@@ -36,7 +36,7 @@ In the agent chat, type `/qa` and choose **qa**, or ask in plain language to use
 /qa Write a unit test for the sign-in form. This is UI.
 ```
 
-`qa` reads one skill for the prompt and leaves the others closed. Say which job you want so it opens the matching skill.
+`qa` reads one skill for the prompt, plus what that skill allows. Say which job you want so it opens the matching skill.
 
 ## What to ask
 
@@ -47,17 +47,15 @@ Name the source file or screen, and say whether the work is **UI** or **API**.
 
 ### Unit and integration
 
-UI tests start with `// @vitest-environment jsdom` and use Testing Library. API tests stay on Node and do not add that line. Both kinds of file are `*.test.ts`.
+Files are `.test.ts` and must not contain JSX. The steps live in [`.cursor/skills/vitest-unit-integration/SKILL.md`](.cursor/skills/vitest-unit-integration/SKILL.md).
 
 ```text
 /qa Write a unit test for src/components/SignIn.tsx. This is UI.
 ```
 
 ```text
-/qa Write an integration test for the login route handler. This is API.
+/qa Write an integration test for app/api/session/route.ts. This is API.
 ```
-
-Put unit tests in `test/unit`. Put integration tests in `test/integration`.
 
 ### End-to-end
 
@@ -87,11 +85,11 @@ Specs are `test/e2e/*.spec.ts`. Page classes are `test/e2e/pages/`. Locators liv
 
 ## Skills
 
-`qa` opens only the skill the prompt needs.
+`qa` opens one skill, plus what that skill allows.
 
 | You ask for | Skill it reads |
 | --- | --- |
-| Unit or integration | [`.cursor/skills/vitest-unit-integration`](.cursor/skills/vitest-unit-integration) |
+| Unit or integration | [`.cursor/skills/vitest-unit-integration`](.cursor/skills/vitest-unit-integration), then at most one reference (`features-mocking`, `core-expect`, or `core-test-api`) |
 | Any end-to-end work | [`.cursor/skills/playwright`](.cursor/skills/playwright), then one tool below |
 | A plan | [`.cursor/skills/playwright-planner`](.cursor/skills/playwright-planner) |
 | A spec from a plan | [`.cursor/skills/playwright-generator`](.cursor/skills/playwright-generator) |
