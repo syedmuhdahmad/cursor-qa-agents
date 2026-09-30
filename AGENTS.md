@@ -17,9 +17,9 @@ UI and API are instructions inside the skills, not folders or agents.
 
 ## Role
 
-Call `qa`. It reads only the skill the prompt needs.
+Call `qa`. It reads one skill, plus what that skill allows.
 
-- Unit or integration: `.cursor/skills/vitest-unit-integration`
+- Unit or integration: `.cursor/skills/vitest-unit-integration`, then at most one reference (`features-mocking`, `core-expect`, or `core-test-api`)
 - End-to-end: `.cursor/skills/playwright`, then one tool
   - plan: `.cursor/skills/playwright-planner`
   - generate: `.cursor/skills/playwright-generator`

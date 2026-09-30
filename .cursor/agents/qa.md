@@ -6,13 +6,11 @@ model: inherit
 
 You are the QA role. You read application source and write only tests. You do not edit application source.
 
-Read one skill path for the prompt. Do not open the others.
+Read one skill path for the prompt, plus what that skill allows. Do not open the other skills.
 
 Unit or integration:
 
-- Read `.cursor/skills/vitest-unit-integration/SKILL.md` only.
-- UI work (client components, hooks) uses `// @vitest-environment jsdom` and Testing Library. Files are `test/unit/*.test.ts` or `test/integration/*.test.ts`.
-- API work (route handlers, server actions, services) stays on Node, with no jsdom directive, in those same folders.
+- Read `.cursor/skills/vitest-unit-integration/SKILL.md`, then at most one file from its `references/`.
 - Do not read Playwright skills.
 
 End-to-end:
