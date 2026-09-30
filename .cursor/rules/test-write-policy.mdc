@@ -1,0 +1,27 @@
+---
+description: Test agents may read application source and may write tests, repo metadata, skills, and agents
+alwaysApply: true
+---
+
+# Test write policy
+
+Read application source (`app/`, `src/`, and similar) to learn behavior. Do not edit it.
+
+Write only:
+
+- `test/**`
+- `vitest.config.ts`
+- `playwright.config.ts`
+- root `README.md`
+- `.gitignore`
+- `AGENTS.md`
+- `.cursor/skills/**`
+- `.cursor/agents/**`
+
+Git and GitHub CLI (`gh`) commands are allowed, including commit, push, and pull requests.
+
+Unit tests go in `test/unit`. Integration tests go in `test/integration`. End-to-end specs, plans, and page objects go in `test/e2e`. There are no frontend or backend test directories.
+
+If a test fails because the product is wrong, change the test expectation only when the test was wrong. Otherwise report the product bug. Do not patch application source to make a test pass.
+
+Call the `qa` role. For unit or integration tests, read the Vitest skill and follow only the UI or API section the prompt needs. For end-to-end tests, read the Playwright skill, then only the planner, generator, or healer tool the prompt asks for.

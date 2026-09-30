@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["--no-install", "@playwright/mcp", "--headless", "--isolated"]
+    },
+    "playwright-test": {
+      "command": "npx",
+      "args": ["--no-install", "playwright", "run-test-mcp-server", "--headless"]
+    },
+    "vitest": {
+      "command": "npx",
+      "args": ["--no-install", "@djankies/vitest-mcp"]
+    }
+  }
+}

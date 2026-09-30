@@ -1,0 +1,10 @@
+node_modules/
+__pycache__/
+*.pyc
+.vitest/
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.playwright-cli/
+.playwright/
