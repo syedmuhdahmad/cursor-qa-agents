@@ -30,8 +30,9 @@ If the prompt does not say, infer it from the source file you are testing and st
 
 ## Tools
 
-- Run Vitest with `npx vitest run --project <unit|integration> --no-passWithNoTests <file>`.
-- Run Playwright with `npx playwright test <file>`.
+- Run Vitest with `RTK_DISABLED=1 npx vitest run --project <unit|integration> --no-passWithNoTests <file>`.
+- Run Playwright with `RTK_DISABLED=1 npx playwright test <file>`.
+- Always keep the `RTK_DISABLED=1` prefix on test commands. Output filters such as RTK rewrite or hide the summary lines and debug prompts these skills read. Without RTK the prefix does nothing.
 - Explore a live page with the Playwright MCP `browser_*` tools (planner and generator).
 - Debug a failing spec with `npx --no-install playwright-cli` (healer only).
 

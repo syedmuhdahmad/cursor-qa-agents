@@ -12,14 +12,14 @@ You may change only files under `test/e2e/`, and `playwright.config.ts` when the
 
 ## Steps
 
-1. Run the spec: `npx playwright test test/e2e/<name>.spec.ts`. Note each failing test's title, `file:line`, and error. For each failure Playwright prints an `error-context.md` path under `test-results/`. Read it first; it holds the page snapshot at the moment of failure.
+1. Run the spec: `RTK_DISABLED=1 npx playwright test test/e2e/<name>.spec.ts`. Note each failing test's title, `file:line`, and error. For each failure Playwright prints an `error-context.md` path under `test-results/`. Read it first; it holds the page snapshot at the moment of failure.
 2. Classify each failure from the error and the page class:
    - **Locator**: element not found, strict-mode violation, wrong role or name.
    - **Timing**: assertion timed out while the element appears later.
    - **Data or setup**: missing mock, missing seed data, wrong route.
    - **Product bug**: the app does something the plan or source says it must not.
 3. If the cause is not clear from the error, debug the one failing test with playwright-cli:
-   - Start it in the background: `npx playwright test test/e2e/<name>.spec.ts:<line> --debug=cli`. Wait until it prints the debugging instructions with a session name such as `tw-abc123`.
+   - Start it in the background: `RTK_DISABLED=1 npx playwright test test/e2e/<name>.spec.ts:<line> --debug=cli`. Wait until it prints the debugging instructions with a session name such as `tw-abc123`.
    - `npx --no-install playwright-cli attach tw-abc123`, then `npx --no-install playwright-cli snapshot` to see the page.
    - Act with `click`, `fill`, or `find "<text>"`. Each command prints the Playwright code it ran. Copy the locator from there.
    - `npx --no-install playwright-cli detach`, then stop the background test run.
