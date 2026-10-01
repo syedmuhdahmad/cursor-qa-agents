@@ -83,6 +83,8 @@ NPM_TEST_SCRIPTS = {
     "test:e2e:list",
 }
 MUTATING = {"rm", "mv", "cp", "mkdir", "touch", "tee", "install", "truncate", "ln"}
+GIT_OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
+GIT_ALWAYS_DENY = {"apply", "am", "clean"}
 FIND_WRITES = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf"}
 
 
@@ -129,6 +131,39 @@ def collect_paths(value, found):
             collect_paths(item, found)
 
 
+def is_redirect_amp(command, index):
+    """`&` in `2>&1`, `>&2`, `&>file`, or `|&` is a redirect, not a background operator."""
+    before = command[index - 1] if index > 0 else ""
+    after = command[index + 1] if index + 1 < len(command) else ""
+    return before in {">", "<", "|"} or after == ">"
+
+
+def has_substitution(command):
+    """True when the shell would run a nested command: `$(...)`, backticks, `<(...)`, or `>(...)`."""
+    quote = None
+    i = 0
+    while i < len(command):
+        char = command[i]
+        if char == "\\" and quote != "'":
+            i += 2
+            continue
+        if quote == "'":
+            if char == "'":
+                quote = None
+            i += 1
+            continue
+        if char == "`" or command.startswith("$(", i):
+            return True
+        if quote is None and (command.startswith("<(", i) or command.startswith(">(", i)):
+            return True
+        if char == '"':
+            quote = None if quote == '"' else '"'
+        elif char == "'" and quote is None:
+            quote = "'"
+        i += 1
+    return False
+
+
 def split_compound(command):
     parts = []
     buf = []
@@ -151,6 +186,11 @@ def split_compound(command):
             parts.append("".join(buf))
             buf = []
             i += 2
+            continue
+        if char == "&" and not is_redirect_amp(command, i):
+            parts.append("".join(buf))
+            buf = []
+            i += 1
             continue
         if char in {";", "\n"}:
             parts.append("".join(buf))
@@ -184,7 +224,7 @@ def split_pipes(segment):
         if char == "|":
             parts.append("".join(buf))
             buf = []
-            i += 1
+            i += 2 if segment.startswith("|&", i) else 1
             continue
         buf.append(char)
         i += 1
@@ -253,6 +293,37 @@ def unwrap_rtk(tokens):
     return tokens[index:]
 
 
+def git_allowed(tokens, cwd):
+    """Allow git, except subcommands that rewrite working-tree files outside the write scope."""
+    index = 1
+    while index < len(tokens) and tokens[index].startswith("-"):
+        index += 2 if tokens[index] in GIT_OPTIONS_WITH_VALUE else 1
+    if index >= len(tokens):
+        return True
+    subcommand = tokens[index]
+    args = tokens[index + 1:]
+    if subcommand in GIT_ALWAYS_DENY:
+        return False
+    if subcommand == "stash":
+        return bool(args) and args[0] in {"list", "show"}
+    if subcommand == "reset":
+        return not any(arg in {"--hard", "--merge", "--keep"} for arg in args)
+    if subcommand in {"restore", "rm", "mv"}:
+        paths = operand_paths(["git"] + [arg for arg in args if arg != "--"])
+        return bool(paths) and all(is_allowed(path, cwd) for path in paths)
+    if subcommand == "checkout":
+        if "--" in args:
+            paths = args[args.index("--") + 1:]
+            return bool(paths) and all(is_allowed(path, cwd) for path in paths)
+        operands = [arg for arg in args if not arg.startswith("-")]
+        for operand in operands:
+            path = Path(cwd) / operand
+            if path.exists() and not is_allowed(operand, cwd):
+                return False
+        return True
+    return True
+
+
 def atomic_allowed(segment, cwd):
     for target in redirect_targets(segment):
         if not is_allowed(target, cwd):
@@ -268,7 +339,9 @@ def atomic_allowed(segment, cwd):
         return True
     if program in READ_ONLY:
         return True
-    if program in {"git", "gh"}:
+    if program == "git":
+        return git_allowed(tokens, cwd)
+    if program == "gh":
         return True
     if program == "find":
         return not any(token in FIND_WRITES for token in tokens)
@@ -286,6 +359,11 @@ def atomic_allowed(segment, cwd):
 def guard_shell(command, cwd):
     if not command.strip():
         emit("allow")
+    if has_substitution(command):
+        emit(
+            "deny",
+            "Shell commands cannot use $(...), backticks, or process substitution. Run each command on its own.",
+        )
     segments = split_compound(command)
     if not segments:
         emit("allow")
