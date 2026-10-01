@@ -1,0 +1,27 @@
+# Files the agent never needs to read. Cursor already skips .gitignore entries.
+# The write guard hook also denies shell reads (cat, grep, sed, ...) of these paths.
+# test-results/ is not listed: the healer reads error-context.md from it.
+
+# Lockfiles
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lock
+bun.lockb
+
+# Build output
+node_modules/
+.next/
+dist/
+build/
+out/
+.turbo/
+.vercel/
+
+# Test output
+coverage/
+playwright-report/
+blob-report/
+.vitest/
+.playwright-cli/
+.playwright/

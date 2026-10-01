@@ -12,7 +12,7 @@ You may change only files under `test/e2e/`, and `playwright.config.ts` when the
 
 ## Steps
 
-1. Run the spec: `npx playwright test test/e2e/<name>.spec.ts`. Note each failing test's title, `file:line`, and error.
+1. Run the spec: `npx playwright test test/e2e/<name>.spec.ts`. Note each failing test's title, `file:line`, and error. For each failure Playwright prints an `error-context.md` path under `test-results/`. Read it first; it holds the page snapshot at the moment of failure.
 2. Classify each failure from the error and the page class:
    - **Locator**: element not found, strict-mode violation, wrong role or name.
    - **Timing**: assertion timed out while the element appears later.

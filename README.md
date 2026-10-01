@@ -29,13 +29,13 @@ Open the app folder in Cursor with **File → Open Folder**, and use **Agent** m
 
 ## Tools
 
-The MCP servers are listed in [`.cursor/mcp.json`](.cursor/mcp.json). Turn them on in Cursor settings, and restart them if Cursor does not show them.
+The Playwright MCP server is listed in [`.cursor/mcp.json`](.cursor/mcp.json). Turn it on in Cursor settings, and restart it if Cursor does not show it. Every enabled MCP server adds its tool list to each request, so turn it off while you only write unit or integration tests.
 
 | Tool | Used for |
 | --- | --- |
 | `playwright` MCP | Exploring a live page while planning or generating a spec |
 | `playwright-cli` | Debugging a failing spec (`npx playwright test --debug=cli`, then `attach`) |
-| `vitest` MCP | Running Vitest from the agent |
+| `npx vitest` | Running unit and integration tests from the shell |
 
 ## The app under test
 
@@ -139,11 +139,16 @@ In the shell, the agent can run tests, read files, and use `git` and `gh` to ins
 
 - Redirects into other files (`>`, `>>`, `&>`, `>|`, `<>`). `/dev/null` is allowed.
 - Nested commands: `$(...)`, backticks, `<(...)`.
+- Read commands that can write or run programs: `sed` with `w`/`e` or `-f`, in-place `sed` on source, `sort -o`, a `uniq` output file, and `rg --pre`.
 - Git commands that rewrite the working tree: switching to an existing branch, `pull`, `merge`, `rebase`, `cherry-pick`, `stash`, `reset --hard`, `restore` or `checkout --` on source, `apply`, `clean`.
 - Git aliases, `-c` overrides, `--git-dir`/`--work-tree`, and `git config` writes.
 - `gh pr checkout`, `gh repo clone`, `gh run download`, and `gh alias`.
 
 Run those yourself when you need them.
+
+## What qa does not read
+
+[`.cursorignore`](.cursorignore) keeps lockfiles, build output, and test reports out of the agent's context. Cursor does not apply it to terminal commands, so the hook also denies `cat`, `grep`, `sed`, and similar reads of those paths. Add your app's large fixtures or generated code there.
 
 Test the hook after changing it:
 
