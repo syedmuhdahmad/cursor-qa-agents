@@ -37,6 +37,8 @@ The Playwright MCP server is listed in [`.cursor/mcp.json`](.cursor/mcp.json). T
 | `playwright-cli` | Debugging a failing spec (`npx playwright test --debug=cli`, then `attach`) |
 | `npx vitest` | Running unit and integration tests from the shell |
 
+The agent runs every test command with `RTK_DISABLED=1` in front. See [Using RTK](#using-rtk) for why.
+
 ## The app under test
 
 End-to-end tests open the app at `http://localhost:3000`. Playwright starts it with `npm run dev` when nothing is listening there.
@@ -46,6 +48,51 @@ If your app runs somewhere else, start it yourself and set `BASE_URL`:
 ```bash
 BASE_URL=http://localhost:5173 npm run test:e2e
 ```
+
+## Using RTK
+
+[RTK](https://github.com/rtk-ai/rtk) is a token-saving tool. Its Cursor hook rewrites shell commands so their output is shorter. For most commands that helps. For the test runners it hides or changes the lines the `qa` agent depends on, so every test command in the skills starts with `RTK_DISABLED=1`. RTK skips any command that starts with it. Without RTK the variable does nothing.
+
+Only test commands carry the prefix. `git`, `gh`, `grep`, `cat`, `ls`, and the rest still go through RTK.
+
+### Vitest: the whole result is lost
+
+RTK rewrites `npx vitest run …` to `rtk vitest …`. On Vitest 5 the agent then sees only this, whether the tests pass or fail:
+
+```text
+[RTK:PASSTHROUGH] vitest parser: All parsing tiers failed
+JSON report written to <project>/.vitest/json/output.json
+```
+
+The cause: `rtk vitest` adds `--reporter=json` and parses stdout. Since Vitest 5 the JSON reporter writes its report to `.vitest/json/output.json` by default and prints only that path, so every RTK parser tier fails. The agent cannot see the `Tests N passed` line it uses to tell a real pass from a run where every test was skipped. It cannot read the JSON file either, because `.vitest/` is in `.cursorignore`.
+
+This is reported upstream as [rtk-ai/rtk#4224](https://github.com/rtk-ai/rtk/issues/4224) (open). We reproduced it on rtk 0.50.0 with Vitest 5.0.3. Once a fixed RTK release is out, the prefix can come off the Vitest commands.
+
+### Playwright: changed summary and held-back output
+
+RTK rewrites `npx playwright test …` to `rtk playwright test …`. That filter keeps error messages and code frames, but:
+
+- `--list` is reported as `PASS (0) FAIL (0) skipped (1)` instead of the test list.
+- The summary becomes `PASS (n) FAIL (n)` instead of Playwright's `n passed` / `n failed`.
+- The `Error Context: test-results/…/error-context.md` line is dropped. The healer reads that file first.
+- Output appears only when the command exits. The healer's background `--debug=cli` run waits for a `playwright-cli attach tw-…` line, which then never shows.
+
+The last point comes from how RTK filters work, so the Playwright prefix should stay even after the Vitest fix.
+
+### The cost
+
+Test runs are not compressed. The skills run one file at a time, so a passing Vitest file is about 6 lines. On a failure RTK was keeping the error and code frame anyway, so little is lost. `rtk discover` may list these commands as using `RTK_DISABLED=1` unnecessarily. That only affects its statistics.
+
+### Alternative: exclude the commands in your RTK config
+
+If you prefer, add the test runners to `exclude_commands` in `~/.config/rtk/config.toml`:
+
+```toml
+[hooks]
+exclude_commands = ["^npx vitest\\b", "^npx playwright test\\b"]
+```
+
+This applies to every project on your machine and is not part of this repo, so keep the prefix in the skills for anyone else who uses them.
 
 ## Start the qa agent
 

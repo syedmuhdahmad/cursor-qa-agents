@@ -10,6 +10,8 @@ If a test fails because the product is wrong, report the bug. Do not change appl
 
 ## Commands
 
-- `npx vitest run --project unit --no-passWithNoTests <file>`
-- `npx vitest run --project integration --no-passWithNoTests <file>`
-- `npx playwright test <file>`
+Keep the `RTK_DISABLED=1` prefix. RTK otherwise hides the Vitest result and changes Playwright's summary. See "Using RTK" in `README.md`.
+
+- `RTK_DISABLED=1 npx vitest run --project unit --no-passWithNoTests <file>`
+- `RTK_DISABLED=1 npx vitest run --project integration --no-passWithNoTests <file>`
+- `RTK_DISABLED=1 npx playwright test <file>`

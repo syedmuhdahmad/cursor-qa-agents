@@ -35,6 +35,8 @@ class ShellAllowed(unittest.TestCase):
         for command in [
             "npx vitest run --project unit --no-passWithNoTests test/unit/a.test.ts",
             "npx playwright test test/e2e/sign-in.spec.ts",
+            "RTK_DISABLED=1 npx vitest run --project unit --no-passWithNoTests test/unit/a.test.ts",
+            "RTK_DISABLED=1 npx playwright test test/e2e/a.spec.ts:12 --debug=cli",
             "PLAYWRIGHT_HTML_OPEN=never npx playwright test test/e2e/a.spec.ts:12 --debug=cli &",
             "npx --no-install playwright-cli attach tw-abc123",
             "npm run test:unit 2>&1 | tail -20",

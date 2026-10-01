@@ -19,7 +19,7 @@ Output:
 2. Check the app responds at `use.baseURL` from `playwright.config.ts`. If not, stop and tell the user to start it. Do not start servers yourself.
 3. For each scenario, walk its steps once with the Playwright MCP tools (`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_fill_form`). Each action returns the Playwright code it ran. Copy locators from that code into the page class. Do not invent locators. Call `browser_close` when done.
 4. Write the page classes, then the spec.
-5. Run only this spec: `npx playwright test test/e2e/<name>.spec.ts`.
+5. Run only this spec: `RTK_DISABLED=1 npx playwright test test/e2e/<name>.spec.ts`.
 6. Read the summary. Require `N passed` with N equal to the number of scenarios, and nothing skipped or flaky.
 7. Fix and rerun at most 3 times. Then stop and report, or tell the user to ask for the healer.
 
