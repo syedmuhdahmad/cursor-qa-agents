@@ -135,7 +135,15 @@ A project hook, [`.cursor/hooks/guard-test-writes.py`](.cursor/hooks/guard-test-
 - `.cursor/skills/**`
 - `.cursor/agents/**`
 
-In the shell, the agent can run tests, read files, and use `git` and `gh`, including commit, push, and pull requests. The hook blocks commands that would change files outside those paths, including `git checkout -- src`, `git restore`, `git stash`, `git reset --hard`, and nested commands like `$(...)`.
+In the shell, the agent can run tests, read files, and use `git` and `gh` to inspect, commit, push, create a branch from the current commit (`git switch -c`), and open pull requests. The hook blocks anything that could change files outside those paths:
+
+- Redirects into other files (`>`, `>>`, `&>`, `>|`, `<>`). `/dev/null` is allowed.
+- Nested commands: `$(...)`, backticks, `<(...)`.
+- Git commands that rewrite the working tree: switching to an existing branch, `pull`, `merge`, `rebase`, `cherry-pick`, `stash`, `reset --hard`, `restore` or `checkout --` on source, `apply`, `clean`.
+- Git aliases, `-c` overrides, `--git-dir`/`--work-tree`, and `git config` writes.
+- `gh pr checkout`, `gh repo clone`, `gh run download`, and `gh alias`.
+
+Run those yourself when you need them.
 
 Test the hook after changing it:
 

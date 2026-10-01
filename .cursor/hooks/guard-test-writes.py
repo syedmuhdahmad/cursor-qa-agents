@@ -83,8 +83,24 @@ NPM_TEST_SCRIPTS = {
     "test:e2e:list",
 }
 MUTATING = {"rm", "mv", "cp", "mkdir", "touch", "tee", "install", "truncate", "ln"}
-GIT_OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
-GIT_ALWAYS_DENY = {"apply", "am", "clean"}
+GIT_SAFE_GLOBAL_OPTIONS = {"--no-pager", "-P", "--no-optional-locks", "--paginate", "-p"}
+GIT_READ_OR_COMMIT = {
+    "status", "log", "diff", "show", "blame", "grep", "ls-files", "ls-remote", "ls-tree",
+    "rev-parse", "rev-list", "describe", "shortlog", "reflog", "cat-file", "merge-base",
+    "name-rev", "for-each-ref", "show-ref", "check-ignore", "version", "help",
+    "add", "commit", "fetch", "push", "tag", "branch", "remote",
+}
+GIT_READ_CONFIG = {"--get", "--get-all", "--get-regexp", "--list", "-l", "get", "list"}
+GH_COMMANDS = {"pr", "issue", "api", "run", "workflow", "status", "search", "browse", "label", "release", "repo", "auth"}
+GH_DENIED = {
+    ("pr", "checkout"),
+    ("run", "download"),
+    ("release", "download"),
+}
+GH_ONLY = {
+    "repo": {"view", "list"},
+    "auth": {"status"},
+}
 FIND_WRITES = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf"}
 
 
@@ -232,16 +248,65 @@ def split_pipes(segment):
     return [part.strip() for part in parts if part.strip()]
 
 
+def read_word(text, index):
+    """Read one shell word starting at index, honoring quotes. Returns (word, next_index)."""
+    word = []
+    quote = None
+    while index < len(text):
+        char = text[index]
+        if quote:
+            if char == quote:
+                quote = None
+            else:
+                word.append(char)
+            index += 1
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            index += 1
+            continue
+        if char in " \t;&|<>()":
+            break
+        word.append(char)
+        index += 1
+    return "".join(word), index
+
+
 def redirect_targets(segment):
+    """Files the shell would open for writing: `>`, `>>`, `>|`, `&>`, `&>>`, `<>`, `N>`, and `>&file`."""
     targets = []
-    pattern = re.compile(r"(?:^|[\s;])(?:\d*)>>?\s*([^\s;&|]+)")
-    for match in pattern.finditer(segment):
-        target = match.group(1).strip("'\"")
-        if target.startswith("&"):
+    quote = None
+    i = 0
+    while i < len(segment):
+        char = segment[i]
+        if char == "\\" and quote != "'":
+            i += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+            i += 1
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            i += 1
+            continue
+        if char != ">":
+            i += 1
+            continue
+        i += 1
+        if i < len(segment) and segment[i] in {">", "|"}:
+            i += 1
+        while i < len(segment) and segment[i] in {" ", "\t"}:
+            i += 1
+        duplicate = i < len(segment) and segment[i] == "&"
+        if duplicate:
+            i += 1
+        target, i = read_word(segment, i)
+        if duplicate and (target.isdigit() or target == "-"):
             continue
         targets.append(target)
     return targets
-
 
 def strip_env(tokens):
     index = 0
@@ -294,39 +359,61 @@ def unwrap_rtk(tokens):
 
 
 def git_allowed(tokens, cwd):
-    """Allow git, except subcommands that rewrite working-tree files outside the write scope."""
+    """Allow reading, committing, and pushing. Deny anything that can rewrite working-tree files
+    outside the write scope: branch switches, merges, aliases, config overrides, and unknown commands."""
     index = 1
     while index < len(tokens) and tokens[index].startswith("-"):
-        index += 2 if tokens[index] in GIT_OPTIONS_WITH_VALUE else 1
+        option = tokens[index]
+        if option == "-C" and index + 1 < len(tokens):
+            index += 2
+            continue
+        if option not in GIT_SAFE_GLOBAL_OPTIONS:
+            return False
+        index += 1
     if index >= len(tokens):
         return True
     subcommand = tokens[index]
     args = tokens[index + 1:]
-    if subcommand in GIT_ALWAYS_DENY:
-        return False
+    if subcommand in GIT_READ_OR_COMMIT:
+        return True
+    if subcommand == "config":
+        return any(arg in GIT_READ_CONFIG for arg in args)
     if subcommand == "stash":
         return bool(args) and args[0] in {"list", "show"}
+    if subcommand == "worktree":
+        return bool(args) and args[0] == "list"
     if subcommand == "reset":
         return not any(arg in {"--hard", "--merge", "--keep"} for arg in args)
     if subcommand in {"restore", "rm", "mv"}:
         paths = operand_paths(["git"] + [arg for arg in args if arg != "--"])
         return bool(paths) and all(is_allowed(path, cwd) for path in paths)
-    if subcommand == "checkout":
-        if "--" in args:
-            paths = args[args.index("--") + 1:]
-            return bool(paths) and all(is_allowed(path, cwd) for path in paths)
-        operands = [arg for arg in args if not arg.startswith("-")]
-        for operand in operands:
-            path = Path(cwd) / operand
-            if path.exists() and not is_allowed(operand, cwd):
+    if subcommand in {"checkout", "switch"}:
+        if subcommand == "checkout" and "--" in args:
+            if args.index("--") != 0:
                 return False
-        return True
-    return True
+            paths = args[1:]
+            return bool(paths) and all(is_allowed(path, cwd) for path in paths)
+        create = {"-b", "-B"} if subcommand == "checkout" else {"-c", "-C"}
+        # A new branch from HEAD leaves the working tree as it is. Any start point may not.
+        return len(args) == 2 and args[0] in create and not args[1].startswith("-")
+    return False
 
+
+def gh_allowed(tokens):
+    """Allow gh commands that act on GitHub. Deny those that write local files, and aliases."""
+    if len(tokens) < 2 or tokens[1] not in GH_COMMANDS:
+        return False
+    command = tokens[1]
+    action = tokens[2] if len(tokens) > 2 else ""
+    if (command, action) in GH_DENIED:
+        return False
+    if command in GH_ONLY:
+        return action in GH_ONLY[command]
+    return True
 
 def atomic_allowed(segment, cwd):
     for target in redirect_targets(segment):
-        if not is_allowed(target, cwd):
+        if target != "/dev/null" and not is_allowed(target, cwd):
             return False
     try:
         tokens = unwrap_rtk(strip_env(shlex.split(segment)))
@@ -342,7 +429,7 @@ def atomic_allowed(segment, cwd):
     if program == "git":
         return git_allowed(tokens, cwd)
     if program == "gh":
-        return True
+        return gh_allowed(tokens)
     if program == "find":
         return not any(token in FIND_WRITES for token in tokens)
     if program == "sed":
