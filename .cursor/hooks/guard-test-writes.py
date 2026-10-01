@@ -104,7 +104,11 @@ GH_ONLY = {
 }
 READ_FILE_PROGRAMS = {"cat", "head", "tail", "grep", "rg", "wc", "cut", "sort", "uniq", "sed"}
 PATTERN_FIRST = {"grep", "rg", "sed"}
-PATTERN_OPTIONS = {"-e", "-f", "--regexp", "--file", "--expression"}
+# Short options that take a value. `e` is a pattern or sed script, `f` is a file the program opens.
+VALUE_SHORT_OPTIONS = {"grep": "ABCDdefm", "rg": "ABCEefgjMmrTt", "sed": "efl"}
+PATTERN_LONG_OPTIONS = {"--regexp", "--expression"}
+FILE_LONG_OPTIONS = {"--file"}
+SED_SAFE_COMMANDS = set("pdnNqQ=lxhHgGDPzF{}")
 FIND_WRITES = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf"}
 
 
@@ -161,26 +165,187 @@ def is_ignored(path_text, cwd):
     return False
 
 
-def read_operands(tokens):
-    """File operands of a read command, skipping the search pattern or sed script."""
+def parse_pattern_command(tokens):
+    """Split a grep, rg, or sed command into (patterns, files named by -f, other operands).
+
+    Handles `-e X`, `-eX`, bundled `-rne X`, `--regexp=X`, and `-f FILE` / `--file=FILE`.
+    Without `-e` or `-f`, the first operand is the pattern or script.
+    """
+    program = os.path.basename(tokens[0])
+    value_short = VALUE_SHORT_OPTIONS[program]
+    patterns = []
+    files = []
     operands = []
-    has_pattern_option = False
-    skip_next = False
-    for token in tokens[1:]:
-        if skip_next:
-            skip_next = False
+    explicit = False
+    index = 1
+    while index < len(tokens):
+        token = tokens[index]
+        following = tokens[index + 1] if index + 1 < len(tokens) else ""
+        if token == "--":
+            operands.extend(tokens[index + 1:])
+            break
+        if token.startswith("--"):
+            name, has_value, value = token.partition("=")
+            if name in PATTERN_LONG_OPTIONS or name in FILE_LONG_OPTIONS:
+                explicit = True
+                if not has_value:
+                    value = following
+                    index += 1
+                (patterns if name in PATTERN_LONG_OPTIONS else files).append(value)
+            index += 1
             continue
-        if token in PATTERN_OPTIONS:
-            has_pattern_option = True
-            skip_next = True
-            continue
-        if token.startswith("-"):
+        if token.startswith("-") and len(token) > 1:
+            consumed_next = False
+            for position in range(1, len(token)):
+                letter = token[position]
+                if letter not in value_short:
+                    continue
+                value = token[position + 1:]
+                if not value:
+                    value = following
+                    consumed_next = True
+                if letter == "e":
+                    explicit = True
+                    patterns.append(value)
+                elif letter == "f":
+                    explicit = True
+                    files.append(value)
+                break
+            index += 2 if consumed_next else 1
             continue
         operands.append(token)
-    if os.path.basename(tokens[0]) in PATTERN_FIRST and not has_pattern_option:
-        operands = operands[1:]
-    return operands
+        index += 1
+    if not explicit and operands:
+        patterns.append(operands.pop(0))
+    return patterns, files, operands
 
+
+def read_operands(tokens):
+    """Files a read command opens, skipping the search pattern or sed script."""
+    if os.path.basename(tokens[0]) in PATTERN_FIRST:
+        _, option_files, operands = parse_pattern_command(tokens)
+        return option_files + operands
+    return operand_paths(tokens)
+
+
+def skip_delimited(script, index, delimiter, count):
+    """Skip `count` delimiter-terminated parts starting at index. Returns the next index, or -1."""
+    while count:
+        while index < len(script) and script[index] != delimiter:
+            index += 2 if script[index] == "\\" else 1
+        if index >= len(script):
+            return -1
+        index += 1
+        count -= 1
+    return index
+
+
+def sed_script_safe(script):
+    """False when a sed script can write a file or run a command (`w`, `W`, `e`, or `s///w|e`).
+    Unknown commands are unsafe."""
+    index = 0
+    while index < len(script):
+        char = script[index]
+        if char in " \t\n;!" or char.isdigit() or char in "$,~+":
+            index += 1
+            continue
+        if char in "/\\":
+            if char == "\\":
+                index += 1
+                if index >= len(script):
+                    return False
+            index = skip_delimited(script, index + 1, script[index], 1)
+            if index < 0:
+                return False
+            while index < len(script) and script[index] in "IM":
+                index += 1
+            continue
+        if char in "wWe":
+            return False
+        if char in "sy":
+            if index + 1 >= len(script):
+                return False
+            index = skip_delimited(script, index + 2, script[index + 1], 2)
+            if index < 0:
+                return False
+            flags_end = index
+            while flags_end < len(script) and script[flags_end] not in ";\n}":
+                flags_end += 1
+            if char == "s" and any(flag in "we" for flag in script[index:flags_end]):
+                return False
+            index = flags_end
+            continue
+        if char in "aicrR":
+            while index < len(script) and script[index] != "\n":
+                index += 1
+            continue
+        if char in "btT:":
+            while index < len(script) and script[index] not in ";\n":
+                index += 1
+            continue
+        if char in SED_SAFE_COMMANDS:
+            index += 1
+            continue
+        return False
+    return True
+
+
+def sed_in_place(tokens):
+    """True for `-i`, `-i.bak`, bundled `-Ei`, or `--in-place`."""
+    for token in tokens[1:]:
+        if token.startswith("--in-place"):
+            return True
+        if token.startswith("-") and not token.startswith("--"):
+            for letter in token[1:]:
+                if letter == "i":
+                    return True
+                if letter in VALUE_SHORT_OPTIONS["sed"]:
+                    break
+    return False
+
+
+def sed_allowed(tokens, cwd):
+    """Deny scripts that write or run commands, `-f` scripts, and in-place edits outside the write scope."""
+    scripts, script_files, operands = parse_pattern_command(tokens)
+    if script_files or not all(sed_script_safe(script) for script in scripts):
+        return False
+    if sed_in_place(tokens):
+        return bool(operands) and all(is_allowed(path, cwd) for path in operands)
+    return True
+
+def sort_allowed(tokens, cwd):
+    """`sort -o FILE` writes FILE."""
+    for index, token in enumerate(tokens[1:], start=1):
+        following = tokens[index + 1] if index + 1 < len(tokens) else ""
+        if token == "--output":
+            target = following
+        elif token.startswith("--output="):
+            target = token.split("=", 1)[1]
+        elif token.startswith("-") and not token.startswith("--") and "o" in token:
+            position = token.index("o")
+            if any(letter in "ktST" for letter in token[1:position]):
+                continue
+            target = token[position + 1:] or following
+        else:
+            continue
+        if not is_allowed(target, cwd):
+            return False
+    return True
+
+
+def uniq_allowed(tokens, cwd):
+    """`uniq INPUT OUTPUT` writes OUTPUT."""
+    operands = []
+    index = 1
+    while index < len(tokens):
+        token = tokens[index]
+        if token in {"-f", "-s", "-w"}:
+            index += 2
+            continue
+        if not token.startswith("-"):
+            operands.append(token)
+        index += 1
+    return len(operands) < 2 or is_allowed(operands[1], cwd)
 
 def ignored_read(segment, cwd):
     """The first .cursorignore path a read command would open, or None."""
@@ -507,6 +672,14 @@ def atomic_allowed(segment, cwd):
     program = os.path.basename(tokens[0])
     if is_test_runner(tokens):
         return True
+    if program == "sed":
+        return sed_allowed(tokens, cwd)
+    if program == "rg":
+        return not any(token == "--pre" or token.startswith("--pre=") for token in tokens)
+    if program == "sort":
+        return sort_allowed(tokens, cwd)
+    if program == "uniq":
+        return uniq_allowed(tokens, cwd)
     if program in READ_ONLY:
         return True
     if program == "git":
@@ -515,11 +688,6 @@ def atomic_allowed(segment, cwd):
         return gh_allowed(tokens)
     if program == "find":
         return not any(token in FIND_WRITES for token in tokens)
-    if program == "sed":
-        if "-i" not in tokens and not any(token.startswith("--in-place") for token in tokens):
-            return True
-        paths = operand_paths(tokens)
-        return bool(paths) and all(is_allowed(path, cwd) for path in paths)
     if program in MUTATING:
         paths = operand_paths(tokens)
         return bool(paths) and all(is_allowed(path, cwd) for path in paths)

@@ -139,6 +139,7 @@ In the shell, the agent can run tests, read files, and use `git` and `gh` to ins
 
 - Redirects into other files (`>`, `>>`, `&>`, `>|`, `<>`). `/dev/null` is allowed.
 - Nested commands: `$(...)`, backticks, `<(...)`.
+- Read commands that can write or run programs: `sed` with `w`/`e` or `-f`, in-place `sed` on source, `sort -o`, a `uniq` output file, and `rg --pre`.
 - Git commands that rewrite the working tree: switching to an existing branch, `pull`, `merge`, `rebase`, `cherry-pick`, `stash`, `reset --hard`, `restore` or `checkout --` on source, `apply`, `clean`.
 - Git aliases, `-c` overrides, `--git-dir`/`--work-tree`, and `git config` writes.
 - `gh pr checkout`, `gh repo clone`, `gh run download`, and `gh alias`.

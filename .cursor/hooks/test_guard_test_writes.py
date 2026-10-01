@@ -64,6 +64,17 @@ class ShellAllowed(unittest.TestCase):
             "gh pr checks 2",
             "ls test 2>/dev/null",
             "npx playwright test 2>&1 >/dev/null",
+            "sed -n '10,40p' src/a.ts",
+            "sed -n '/describe/,/^})/p' test/unit/a.test.ts",
+            "cat src/a.ts | sed 's/foo/bar/g; s|x;y|z|'",
+            "sed -E 's/^/  /' test/a",
+            "sed '$d' test/a",
+            "sort -u -o test/unit/out.txt test/a",
+            "sort -k2 -t, test/a",
+            "uniq -c test/a",
+            "uniq test/a test/unit/out.txt",
+            "rg -n useState src",
+            "sed -i 's/a/b/' test/unit/a.test.ts",
         ]:
             with self.subTest(command=command):
                 self.assertEqual(shell(command), "allow")
@@ -112,6 +123,20 @@ class ShellDenied(unittest.TestCase):
             "gh run download 123",
             "echo hi >& src/a.ts",
             "git --git-dir=.git status",
+            "rg --pre ./test/x.sh foo src",
+            "rg --pre=bash foo test/x.sh",
+            "sort -o src/a.ts test/a",
+            "sort -uo src/a.ts test/a",
+            "sort --output=src/a.ts test/a",
+            "uniq test/a src/a.ts",
+            "sed -n 'w src/a.ts' test/a",
+            "sed 's/a/b/w src/a.ts' test/a",
+            "sed -e p -e 'e touch src/x' test/a",
+            "sed '1e touch src/x' test/a",
+            "sed -f test/script.sed test/a",
+            "sed -i.bak s/a/b/ src/a.ts",
+            "sed -Ei s/a/b/ src/a.ts",
+            "sed -i 's/a/b/w test/x' test/a",
         ]:
             with self.subTest(command=command):
                 self.assertEqual(shell(command), "deny")
@@ -131,6 +156,13 @@ class IgnoredReads(unittest.TestCase):
             "tail coverage/lcov.info",
             "wc -l src/a.ts dist/main.js",
             "cat apps/web/.next/server/app.js",
+            "grep -f package-lock.json src",
+            "grep --file=package-lock.json src",
+            "grep --regexp=react package-lock.json",
+            "grep -ereact package-lock.json",
+            "grep -rne react package-lock.json",
+            "rg -e react -- package-lock.json",
+            "rg --file package-lock.json src",
         ]:
             with self.subTest(command=command):
                 self.assertEqual(shell(command), "deny")
@@ -144,6 +176,10 @@ class IgnoredReads(unittest.TestCase):
             "cat test-results/sign-in/error-context.md",
             "ls node_modules/.bin",
             "npx vitest run",
+            "grep --regexp=package-lock.json README.md",
+            "grep -rn -e dist -e build src",
+            "rg -g '!*.test.ts' useState src",
+            "rg -tts --pretty useState src",
         ]:
             with self.subTest(command=command):
                 self.assertEqual(shell(command), "allow")
