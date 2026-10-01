@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
 test('seed', async ({ page }) => {
-  await page.goto('about:blank')
-  await expect(page).toHaveURL('about:blank')
+  const response = await page.goto('/')
+  expect(response?.ok()).toBe(true)
 })

@@ -1,17 +1,17 @@
 ---
 description: Naming and layout for Vitest and Playwright tests
-globs: test/**/*.{ts,tsx}
+globs: test/**
 alwaysApply: false
 ---
 
 # Test files
 
-Vitest files are `*.test.ts` in `test/unit` or `test/integration`.
+Vitest files are `*.test.ts` in `test/unit/` or `test/integration/`. No `.tsx`, no JSX.
 
 - UI tests start with `// @vitest-environment jsdom`.
 - Server tests use the default Node environment.
 
-Playwright specs are `test/e2e/*.spec.ts`. Page classes are `test/e2e/pages/`. Plans are `test/e2e/*.plan.md`.
+Playwright specs are `test/e2e/<name>.spec.ts`. Page classes are `test/e2e/pages/<screen>-page.ts`. Plans are `test/e2e/plan/<name>.plan.md`.
 
-- Locators live on the page object. Prefer `getByRole`.
+- Locators live on the page class. Prefer `getByRole`.
 - Assertions live in the spec.

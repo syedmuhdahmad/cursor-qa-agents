@@ -7,26 +7,30 @@ disable-model-invocation: true
 
 # Playwright page objects
 
-Specs stay in `test/e2e/*.spec.ts`. Page classes stay in `test/e2e/pages/`. Plans stay in `test/e2e/plan/*.plan.md`. The seed is `test/e2e/seed.spec.ts`.
+Specs are `test/e2e/<name>.spec.ts`. Page classes are `test/e2e/pages/<screen>-page.ts`. Plans are `test/e2e/plan/<name>.plan.md`. The seed is `test/e2e/seed.spec.ts`.
 
 ## Page class
 
-- One class per screen or distinct dialog.
+- One class per screen or distinct dialog. File `sign-in-page.ts` exports `SignInPage`.
 - The constructor takes Playwright `Page`.
-- Locators are readonly fields. Prefer `getByRole`, then `getByLabel`, then `getByText`.
-- Methods are user actions (`goto`, `signIn`, `submit`) and return another page object when navigation changes screen.
-- No assertions in the page class.
+- Locators are `readonly` fields set in the constructor. Prefer `getByRole`, then `getByLabel`, then `getByText`. Use `getByTestId` only when none of those is unique. No CSS or XPath.
+- Methods are user actions (`goto`, `signIn`, `submit`). `goto` uses a relative path.
+- No assertions and no `expect` import in the page class.
 
 ```ts
-import { expect, type Locator, type Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 export class SignInPage {
   readonly email: Locator
+  readonly password: Locator
   readonly submit: Locator
+  readonly error: Locator
 
   constructor(private readonly page: Page) {
     this.email = page.getByRole('textbox', { name: 'Email' })
+    this.password = page.getByLabel('Password')
     this.submit = page.getByRole('button', { name: 'Sign in' })
+    this.error = page.getByRole('alert')
   }
 
   async goto() {
@@ -35,7 +39,7 @@ export class SignInPage {
 
   async signIn(email: string, password: string) {
     await this.email.fill(email)
-    await this.page.getByLabel('Password').fill(password)
+    await this.password.fill(password)
     await this.submit.click()
   }
 }
@@ -43,10 +47,10 @@ export class SignInPage {
 
 ## Spec
 
-- Import the page class. Keep assertions in the spec with `expect`.
-- Comment the plan path and the seed path at the top of the file.
-- One scenario per `test`. Group related scenarios in `test.describe`.
-- Do not put raw selectors in the spec.
+- Import page classes. Actions go through page-class methods. Assertions use `expect` on page-class locators.
+- No raw selectors in the spec. If an assertion needs a new locator, add a field to the page class.
+- One scenario per `test`. Group scenarios in `test.describe`.
+- The plan path and seed path are commented on the first two lines.
 
 ```ts
 // spec: test/e2e/plan/sign-in.plan.md
@@ -54,10 +58,10 @@ export class SignInPage {
 import { expect, test } from '@playwright/test'
 import { SignInPage } from './pages/sign-in-page'
 
-test('signs in with a valid account', async ({ page }) => {
+test('shows an error for a wrong password', async ({ page }) => {
   const signIn = new SignInPage(page)
   await signIn.goto()
-  await signIn.signIn('ada@example.com', 'correct-horse')
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+  await signIn.signIn('ada@example.com', 'wrong')
+  await expect(signIn.error).toHaveText('Email or password is incorrect')
 })
 ```
