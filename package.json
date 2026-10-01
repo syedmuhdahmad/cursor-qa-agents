@@ -9,7 +9,6 @@
     "test:e2e:list": "playwright test --list"
   },
   "devDependencies": {
-    "@djankies/vitest-mcp": "^0.5.1",
     "@playwright/cli": "^0.1.22",
     "@playwright/mcp": "^0.0.83",
     "@playwright/test": "^1.63.0",

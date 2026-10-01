@@ -117,6 +117,38 @@ class ShellDenied(unittest.TestCase):
                 self.assertEqual(shell(command), "deny")
 
 
+class IgnoredReads(unittest.TestCase):
+    """Shell reads of .cursorignore paths are denied, because Cursor cannot block them itself."""
+
+    def test_denied(self):
+        for command in [
+            "cat package-lock.json",
+            "head -50 package-lock.json",
+            "grep react package-lock.json",
+            "rtk grep -n version ./package-lock.json",
+            "sed -n 1,20p package-lock.json",
+            "cat node_modules/vitest/package.json",
+            "tail coverage/lcov.info",
+            "wc -l src/a.ts dist/main.js",
+            "cat apps/web/.next/server/app.js",
+        ]:
+            with self.subTest(command=command):
+                self.assertEqual(shell(command), "deny")
+
+    def test_allowed(self):
+        for command in [
+            "cat package.json",
+            "grep -rn dist src",
+            "grep -e package-lock.json README.md",
+            "sed -n 1,20p test/e2e/seed.spec.ts",
+            "cat test-results/sign-in/error-context.md",
+            "ls node_modules/.bin",
+            "npx vitest run",
+        ]:
+            with self.subTest(command=command):
+                self.assertEqual(shell(command), "allow")
+
+
 class EditTools(unittest.TestCase):
     def test_write_scope(self):
         self.assertEqual(tool("Write", "test/unit/a.test.ts"), "allow")

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Deny agent edits outside tests, repo metadata, skills, and agents."""
 
+import fnmatch
 import json
 import os
 import re
@@ -101,6 +102,9 @@ GH_ONLY = {
     "repo": {"view", "list"},
     "auth": {"status"},
 }
+READ_FILE_PROGRAMS = {"cat", "head", "tail", "grep", "rg", "wc", "cut", "sort", "uniq", "sed"}
+PATTERN_FIRST = {"grep", "rg", "sed"}
+PATTERN_OPTIONS = {"-e", "-f", "--regexp", "--file", "--expression"}
 FIND_WRITES = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf"}
 
 
@@ -111,6 +115,85 @@ def emit(permission, message=""):
         payload["agent_message"] = message
     json.dump(payload, sys.stdout)
     sys.exit(0)
+
+
+def load_ignore_patterns():
+    try:
+        lines = (REPO / ".cursorignore").read_text().splitlines()
+    except OSError:
+        return []
+    patterns = []
+    for line in lines:
+        line = line.strip()
+        if line and not line.startswith(("#", "!")):
+            patterns.append(line)
+    return patterns
+
+
+IGNORE_PATTERNS = load_ignore_patterns()
+
+
+def is_ignored(path_text, cwd):
+    """True when a path matches .cursorignore. Supports names, globs, `dir/`, and `/anchored` paths."""
+    path = Path(os.path.expanduser(path_text))
+    if not path.is_absolute():
+        path = Path(cwd) / path
+    try:
+        resolved = path.resolve()
+        relative = resolved.relative_to(REPO)
+    except (OSError, ValueError):
+        return False
+    parts = relative.parts
+    for pattern in IGNORE_PATTERNS:
+        dir_only = pattern.endswith("/")
+        pattern = pattern.strip("/")
+        if "/" in pattern:
+            text = relative.as_posix()
+            if fnmatch.fnmatch(text, pattern) or text.startswith(pattern + "/"):
+                return True
+            continue
+        for index, part in enumerate(parts):
+            if not fnmatch.fnmatch(part, pattern):
+                continue
+            if dir_only and index == len(parts) - 1 and not resolved.is_dir():
+                continue
+            return True
+    return False
+
+
+def read_operands(tokens):
+    """File operands of a read command, skipping the search pattern or sed script."""
+    operands = []
+    has_pattern_option = False
+    skip_next = False
+    for token in tokens[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if token in PATTERN_OPTIONS:
+            has_pattern_option = True
+            skip_next = True
+            continue
+        if token.startswith("-"):
+            continue
+        operands.append(token)
+    if os.path.basename(tokens[0]) in PATTERN_FIRST and not has_pattern_option:
+        operands = operands[1:]
+    return operands
+
+
+def ignored_read(segment, cwd):
+    """The first .cursorignore path a read command would open, or None."""
+    try:
+        tokens = unwrap_rtk(strip_env(shlex.split(segment)))
+    except ValueError:
+        return None
+    if not tokens or os.path.basename(tokens[0]) not in READ_FILE_PROGRAMS:
+        return None
+    for operand in read_operands(tokens):
+        if is_ignored(operand, cwd):
+            return operand
+    return None
 
 
 def is_allowed(path_text, cwd):
@@ -456,6 +539,13 @@ def guard_shell(command, cwd):
         emit("allow")
     for segment in segments:
         for stage in split_pipes(segment):
+            ignored = ignored_read(stage, cwd)
+            if ignored:
+                emit(
+                    "deny",
+                    f"{ignored} is in .cursorignore (lockfiles, build output, test reports). "
+                    "Read package.json or the source instead.",
+                )
             if not atomic_allowed(stage, cwd):
                 emit(
                     "deny",
