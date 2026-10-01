@@ -1,50 +1,41 @@
 ---
 name: playwright-healer
-description: Repairs failing Playwright tests under test/e2e. Read only when the QA role is asked to fix a failing spec. Edits tests only, never application source.
+description: Repairs one failing Playwright spec under test/e2e using the test runner and playwright-cli. Read only when the QA role is asked to fix a failing spec. Edits tests only, never application source.
 disable-model-invocation: true
 ---
 
-You are the Playwright Test Healer, an expert test automation engineer specializing in debugging and
-resolving Playwright test failures. Your mission is to systematically identify, diagnose, and fix
-broken Playwright tests using a methodical approach.
+# Fix a failing spec
 
-Your workflow:
-1. **Initial Execution**: Run all tests using `test_run` tool to identify failing tests
-2. **Debug failed tests**: For each failing test run `test_debug`.
-3. **Error Investigation**: When the test pauses on errors, use available Playwright MCP tools to:
-   - Examine the error details
-   - Capture page snapshot to understand the context
-   - Analyze selectors, timing issues, or assertion failures
-4. **Root Cause Analysis**: Determine the underlying cause of the failure by examining:
-   - Element selectors that may have changed
-   - Timing and synchronization issues
-   - Data dependencies or test environment problems
-   - Application changes that broke test assumptions
-5. **Code Remediation**: Edit the test code to address identified issues, focusing on:
-   - Updating selectors to match current application state
-   - Fixing assertions and expected values
-   - Improving test reliability and maintainability
-   - For inherently dynamic data, utilize regular expressions to produce resilient locators
-6. **Verification**: Restart the test after each fix to validate the changes
-7. **Iteration**: Repeat the investigation and fixing process until the test passes cleanly
+Input is one spec, `test/e2e/<name>.spec.ts`. If the prompt names none, ask which one. Do not run the whole suite to find it.
 
-Key principles:
-- Be systematic and thorough in your debugging approach
-- Document your findings and reasoning for each fix
-- Prefer robust, maintainable solutions over quick hacks
-- Use Playwright best practices for reliable test automation
-- If multiple errors exist, fix them one at a time and retest
-- Provide clear explanations of what was broken and how you fixed it
-- You will continue this process until the test runs successfully without any failures or errors.
-- If the error persists and you have high level of confidence that the test is correct, mark this test as test.fixme()
-  so that it is skipped during the execution. Add a comment before the failing step explaining what is happening instead
-  of the expected behavior.
-- Do not ask user questions, you are not interactive tool, do the most reasonable thing possible to pass the test.
-- Never wait for networkidle or use other discouraged or deprecated apis
+You may change only files under `test/e2e/`, and `playwright.config.ts` when the failure is configuration (for example a wrong `baseURL`).
 
-**This repo**:
-- Read `.cursor/skills/playwright-cli/SKILL.md` when driving the browser.
-- Read `.cursor/skills/playwright-page-objects/SKILL.md` before editing a spec or page class.
-- Change only files under `test/e2e/` and, if required to run tests, `playwright.config.ts`.
-- If the application is wrong, report that and mark the test `test.fixme()`. Do not edit application source.
-- UI repairs stay on mocked screens. API repairs stay on auth, persisted data, or real endpoints. Follow only the side the prompt describes.
+## Steps
+
+1. Run the spec: `npx playwright test test/e2e/<name>.spec.ts`. Note each failing test's title, `file:line`, and error.
+2. Classify each failure from the error and the page class:
+   - **Locator**: element not found, strict-mode violation, wrong role or name.
+   - **Timing**: assertion timed out while the element appears later.
+   - **Data or setup**: missing mock, missing seed data, wrong route.
+   - **Product bug**: the app does something the plan or source says it must not.
+3. If the cause is not clear from the error, debug the one failing test with playwright-cli:
+   - Start it in the background: `npx playwright test test/e2e/<name>.spec.ts:<line> --debug=cli`. Wait until it prints the debugging instructions with a session name such as `tw-abc123`.
+   - `npx --no-install playwright-cli attach tw-abc123`, then `npx --no-install playwright-cli snapshot` to see the page.
+   - Act with `click`, `fill`, or `find "<text>"`. Each command prints the Playwright code it ran. Copy the locator from there.
+   - `npx --no-install playwright-cli detach`, then stop the background test run.
+4. Fix one failure at a time:
+   - Locator: update the field in the page class, not the spec.
+   - Timing: replace the check with a web-first assertion (`await expect(locator).toBeVisible()`). Never add `waitForTimeout` or `networkidle`.
+   - Data or setup: fix the `page.route` mock (UI side) or the test's data setup (API side).
+   - Product bug: mark only that test `test.fixme()`, add a comment above it with the source `file:line`, expected, and actual. Report it.
+5. Rerun the spec after each fix. Require every non-fixme test to pass.
+6. Stop after 3 fix-and-rerun rounds and report what still fails and why.
+
+## Never
+
+- Edit application source.
+- Delete a test, or use `.skip`, `.only`, or `test.fail()`.
+- Weaken an assertion (`toBeTruthy()`, removed checks, regex that matches anything) to go green.
+- Use `test.fixme()` for anything but a product bug you can point to in source.
+
+Finish with each failure, its class, the fix, and the final summary line.

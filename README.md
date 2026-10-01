@@ -1,53 +1,60 @@
 # Cursor QA agent
 
-This folder is a Cursor workspace for writing tests. The `qa` agent reads your application source and writes tests. It does not change the product to make a test pass.
+A Cursor setup for writing tests. The `qa` agent reads your application source and writes tests. It does not change the product to make a test pass.
 
 Application code lives in places such as `app/` or `src/`. Tests live under `test/`.
 
-## Setup
+## Add it to your app
 
-1. Install [Cursor](https://cursor.com) and [Node.js](https://nodejs.org).
-2. Open this folder in Cursor with **File → Open Folder**.
-3. Open the agent chat and switch to **Agent** mode. Ask mode can explain the code. Agent mode is what writes test files.
-4. Install dependencies and the Chromium browser Playwright uses:
+Copy these into the root of your React or Next.js app, next to `app/` or `src/`:
+
+```text
+.cursor/  test/  AGENTS.md  vitest.config.ts  playwright.config.ts
+```
+
+Do not copy `package.json` over yours. Merge it instead:
+
+- Add the `devDependencies` from this repo's `package.json` to yours. React and React DOM come from your app.
+- Add the four `test:*` scripts.
+- Add the `.gitignore` lines you don't already have.
+
+Then install dependencies and the Chromium browser Playwright uses:
 
 ```bash
 npm install
 npx playwright install chromium
 ```
 
-5. Turn on the MCP servers in Cursor settings. This repo already lists them in [`.cursor/mcp.json`](.cursor/mcp.json):
+Open the app folder in Cursor with **File → Open Folder**, and use **Agent** mode in chat. Ask mode can explain code but cannot write files.
 
-| Server | Used for |
+## Tools
+
+The MCP servers are listed in [`.cursor/mcp.json`](.cursor/mcp.json). Turn them on in Cursor settings, and restart them if Cursor does not show them.
+
+| Tool | Used for |
 | --- | --- |
-| `playwright` | Driving the browser while planning or inspecting a page |
-| `playwright-test` | Running and debugging Playwright specs |
-| `vitest` | Running Vitest from the agent |
+| `playwright` MCP | Exploring a live page while planning or generating a spec |
+| `playwright-cli` | Debugging a failing spec (`npx playwright test --debug=cli`, then `attach`) |
+| `vitest` MCP | Running Vitest from the agent |
 
-Restart the MCP servers if Cursor does not show them after you open the folder.
+## The app under test
+
+End-to-end tests open the app at `http://localhost:3000`. Playwright starts it with `npm run dev` when nothing is listening there.
+
+If your app runs somewhere else, start it yourself and set `BASE_URL`:
+
+```bash
+BASE_URL=http://localhost:5173 npm run test:e2e
+```
 
 ## Start the qa agent
 
-The role is defined in [`.cursor/agents/qa.md`](.cursor/agents/qa.md).
-
-In the agent chat, type `/qa` and choose **qa**, or ask in plain language to use the `qa` role. Example:
-
-```text
-/qa Write a unit test for the sign-in form. This is UI.
-```
-
-`qa` reads one skill for the prompt, plus what that skill allows. Say which job you want so it opens the matching skill.
-
-## What to ask
-
-Name the source file or screen, and say whether the work is **UI** or **API**.
+The role is defined in [`.cursor/agents/qa.md`](.cursor/agents/qa.md). In the agent chat, type `/qa`. Ask for one job per prompt, name the source file or screen, and say **UI** or **API**:
 
 - **UI** means client screens, forms, and flows. The network may be mocked.
-- **API** means route handlers, server actions, services, auth, or saved data. These tests use the real API. Do not ask for both in one prompt.
+- **API** means route handlers, server actions, services, auth, or saved data. These tests use the real backend.
 
 ### Unit and integration
-
-Files are `.test.ts` and must not contain JSX. The steps live in [`.cursor/skills/vitest-unit-integration/SKILL.md`](.cursor/skills/vitest-unit-integration/SKILL.md).
 
 ```text
 /qa Write a unit test for src/components/SignIn.tsx. This is UI.
@@ -57,58 +64,51 @@ Files are `.test.ts` and must not contain JSX. The steps live in [`.cursor/skill
 /qa Write an integration test for app/api/session/route.ts. This is API.
 ```
 
+Files are `.test.ts` and contain no JSX. They mirror the source path, so `src/components/SignIn.tsx` gets `test/unit/components/SignIn.test.ts`.
+
 ### End-to-end
 
-End-to-end work has three steps. Ask for one step at a time.
+End-to-end work has three steps. Ask for one at a time.
 
-**Plan.** The agent explores the app and saves a markdown plan. It does not write the spec yet.
+**Plan.** The agent explores one feature in the browser and saves `test/e2e/plan/<name>.plan.md`.
 
 ```text
 /qa Plan end-to-end coverage for sign-in. This is UI.
 ```
 
-The plan is saved as `test/e2e/plan/<name>.plan.md`. The seed file named in the plan is `test/e2e/seed.spec.ts`.
-
-**Generate.** The agent turns one plan into a Playwright spec and page classes.
+**Generate.** The agent turns one plan into `test/e2e/<name>.spec.ts` and page classes in `test/e2e/pages/`, then runs the spec.
 
 ```text
 /qa Generate the Playwright spec from test/e2e/plan/sign-in.plan.md. This is UI.
 ```
 
-Specs are `test/e2e/*.spec.ts`. Page classes are `test/e2e/pages/`. Locators live on the page class. Assertions live in the spec.
-
-**Heal.** The agent reruns a failing spec and edits the test. It does not edit application source.
+**Heal.** The agent reruns one failing spec, debugs it with `playwright-cli`, and fixes the test. A real product bug is marked `test.fixme()` and reported.
 
 ```text
-/qa Fix the failing sign-in spec in test/e2e/sign-in.spec.ts.
+/qa Fix the failing spec test/e2e/sign-in.spec.ts.
 ```
 
-## Skills
+## What qa reads
 
-`qa` opens one skill, plus what that skill allows.
+`qa` reads only the files for the job you asked for. This keeps it fast and stops it from mixing instructions.
 
-| You ask for | Skill it reads |
+| Job | Files |
 | --- | --- |
-| Unit or integration | [`.cursor/skills/vitest-unit-integration`](.cursor/skills/vitest-unit-integration), then at most one reference (`features-mocking`, `core-expect`, or `core-test-api`) |
-| Any end-to-end work | [`.cursor/skills/playwright`](.cursor/skills/playwright), then one tool below |
-| A plan | [`.cursor/skills/playwright-planner`](.cursor/skills/playwright-planner) |
-| A spec from a plan | [`.cursor/skills/playwright-generator`](.cursor/skills/playwright-generator) |
-| A failing spec | [`.cursor/skills/playwright-healer`](.cursor/skills/playwright-healer) |
-| Driving the browser | [`.cursor/skills/playwright-cli`](.cursor/skills/playwright-cli), and only then |
-| A page class or spec | [`.cursor/skills/playwright-page-objects`](.cursor/skills/playwright-page-objects), and only then |
+| Unit or integration | [`vitest-unit-integration`](.cursor/skills/vitest-unit-integration/SKILL.md), plus at most one reference |
+| Plan | [`playwright-planner`](.cursor/skills/playwright-planner/SKILL.md) |
+| Generate | [`playwright-generator`](.cursor/skills/playwright-generator/SKILL.md) and [`playwright-page-objects`](.cursor/skills/playwright-page-objects/SKILL.md) |
+| Heal | [`playwright-healer`](.cursor/skills/playwright-healer/SKILL.md) and [`playwright-page-objects`](.cursor/skills/playwright-page-objects/SKILL.md) |
 
 ## Layout
 
 ```text
 test/unit/                 Vitest unit tests
 test/integration/          Vitest integration tests
-test/e2e/*.spec.ts         Playwright specs
-test/e2e/plan/*.plan.md    End-to-end plans
+test/e2e/<name>.spec.ts    Playwright specs
+test/e2e/plan/             End-to-end plans
 test/e2e/pages/            Page classes
-test/e2e/seed.spec.ts      Playwright seed
+test/e2e/seed.spec.ts      Checks that the app responds at /
 ```
-
-There are no separate frontend or backend test folders. UI and API are instructions inside the skills.
 
 ## Run the tests yourself
 
@@ -122,11 +122,9 @@ npm run test:e2e
 
 ## What qa will not change
 
-`qa` may read `app/`, `src/`, and similar source so it can learn the behavior. It does not edit that source.
+`qa` reads `app/`, `src/`, and similar source to learn the behavior. It does not edit that source. If a test fails because the product is wrong, it reports the bug instead of weakening the test.
 
-If a test fails because the product is wrong, the agent reports the bug. It changes a test expectation only when the test itself was wrong.
-
-A project hook enforces the same limit. Writes are allowed in:
+A project hook, [`.cursor/hooks/guard-test-writes.py`](.cursor/hooks/guard-test-writes.py), enforces this. Writes are allowed only in:
 
 - `test/**`
 - `vitest.config.ts`
@@ -137,4 +135,18 @@ A project hook enforces the same limit. Writes are allowed in:
 - `.cursor/skills/**`
 - `.cursor/agents/**`
 
-Git and GitHub CLI (`gh`) commands are allowed, including commit, push, and pull requests. Edits under `app/` or `src/` are blocked.
+In the shell, the agent can run tests, read files, and use `git` and `gh` to inspect, commit, push, create a branch from the current commit (`git switch -c`), and open pull requests. The hook blocks anything that could change files outside those paths:
+
+- Redirects into other files (`>`, `>>`, `&>`, `>|`, `<>`). `/dev/null` is allowed.
+- Nested commands: `$(...)`, backticks, `<(...)`.
+- Git commands that rewrite the working tree: switching to an existing branch, `pull`, `merge`, `rebase`, `cherry-pick`, `stash`, `reset --hard`, `restore` or `checkout --` on source, `apply`, `clean`.
+- Git aliases, `-c` overrides, `--git-dir`/`--work-tree`, and `git config` writes.
+- `gh pr checkout`, `gh repo clone`, `gh run download`, and `gh alias`.
+
+Run those yourself when you need them.
+
+Test the hook after changing it:
+
+```bash
+python3 -m unittest discover -s .cursor/hooks
+```
