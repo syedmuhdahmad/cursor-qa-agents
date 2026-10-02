@@ -216,7 +216,7 @@ Some pages register their own tools for agents through the experimental WebMCP A
 has them, the page status says so, and the snapshot lists them at the top. Run `webmcp-list` to
 get the same list and schemas without taking a snapshot:
 
-```
+```text
 - Page URL: https://example.com/
 - 2 webmcp tools available on the page
 ```
@@ -259,11 +259,13 @@ playwright-cli --raw localstorage-get theme
 ```
 
 For structured output wrapping every reply as JSON, pass --json
+
 ```bash
 playwright-cli list --json
 ```
 
 ## Open parameters
+
 ```bash
 # Use specific browser when creating session
 playwright-cli open --browser=chrome

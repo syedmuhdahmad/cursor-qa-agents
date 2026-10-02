@@ -1,15 +1,24 @@
-# Files the agent never needs to read. Cursor already skips .gitignore entries.
-# The write guard hook also denies shell reads (cat, grep, sed, ...) of these paths.
-# test-results/ is not listed: the healer reads error-context.md from it.
+# Paths the agent never needs to read. Syntax follows .gitignore.
+#
+# Cursor already skips everything in .gitignore; this file adds paths that
+# are tracked or useful to humans but only waste agent context.
+#
+# .cursor/hooks/guard-test-writes.py also reads this file and denies shell
+# reads (cat, grep, sed, and so on) of the paths below. Lines starting with
+# `#` or `!` are skipped by that hook, so negation patterns have no effect
+# there.
+#
+# test-results/ is deliberately absent: the healer skill reads
+# error-context.md from it.
 
-# Lockfiles
+# Lockfiles: large, generated, and never needed to write a test.
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
 bun.lock
 bun.lockb
 
-# Build output
+# Build output and framework caches.
 node_modules/
 .next/
 dist/
@@ -18,7 +27,7 @@ out/
 .turbo/
 .vercel/
 
-# Test output
+# Test reports and tool state. Read the test source instead.
 coverage/
 playwright-report/
 blob-report/

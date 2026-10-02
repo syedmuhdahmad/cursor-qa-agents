@@ -121,7 +121,7 @@ coverage: {
 
 ## Ignoring Code
 
-### V8
+### V8 Ignore Comments
 
 ```ts
 /* v8 ignore next -- @preserve */
@@ -134,7 +134,7 @@ function ignored() {
 /* v8 ignore stop -- @preserve */
 ```
 
-### Istanbul
+### Istanbul Ignore Comments
 
 ```ts
 /* istanbul ignore next -- @preserve */

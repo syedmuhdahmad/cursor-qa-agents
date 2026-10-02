@@ -1,6 +1,11 @@
+# Dependencies
 node_modules/
+
+# Python bytecode from the Cursor hook and its tests
 __pycache__/
 *.pyc
+
+# Test output and tool state
 .vitest/
 coverage/
 playwright-report/
