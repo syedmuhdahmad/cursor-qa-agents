@@ -18,6 +18,7 @@ test('context', ({ task, expect, skip, signal, annotate }) => {
 ```
 
 Properties:
+
 - `task` — test metadata (name, file, etc.)
 - `expect` — expect bound to this test (required for concurrent snapshot tests)
 - `skip(condition?, message?)` — skip the test
@@ -84,7 +85,7 @@ Tuple form sets options: `fixture: [async ({}, use) => {…}, { scope: 'file' }]
 ## Fixture Scopes (3.2+)
 
 | Scope | Lifetime | Can access |
-|-------|----------|------------|
+| ------- | ---------- | ------------ |
 | `test` (default) | each test | worker + file + test fixtures + built-in context |
 | `file` | once per file | worker + file fixtures |
 | `worker` | once per worker process | only worker fixtures |

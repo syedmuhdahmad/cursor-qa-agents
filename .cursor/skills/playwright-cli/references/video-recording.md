@@ -73,6 +73,7 @@ await page.screencast.showActions({
 ```
 
 Notes:
+
 - All decorations fade out over `duration`. Override `animation` in a style to do something else.
 - The cursor stays on screen at the last action point between actions and across navigations,
   and travels along a slightly curved path, so it reads as a hand moving a mouse.
@@ -88,7 +89,7 @@ playwright-cli video-start recordings/login-flow-2024-01-15.webm
 playwright-cli video-start recordings/checkout-test-run-42.webm
 ```
 
-### 2. Record entire hero scripts.
+### 2. Record entire hero scripts
 
 When recording a video for the user or as a proof of work, it is best to create a code snippet and execute it with run-code.
 It allows inserting appropriate pauses between the actions and annotating the video. There are new Playwright APIs for that.
@@ -181,7 +182,7 @@ Embrace creativity, overlays are powerful.
 ### Overlay API Summary
 
 | Method | Use Case |
-|--------|----------|
+| -------- | ---------- |
 | `page.screencast.showChapter(title, { description?, duration?, styleSheet? })` | Full-screen chapter card with blurred backdrop — ideal for section transitions |
 | `page.screencast.showOverlay(html, { duration? })` | Custom HTML overlay — use for callouts, labels, highlights |
 | `disposable.dispose()` | Remove a sticky overlay added without duration |
@@ -204,7 +205,7 @@ gh issue comment 456 --body "Recording of the repro steps." --attach ./repro.web
 ## Tracing vs Video
 
 | Feature | Video | Tracing |
-|---------|-------|---------|
+| --------- | ------- | --------- |
 | Output | WebM file | Trace file (viewable in Trace Viewer) |
 | Shows | Visual recording | DOM snapshots, network, console, actions |
 | Use case | Demos, documentation | Debugging, analysis |

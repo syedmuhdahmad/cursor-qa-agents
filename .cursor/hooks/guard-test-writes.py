@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""Deny agent edits outside tests, repo metadata, skills, and agents."""
+"""Deny agent edits outside tests, repo metadata, skills, and agents.
+
+Cursor runs this hook before every tool call (preToolUse) and every shell
+command (beforeShellExecution); see .cursor/hooks.json. It reads one JSON
+payload on stdin and prints {"permission": "allow" | "deny", ...} on stdout.
+
+Write tools are allowed only when every target path is inside the write scope.
+Shell commands are split into segments and pipeline stages, and each stage
+must be a test runner, a known read-only program, a safe git or gh command,
+or a file operation whose targets are all inside the write scope. Anything
+the hook cannot classify is denied.
+"""
 
 import fnmatch
 import json
@@ -9,7 +20,10 @@ import shlex
 import sys
 from pathlib import Path
 
+# Repository root: this file lives at <repo>/.cursor/hooks/.
 REPO = Path(__file__).resolve().parents[2]
+
+# Write scope. Keep AGENTS.md and WRITE_SCOPE in step with these.
 ALLOWED_FILES = {
     (REPO / "vitest.config.ts").resolve(),
     (REPO / "playwright.config.ts").resolve(),
@@ -21,11 +35,14 @@ ALLOWED_DIRS = (
     (REPO / ".cursor" / "skills").resolve(),
     (REPO / ".cursor" / "agents").resolve(),
 )
+# Root README, matched case-insensitively.
 ROOT_README_NAMES = {"readme", "readme.md"}
+# Human-readable write scope used in deny messages.
 WRITE_SCOPE = (
     "test/, vitest.config.ts, playwright.config.ts, README.md, .gitignore, "
     "AGENTS.md, .cursor/skills/, and .cursor/agents/"
 )
+# Agent tool names that create, change, or delete files.
 WRITE_TOOLS = {
     "Write",
     "StrReplace",
@@ -36,6 +53,7 @@ WRITE_TOOLS = {
     "MultiEdit",
     "NotebookEdit",
 }
+# Keys in a tool's input that name a target file.
 PATH_KEYS = {
     "path",
     "file_path",
@@ -44,6 +62,8 @@ PATH_KEYS = {
     "notebook_path",
     "file",
 }
+# Programs that cannot write files. sed, sort, and uniq can, so they have
+# their own checks in atomic_allowed().
 READ_ONLY = {
     "ls",
     "cat",
@@ -77,13 +97,16 @@ READ_ONLY = {
     "[",
     ":",
 }
+# package.json scripts the agent may run.
 NPM_TEST_SCRIPTS = {
     "test:unit",
     "test:integration",
     "test:e2e",
     "test:e2e:list",
 }
+# File operations allowed only when every operand is inside the write scope.
 MUTATING = {"rm", "mv", "cp", "mkdir", "touch", "tee", "install", "truncate", "ln"}
+# git options and subcommands that cannot rewrite working-tree files.
 GIT_SAFE_GLOBAL_OPTIONS = {"--no-pager", "-P", "--no-optional-locks", "--paginate", "-p"}
 GIT_READ_OR_COMMIT = {
     "status", "log", "diff", "show", "blame", "grep", "ls-files", "ls-remote", "ls-tree",
@@ -92,6 +115,8 @@ GIT_READ_OR_COMMIT = {
     "add", "commit", "fetch", "push", "tag", "branch", "remote",
 }
 GIT_READ_CONFIG = {"--get", "--get-all", "--get-regexp", "--list", "-l", "get", "list"}
+# gh commands that act on GitHub. GH_DENIED lists those that write local
+# files; GH_ONLY limits a command to the listed actions.
 GH_COMMANDS = {"pr", "issue", "api", "run", "workflow", "status", "search", "browse", "label", "release", "repo", "auth"}
 GH_DENIED = {
     ("pr", "checkout"),
@@ -102,17 +127,22 @@ GH_ONLY = {
     "repo": {"view", "list"},
     "auth": {"status"},
 }
+# Programs whose operands are files they read, checked against .cursorignore.
 READ_FILE_PROGRAMS = {"cat", "head", "tail", "grep", "rg", "wc", "cut", "sort", "uniq", "sed"}
+# Programs whose first operand is a pattern or script, not a file.
 PATTERN_FIRST = {"grep", "rg", "sed"}
 # Short options that take a value. `e` is a pattern or sed script, `f` is a file the program opens.
 VALUE_SHORT_OPTIONS = {"grep": "ABCDdefm", "rg": "ABCEefgjMmrTt", "sed": "efl"}
 PATTERN_LONG_OPTIONS = {"--regexp", "--expression"}
 FILE_LONG_OPTIONS = {"--file"}
+# sed commands that only print, delete, or move text in memory.
 SED_SAFE_COMMANDS = set("pdnNqQ=lxhHgGDPzF{}")
+# find actions that delete, write, or run commands.
 FIND_WRITES = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf"}
 
 
 def emit(permission, message=""):
+    """Print the hook decision for Cursor and exit. Shows message to both user and agent."""
     payload = {"permission": permission}
     if message:
         payload["user_message"] = message
@@ -122,6 +152,7 @@ def emit(permission, message=""):
 
 
 def load_ignore_patterns():
+    """Patterns from .cursorignore, skipping blank lines, comments, and `!` negations."""
     try:
         lines = (REPO / ".cursorignore").read_text().splitlines()
     except OSError:
@@ -313,6 +344,7 @@ def sed_allowed(tokens, cwd):
         return bool(operands) and all(is_allowed(path, cwd) for path in operands)
     return True
 
+
 def sort_allowed(tokens, cwd):
     """`sort -o FILE` writes FILE."""
     for index, token in enumerate(tokens[1:], start=1):
@@ -347,6 +379,7 @@ def uniq_allowed(tokens, cwd):
         index += 1
     return len(operands) < 2 or is_allowed(operands[1], cwd)
 
+
 def ignored_read(segment, cwd):
     """The first .cursorignore path a read command would open, or None."""
     try:
@@ -362,6 +395,7 @@ def ignored_read(segment, cwd):
 
 
 def is_allowed(path_text, cwd):
+    """True when a path, resolved against cwd and symlinks, is inside the write scope."""
     raw = os.path.expanduser(path_text)
     path = Path(raw)
     if not path.is_absolute():
@@ -384,6 +418,7 @@ def is_allowed(path_text, cwd):
 
 
 def collect_paths(value, found):
+    """Append every string under a PATH_KEYS key in a nested tool input to found."""
     if isinstance(value, dict):
         for key, item in value.items():
             if key.lower() in PATH_KEYS and isinstance(item, str):
@@ -429,6 +464,7 @@ def has_substitution(command):
 
 
 def split_compound(command):
+    """Split a command line on `&&`, `||`, `;`, newlines, and background `&`, outside quotes."""
     parts = []
     buf = []
     quote = None
@@ -468,6 +504,7 @@ def split_compound(command):
 
 
 def split_pipes(segment):
+    """Split one command segment into pipeline stages on `|` and `|&`, outside quotes."""
     parts = []
     buf = []
     quote = None
@@ -556,7 +593,9 @@ def redirect_targets(segment):
         targets.append(target)
     return targets
 
+
 def strip_env(tokens):
+    """Drop leading `NAME=value` assignments so tokens[0] is the program."""
     index = 0
     while index < len(tokens) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tokens[index]):
         index += 1
@@ -564,6 +603,7 @@ def strip_env(tokens):
 
 
 def is_test_runner(tokens):
+    """True for an allowed npm test script, or vitest, playwright-cli, or `playwright test`, directly or via npx."""
     if not tokens:
         return False
     program = os.path.basename(tokens[0])
@@ -593,6 +633,7 @@ def is_test_runner(tokens):
 
 
 def operand_paths(tokens):
+    """Arguments after the program that are not options."""
     return [token for token in tokens[1:] if not token.startswith("-")]
 
 
@@ -659,7 +700,9 @@ def gh_allowed(tokens):
         return action in GH_ONLY[command]
     return True
 
+
 def atomic_allowed(segment, cwd):
+    """True when one pipeline stage, including its redirects, stays inside the write scope."""
     for target in redirect_targets(segment):
         if target != "/dev/null" and not is_allowed(target, cwd):
             return False
@@ -695,6 +738,7 @@ def atomic_allowed(segment, cwd):
 
 
 def guard_shell(command, cwd):
+    """Decide a beforeShellExecution event. Every stage of every segment must pass."""
     if not command.strip():
         emit("allow")
     if has_substitution(command):
@@ -725,6 +769,7 @@ def guard_shell(command, cwd):
 
 
 def guard_tool(payload, cwd):
+    """Decide a preToolUse event. Non-write tools pass; write tools need every path in scope."""
     tool_name = payload.get("tool_name") or payload.get("tool") or ""
     if tool_name not in WRITE_TOOLS:
         emit("allow")
@@ -748,6 +793,7 @@ def guard_tool(payload, cwd):
 
 
 def main():
+    """Read the hook payload from stdin and route it. Malformed input is denied."""
     raw = sys.stdin.read()
     try:
         payload = json.loads(raw) if raw.strip() else {}

@@ -30,7 +30,7 @@ When `reporters` is unset, Vitest auto-selects:
 ## Built-in Reporters
 
 | Reporter | Use |
-|----------|-----|
+| ---------- | ----- |
 | `default` | Summary + collapses passing files; prints full tree for single/failing file |
 | `verbose` | One line per finished test (flat list in v4); only reporter that shows annotations on pass |
 | `tree` | Like `default` but always shows each test (the old v3 verbose) |
