@@ -204,3 +204,17 @@ Test the hook after changing it:
 ```bash
 python3 -m unittest discover -s .cursor/hooks
 ```
+
+## Roadmap
+
+Mobile end-to-end testing with [Maestro](https://maestro.dev) is planned, for Android and iOS. The work is tracked in [issue 21](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/21), in this order:
+
+1. [Shared groundwork](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/22): file layout, `qa` routing, the hook allowlist, and the Maestro MCP server.
+2. [Android](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/23): emulators and devices.
+3. [iOS](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/24): the Simulator.
+
+Known gaps in the current setup are tracked under the [Repo hardening milestone](https://github.com/syedmuhdahmad/cursor-qa-agents/milestone/1).
+
+## License
+
+[MIT](LICENSE). Skills copied from other projects keep their own licenses; see [issue 15](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/15).
