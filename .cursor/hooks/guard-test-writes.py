@@ -1450,8 +1450,8 @@ def atomic_allowed(segment, cwd):
 def changed_directories(stage, directories):
     """Where the shell could be after a `cd` stage started in one of directories.
 
-    Returns None when the stage is not a `cd`. `cd -` and anything else the
-    hook cannot follow gives UNKNOWN_CWD.
+    Returns None when the stage is not a `cd`. `cd -` gives UNKNOWN_CWD,
+    because the hook does not know the directory before this one.
     """
     try:
         tokens = strip_env(command_words(stage))

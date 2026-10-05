@@ -238,7 +238,7 @@ The hook also denies:
 - Text the shell rewrites before it runs the command: `$(...)`, backticks, `<(...)`, `$VARIABLE`, `$'...'`, and brace expansion such as `{a,b}`. `$?` is allowed. To pass a literal `$`, put it in single quotes.
 - Setting any variable other than `BASE_URL`, `CI`, `FORCE_COLOR`, `NO_COLOR`, `PLAYWRIGHT_HTML_OPEN`, and `RTK_DISABLED`.
 - A program named by path, such as `./test/bin/tool`. Only `node_modules/.bin/vitest`, `playwright`, and `playwright-cli` may be run by path.
-- Read commands that can write or run programs: `sed` with `w`/`e` or `-f`, in-place `sed` on source, `sort -o`, `sort --compress-program`, a `uniq` output file, `rg --pre`, and `find` with `-delete`, `-exec`, `-fprint`, or `-fls`.
+- Read commands when they would run a program or write outside the write scope: `sed` with `w`/`e` or `-f`, in-place `sed` on source, `sort -o` or a `uniq` output file outside the write scope, `sort --compress-program`, `rg --pre`, and `find` with `-delete`, `-exec`, `-fprint`, or `-fls`.
 - `rm`, `mv`, `cp`, `mkdir`, `touch`, `tee`, `truncate`, and `ln` on anything outside the write scope, including through `--target-directory`.
 - `rtk` commands other than the ones RTK's own rewriting produces for allowed programs, such as `rtk git`, `rtk read`, and `rtk ls`. `rtk test`, `rtk proxy`, and any name rtk does not know run whatever follows them.
 
