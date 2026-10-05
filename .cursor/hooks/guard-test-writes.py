@@ -569,6 +569,8 @@ def ignored_read(segment, cwd):
 
 def is_allowed(path_text, cwd):
     """True when a path, resolved against cwd and symlinks, is inside the write scope."""
+    if "\x00" in path_text:
+        return False
     raw = os.path.expanduser(path_text)
     path = Path(raw)
     if not path.is_absolute():
@@ -1492,6 +1494,9 @@ def guard_shell(command, cwd):
     `dir`. After `cd dir; …` or `cd dir || …` the cd may have failed, so the
     rest must be allowed both in `dir` and in the directory before it.
     """
+    if "\x00" in command:
+        # No shell command contains a NUL character, and paths cannot hold one.
+        emit("deny", "The command contains a NUL character.")
     command = join_continuations(command)
     if not command.strip():
         emit("allow")

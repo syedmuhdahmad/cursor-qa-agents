@@ -687,6 +687,11 @@ class EditTools(unittest.TestCase):
     def test_read_tool_passes(self):
         self.assertEqual(tool("Read", "src/a.ts"), "allow")
 
+    def test_nul_character_is_denied_without_a_crash(self):
+        self.assertEqual(tool("Write", "test/a\x00b.ts"), "deny")
+        self.assertEqual(shell("rm test/a\x00b.ts"), "deny")
+        self.assertEqual(shell("cat ~\x00"), "deny")
+
 
 if __name__ == "__main__":
     unittest.main()
