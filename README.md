@@ -184,16 +184,65 @@ A project hook, [`.cursor/hooks/guard-test-writes.py`](.cursor/hooks/guard-test-
 - `.cursor/skills/**`
 - `.cursor/agents/**`
 
-In the shell, the agent can run tests, read files, and use `git` and `gh` to inspect, commit, push, create a branch from the current commit (`git switch -c`), and open pull requests. The hook blocks anything that could change files outside those paths:
+In the shell, the agent can run tests, read files, and use `git` and `gh` within the limits below. The hook denies every other command, and its message tells the agent what is allowed. Run a denied command yourself when you need it.
 
-- Redirects into other files (`>`, `>>`, `&>`, `>|`, `<>`). `/dev/null` is allowed.
-- Nested commands: `$(...)`, backticks, `<(...)`.
-- Read commands that can write or run programs: `sed` with `w`/`e` or `-f`, in-place `sed` on source, `sort -o`, a `uniq` output file, and `rg --pre`.
-- Git commands that rewrite the working tree: switching to an existing branch, `pull`, `merge`, `rebase`, `cherry-pick`, `stash`, `reset --hard`, `restore` or `checkout --` on source, `apply`, `clean`.
-- Git aliases, `-c` overrides, `--git-dir`/`--work-tree`, and `git config` writes.
-- `gh pr checkout`, `gh repo clone`, `gh run download`, and `gh alias`.
+The hook reads command lines. It does not sandbox the tests: a test file is code, and the runners execute it with your permissions.
 
-Run those yourself when you need them.
+### Tests
+
+- `npm run test:unit`, `test:integration`, `test:e2e`, and `test:e2e:list`, with runner arguments after `--`.
+- `npx vitest` and `npx playwright test`. `vitest init`, `playwright install`, and other `playwright` subcommands are denied.
+- A runner option that names a file or folder must point inside the write scope: `--outputFile`, `--output`, `--config`, `--root`, `--dir`, `--coverage.reportsDirectory`, `--attachmentsDir`, and `--last-failed-file`.
+- `npx` cannot use `-c`, and `--package` must name one of the test runners.
+- `npx playwright-cli` is limited to the commands the healer uses on a test paused by `--debug=cli`: `attach`, `detach`, `list`, `pause-at`, `resume`, `step-over`, `snapshot`, `find`, `generate-locator`, `console`, `requests`, `request`, `click`, `dblclick`, `fill`, `type`, `press`, `hover`, `select`, `check`, and `uncheck`. `--filename` must point inside the write scope.
+
+### git
+
+Allowed:
+
+- Inspecting: `status`, `log`, `diff`, `show`, `blame`, `grep`, `ls-files`, `rev-parse`, `reflog`, and similar read commands.
+- `add` and `commit`.
+- A new branch from the current commit (`git switch -c <name>`, `git checkout -b <name>`, `git branch <name>`), and a new tag.
+- `fetch`, `ls-remote`, and `push` with a configured remote such as `origin`.
+- Unstaging with `git reset`, and `git restore`, `git rm`, `git mv`, and `git checkout --` on files inside the write scope.
+- `git remote -v`, `git remote show`, `git remote get-url`, and `git config --get`.
+
+Denied:
+
+- `push` with `--force`, `--force-with-lease`, `--delete`, `--mirror`, `--all`, `--tags`, or `--prune`, and a refspec that starts with `+` or `:`.
+- A URL or path in place of a remote name, and `--upload-pack` or `--receive-pack`.
+- Deleting, renaming, or forcing a branch or tag, and `checkout -B` or `switch -C`.
+- `commit --amend`, a reset that moves `HEAD`, and `reflog expire` or `delete`.
+- Switching to an existing branch, `pull`, `merge`, `rebase`, `cherry-pick`, `stash`, `apply`, and `clean`.
+- `--output=<file>` on any command, and `git grep --open-files-in-pager`.
+- Adding or changing a remote, `git config` writes, aliases, `-c` overrides, and `--git-dir` or `--work-tree`.
+
+Shortened options such as `--del` for `--delete` are treated like the full option.
+
+### gh
+
+Allowed:
+
+- `pr create`, `view`, `list`, `diff`, `status`, `checks`, and `comment`.
+- `issue create`, `view`, `list`, `status`, and `comment`.
+- `run view`, `list`, and `watch`; `workflow view` and `list`; `release view` and `list`; `label list`; `repo view` and `list`; `search`; `status`; `auth status`.
+- `gh api` for GET requests.
+
+Denied: every other `gh` command. That includes `pr merge`, `pr close`, `pr checkout`, every delete, `workflow run`, `repo clone`, `run download`, `alias`, `comment --delete-last`, and `auth status --show-token`. `gh api` is denied with another method, with `--input`, with fields unless the method is given as GET, and for the `graphql` endpoint.
+
+### Other shell rules
+
+The hook also denies:
+
+- Redirects into files outside the write scope (`>`, `>>`, `&>`, `>|`, `<>`). `/dev/null` is allowed.
+- Text the shell rewrites before it runs the command: `$(...)`, backticks, `<(...)`, `$VARIABLE`, `$'...'`, and brace expansion such as `{a,b}`. `$?` is allowed. To pass a literal `$`, put it in single quotes.
+- Setting any variable other than `BASE_URL`, `CI`, `FORCE_COLOR`, `NO_COLOR`, `PLAYWRIGHT_HTML_OPEN`, and `RTK_DISABLED`.
+- A program named by path, such as `./test/bin/tool`. Only `node_modules/.bin/vitest`, `playwright`, and `playwright-cli` may be run by path.
+- Read commands that can write or run programs: `sed` with `w`/`e` or `-f`, in-place `sed` on source, `sort -o`, `sort --compress-program`, a `uniq` output file, `rg --pre`, and `find` with `-delete`, `-exec`, `-fprint`, or `-fls`.
+- `rm`, `mv`, `cp`, `mkdir`, `touch`, `tee`, `truncate`, and `ln` on anything outside the write scope, including through `--target-directory`.
+- `rtk` commands other than the ones RTK's own rewriting produces for allowed programs, such as `rtk git`, `rtk read`, and `rtk ls`. `rtk test`, `rtk proxy`, and any name rtk does not know run whatever follows them.
+
+After `cd`, relative paths are checked against the new directory.
 
 ## What qa does not read
 
