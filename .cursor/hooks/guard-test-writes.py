@@ -202,6 +202,11 @@ GIT_REMOTE_VALUE_FLAGS = {
     "fetch": {"--depth", "--deepen", "--shallow-since", "--jobs"},
     "ls-remote": {"--sort"},
 }
+# git subcommands that change the repository they run in. `cd` and `git -C`
+# can point them at another repository, so they must run inside this one.
+GIT_CHANGES_REPOSITORY = {
+    "add", "commit", "push", "fetch", "tag", "branch", "reset", "restore", "rm", "mv", "checkout", "switch",
+}
 # A configured remote such as `origin`, as opposed to a URL or a path.
 REMOTE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 GIT_READ_CONFIG = {"--get", "--get-all", "--get-regexp", "--list", "-l", "get", "list"}
@@ -217,6 +222,15 @@ GH_ACTIONS = {
     "search": {"code", "commits", "issues", "prs", "repos"},
     "auth": {"status"},
 }
+# gh actions that publish to GitHub, and their options that take a value.
+# `--body-file` and `-F` send a file's content, and `--repo` and `-R` choose
+# another repository.
+GH_POST_ACTIONS = {"create", "comment"}
+GH_POST_VALUE_OPTIONS = {
+    "--assignee", "--base", "--body", "--body-file", "--head", "--label", "--milestone",
+    "--project", "--recover", "--repo", "--reviewer", "--template", "--title",
+}
+GH_POST_VALUE_SHORTS = "aBbFHlmprtTR"
 # `gh api` long and short options that take a value.
 GH_API_VALUE_OPTIONS = {
     "--method", "--header", "--field", "--raw-field", "--input",
@@ -253,6 +267,10 @@ DENY_VARIABLE = (
     "Write the value out. To pass a literal $, put it in single quotes."
 )
 DENY_BRACES = "Shell commands cannot use brace expansion such as {a,b}. Write each word out."
+DENY_WILDCARD = (
+    "A word that starts with a wildcard, or an option with a wildcard in its name, can expand to a file name "
+    "that the program reads as an option. Start the pattern with ./ or put it in quotes."
+)
 DENY_ENV = (
     "A command may set only these variables, to plain values: " + ", ".join(sorted(ALLOWED_ENV)) + "."
 )
@@ -281,11 +299,13 @@ DENY_PLAYWRIGHT_CLI = (
 DENY_GIT = (
     "That git command is not allowed. git may inspect, stage, commit, create a branch or tag, fetch, and "
     "push a branch to a configured remote. It may not force-push, delete or rename a branch or tag, amend, "
-    "move HEAD, change remotes, switch branches, or write files. Ask the user to run it."
+    "move HEAD, change remotes, switch branches, write files, or change another repository. "
+    "Ask the user to run it."
 )
 DENY_GH = (
-    "That gh command is not allowed. gh may view and list, create a pull request or issue, comment on one, "
-    "and send GET requests with `gh api`. Ask the user to run it."
+    "That gh command is not allowed. gh may view and list, create a pull request or issue in this "
+    "repository, comment on one, and send GET requests with `gh api`. A body file must be inside the write "
+    "scope. Ask the user to run it."
 )
 
 
@@ -592,6 +612,15 @@ def is_allowed(path_text, cwd):
     return False
 
 
+def in_repository(directory):
+    """True when a directory is the repository root or inside it, after resolving symlinks."""
+    try:
+        Path(directory).resolve().relative_to(REPO)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def collect_paths(value, found):
     """Append every string under a PATH_KEYS key in a nested tool input to found."""
     if isinstance(value, dict):
@@ -710,6 +739,59 @@ def expansion_problem(command):
             quote = "'"
         index += 1
     return ""
+
+
+def is_wildcard(word, position):
+    """True when the unquoted character at position starts a pattern: `*`, `?`, or `[` with a closing `]`."""
+    char, literal = word[position]
+    if literal:
+        return False
+    if char in "*?":
+        return True
+    return char == "[" and any(later == "]" and not quoted for later, quoted in word[position + 1:])
+
+
+def wildcard_can_be_option(word):
+    """True when a word's wildcards could expand to a different option.
+
+    word is a list of (character, literal) pairs. `*` can expand to a file
+    named `-delete`, and `-*` to any option. `test/*.ts` and `--include=*.ts`
+    cannot: the start of the word, or the option name before `=`, is fixed.
+    """
+    if not word:
+        return False
+    if word[0][0] == "-":
+        name_end = next((index for index, (char, _) in enumerate(word) if char == "="), len(word))
+        return any(is_wildcard(word, position) for position in range(1, name_end))
+    return is_wildcard(word, 0)
+
+
+def option_wildcard(command):
+    """True when the shell could expand an unquoted wildcard in command into an option the hook never saw."""
+    word = []
+    quote = None
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if char == "\\" and quote != "'":
+            word.append((command[index + 1:index + 2], True))
+            index += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+            else:
+                word.append((char, True))
+        elif char in {"'", '"'}:
+            quote = char
+        elif char in " \t\n;&|<>()":
+            if wildcard_can_be_option(word):
+                return True
+            word = []
+        else:
+            word.append((char, False))
+        index += 1
+    return wildcard_can_be_option(word)
 
 
 def split_compound(command):
@@ -1270,6 +1352,8 @@ def git_allowed(tokens, cwd):
     # `--output=<file>` makes diff, log, and show write to the file.
     if has_option(args, ("--output",)):
         return False
+    if subcommand in GIT_CHANGES_REPOSITORY and not in_repository(cwd):
+        return False
     if subcommand in GIT_PLAIN:
         return True
     if subcommand in GIT_DENIED_OPTIONS:
@@ -1359,7 +1443,45 @@ def gh_api_allowed(args):
     return explicit or not fields
 
 
-def gh_allowed(tokens):
+def gh_post_allowed(args, cwd):
+    """Check the options of `gh pr|issue create|comment`, which publish to GitHub.
+
+    `--body-file` and `-F` send a file's content, so the file must be inside
+    the write scope, or `-` for standard input. `--repo` and `-R` choose
+    another repository, and `--delete-last` removes a comment; both are denied.
+    """
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        following = args[index + 1] if index + 1 < len(args) else ""
+        index += 1
+        if arg.startswith("--"):
+            name, has_value, value = arg.partition("=")
+            if name in {"--repo", "--delete-last"}:
+                return False
+            if name in GH_POST_VALUE_OPTIONS and not has_value:
+                # Skip the value, so a body such as "- item" is not read as an option.
+                value = following
+                index += 1
+            if name == "--body-file" and value != "-" and not is_allowed(value, cwd):
+                return False
+        elif arg.startswith("-") and len(arg) > 1:
+            for position, letter in enumerate(arg[1:], start=1):
+                if letter not in GH_POST_VALUE_SHORTS:
+                    continue
+                value = arg[position + 1:]
+                if not value:
+                    value = following
+                    index += 1
+                if letter == "R":
+                    return False
+                if letter == "F" and value != "-" and not is_allowed(value, cwd):
+                    return False
+                break
+    return True
+
+
+def gh_allowed(tokens, cwd):
     """Allow gh commands that read from GitHub, open or comment on a pull request or issue, or send a GET request.
 
     Deny every other action, so merges, closes, deletions, workflow runs,
@@ -1374,9 +1496,9 @@ def gh_allowed(tokens):
         return gh_api_allowed(args)
     if not args or args[0] not in GH_ACTIONS.get(command, ()):
         return False
-    if args[0] == "comment":
-        # `--delete-last` removes a comment. Adding and editing are allowed.
-        return not any(arg.startswith("--delete-last") for arg in args)
+    if args[0] in GH_POST_ACTIONS:
+        # From another directory, gh would act on whatever repository is there.
+        return in_repository(cwd) and gh_post_allowed(args[1:], cwd)
     if command == "auth":
         # `gh auth status --show-token` and `-t` print the token.
         return not any(
@@ -1438,7 +1560,7 @@ def atomic_allowed(segment, cwd):
             raise Denied(DENY_GIT)
         return True
     if program == "gh":
-        if not gh_allowed(tokens):
+        if not gh_allowed(tokens, cwd):
             raise Denied(DENY_GH)
         return True
     if program == "find":
@@ -1453,7 +1575,8 @@ def changed_directories(stage, directories):
     """Where the shell could be after a `cd` stage started in one of directories.
 
     Returns None when the stage is not a `cd`. `cd -` gives UNKNOWN_CWD,
-    because the hook does not know the directory before this one.
+    because the hook does not know the directory before this one. So does
+    `cd -P`: it resolves symbolic links before `..`, which normpath() does not.
     """
     try:
         tokens = strip_env(command_words(stage))
@@ -1463,7 +1586,8 @@ def changed_directories(stage, directories):
         return None
     operands = positional(tokens[1:])
     target = operands[0] if operands else "~"
-    if target == "-":
+    physical = any(token.startswith("-") and "P" in token for token in tokens[1:] if token not in operands)
+    if target == "-" or physical:
         return {UNKNOWN_CWD}
     target = os.path.expanduser(target)
     return {os.path.normpath(os.path.join(directory, target)) for directory in directories}
@@ -1503,6 +1627,8 @@ def guard_shell(command, cwd):
     problem = expansion_problem(command)
     if problem:
         emit("deny", problem)
+    if option_wildcard(command):
+        emit("deny", DENY_WILDCARD)
     chain = {cwd}
     possible = {cwd}
     after_cd = None

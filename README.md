@@ -200,7 +200,7 @@ The hook reads command lines. It does not sandbox the tests: a test file is code
 
 Allowed:
 
-- Inspecting: `status`, `log`, `diff`, `show`, `blame`, `grep`, `ls-files`, `rev-parse`, `reflog`, and similar read commands.
+- Inspecting: `status`, `log`, `diff`, `show`, `blame`, `grep`, `ls-files`, `ls-tree`, `rev-parse`, `rev-list`, `describe`, `shortlog`, `cat-file`, `merge-base`, `name-rev`, `for-each-ref`, `show-ref`, `check-ignore`, `reflog`, `stash list`, `stash show`, `worktree list`, `version`, and `help`.
 - `add` and `commit`.
 - A new branch from the current commit (`git switch -c <name>`, `git checkout -b <name>`, `git branch <name>`), and a new tag.
 - `fetch`, `ls-remote`, and `push` with a configured remote such as `origin`.
@@ -216,6 +216,7 @@ Denied:
 - Switching to an existing branch, `pull`, `merge`, `rebase`, `cherry-pick`, `stash`, `apply`, and `clean`.
 - `--output=<file>` on any command, and `git grep --open-files-in-pager`.
 - Adding or changing a remote, `git config` writes, aliases, `-c` overrides, and `--git-dir` or `--work-tree`.
+- Changing another repository. After `cd` or with `git -C` to a directory outside this repository, only the inspecting commands are allowed.
 
 Shortened options such as `--del` for `--delete` are treated like the full option.
 
@@ -225,10 +226,11 @@ Allowed:
 
 - `pr create`, `view`, `list`, `diff`, `status`, `checks`, and `comment`.
 - `issue create`, `view`, `list`, `status`, and `comment`.
+- `create` and `comment` act on this repository only. A body file (`--body-file` or `-F`) is published, so it must be inside the write scope.
 - `run view`, `list`, and `watch`; `workflow view` and `list`; `release view` and `list`; `label list`; `repo view` and `list`; `search`; `status`; `auth status`.
 - `gh api` for GET requests.
 
-Denied: every other `gh` command. That includes `pr merge`, `pr close`, `pr checkout`, every delete, `workflow run`, `repo clone`, `run download`, `alias`, `comment --delete-last`, and `auth status --show-token`. `gh api` is denied with another method, with `--input`, with fields unless the method is given as GET, and for the `graphql` endpoint.
+Denied: every other `gh` command. That includes `pr merge`, `pr close`, `pr checkout`, every delete, `workflow run`, `repo clone`, `run download`, `alias`, `comment --delete-last`, `--repo` or `-R` on `create` and `comment`, and `auth status --show-token`. `gh api` is denied with another method, with `--input`, with fields unless the method is given as GET, and for the `graphql` endpoint.
 
 ### Other shell rules
 
@@ -236,13 +238,14 @@ The hook also denies:
 
 - Redirects into files outside the write scope (`>`, `>>`, `&>`, `>|`, `<>`). `/dev/null` is allowed.
 - Text the shell rewrites before it runs the command: `$(...)`, backticks, `<(...)`, `$VARIABLE`, `$'...'`, and brace expansion such as `{a,b}`. `$?` is allowed. To pass a literal `$`, put it in single quotes.
+- A wildcard that could expand to an option, because a file can be named `-delete`: a word that starts with `*`, `?`, or `[…]`, and an option with a wildcard in its name. `test/*.ts`, `./*`, and `--include=*.ts` are allowed. To pass a pattern to the program as it is, quote it: `find . -name '*.ts'`.
 - Setting any variable other than `BASE_URL`, `CI`, `FORCE_COLOR`, `NO_COLOR`, `PLAYWRIGHT_HTML_OPEN`, and `RTK_DISABLED`.
 - A program named by path, such as `./test/bin/tool`. Only `node_modules/.bin/vitest`, `playwright`, and `playwright-cli` may be run by path.
-- Read commands when they would run a program or write outside the write scope: `sed` with `w`/`e` or `-f`, in-place `sed` on source, `sort -o` or a `uniq` output file outside the write scope, `sort --compress-program`, `rg --pre`, and `find` with `-delete`, `-exec`, `-fprint`, or `-fls`.
+- Read commands when they would run a program or write outside the write scope: `sed` with `w`/`e` or `-f`, in-place `sed` on source, `sort -o` or a `uniq` output file outside the write scope, `sort --compress-program`, `rg --pre`, and `find` with `-delete`, `-exec`, `-execdir`, `-ok`, `-okdir`, `-fprint`, `-fprint0`, `-fprintf`, or `-fls`.
 - `rm`, `mv`, `cp`, `mkdir`, `touch`, `tee`, `truncate`, and `ln` on anything outside the write scope, including through `--target-directory`.
 - `rtk` commands other than the ones RTK's own rewriting produces for allowed programs, such as `rtk git`, `rtk read`, and `rtk ls`. `rtk test`, `rtk proxy`, and any name rtk does not know run whatever follows them.
 
-After `cd`, relative paths are checked against the new directory.
+After `cd`, relative paths are checked against the new directory. The hook cannot follow `cd -` or `cd -P`, so relative paths after them are denied.
 
 ## What qa does not read
 

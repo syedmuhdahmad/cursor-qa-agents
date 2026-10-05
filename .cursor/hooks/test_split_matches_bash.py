@@ -49,6 +49,7 @@ command_not_found_handle() {
 
 
 def load_hook():
+    """Import the hook. Its file name has a hyphen, so a plain import cannot load it."""
     spec = importlib.util.spec_from_file_location("guard_test_writes", HOOK)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -56,6 +57,7 @@ def load_hook():
 
 
 def bash_major_version():
+    """bash's major version, or 0 when bash is not installed."""
     if not BASH:
         return 0
     result = subprocess.run([BASH, "-c", "echo ${BASH_VERSINFO[0]}"], capture_output=True, text=True)
@@ -100,7 +102,10 @@ def bash_commands(command, workdir):
 # command_not_found_handle needs bash 4. macOS ships bash 3.2 as /bin/bash.
 @unittest.skipUnless(bash_major_version() >= 4, "needs bash 4 or later")
 class SplitMatchesBash(unittest.TestCase):
+    """Compares the hook's view of random command lines with the commands bash runs."""
+
     def check(self, pieces, seed):
+        """Build SAMPLES_PER_SEED random lines from pieces and compare the two views of each."""
         hook = load_hook()
         rng = random.Random(seed)
         ran_something = 0
@@ -127,10 +132,12 @@ class SplitMatchesBash(unittest.TestCase):
         self.assertGreater(ran_something, SAMPLES_PER_SEED // 10)
 
     def test_quotes_and_separators(self):
+        """Quotes, backslashes, and the operators that separate commands."""
         for seed in (1, 2):
             self.check(WORDS + SEPARATORS, seed)
 
     def test_redirects(self):
+        """The same pieces, with redirects added."""
         for seed in (11, 12):
             self.check(WORDS + SEPARATORS + REDIRECTS, seed)
 
