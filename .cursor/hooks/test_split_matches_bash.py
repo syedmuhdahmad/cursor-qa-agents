@@ -35,12 +35,13 @@ WORDS = ["m", "a", "b", "m a", " ", " ", "'", '"', "\\", "\\'", '\\"', "\\\\", "
 SEPARATORS = [";", "|", "&", "&&", "||", "\n", "\\\n"]
 REDIRECTS = ["\t", "|&", ">", ">>", "2>", "&>", ">&", ">|", "<", "2>&1", "1", "2", "x", "\\>", "\\&", "\\|"]
 
-# Records each command bash runs. One printf is one write, so records from the
-# stages of a pipeline cannot interleave.
+# Records each command bash runs. bash flushes its output at a newline, so a
+# newline inside a word is written as \035. Each record is then one write, and
+# records from commands that run at the same time cannot interleave.
 HANDLER = r"""
 command_not_found_handle() {
     local record="" word
-    for word in "$@"; do record+="$word"$'\037'; done
+    for word in "$@"; do record+="${word//$'\n'/$'\035'}"$'\037'; done
     printf '%s\036' "$record" >> "$SPLIT_LOG"
     return 0
 }
@@ -93,7 +94,7 @@ def bash_commands(command, workdir):
     )
     with open(log, encoding="utf-8", errors="replace") as handle:
         records = handle.read().split("\x1e")[:-1]
-    return [tuple(record.split("\x1f")[:-1]) for record in records]
+    return [tuple(word.replace("\x1d", "\n") for word in record.split("\x1f")[:-1]) for record in records]
 
 
 # command_not_found_handle needs bash 4. macOS ships bash 3.2 as /bin/bash.
