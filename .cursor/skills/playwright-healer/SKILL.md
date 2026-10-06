@@ -19,10 +19,13 @@ You may change only files under `test/e2e/`, and `playwright.config.ts` when the
    - **Data or setup**: missing mock, missing seed data, wrong route.
    - **Product bug**: the app does something the plan or source says it must not.
 3. If the cause is not clear from the error, debug the one failing test with playwright-cli:
-   - Start it in the background: `RTK_DISABLED=1 npx playwright test test/e2e/<name>.spec.ts:<line> --debug=cli`. Wait until it prints the debugging instructions with a session name such as `tw-abc123`.
-   - `npx --no-install playwright-cli attach tw-abc123`, then `npx --no-install playwright-cli snapshot` to see the page.
-   - Act with `click`, `fill`, or `find "<text>"`. Each command prints the Playwright code it ran. Copy the locator from there.
-   - `npx --no-install playwright-cli detach`, then stop the background test run.
+   - Start it in the background: `RTK_DISABLED=1 npx playwright test test/e2e/<name>.spec.ts:<line> --debug=cli`, where `<line>` is the line of the `test(` call. Wait until it prints `playwright-cli attach tw-abc123`.
+   - Attach with `npx --no-install playwright-cli attach tw-abc123`. Every later command names the session: `npx --no-install playwright-cli -s=tw-abc123 <command>`. Without `-s=` the command fails.
+   - The test is paused before its first step. Run it up to the failing step with `pause-at test/e2e/<name>.spec.ts:<line of the failing step>`.
+   - `snapshot` prints the page. `find "<text>"` searches it. `generate-locator <ref>` prints the locator for an element in the snapshot.
+   - Try an action with `click <ref>` or `fill <ref> <text>`. Each prints the Playwright code it ran. Copy the locator from there.
+   - `resume` lets the test run to its end, and the background run then exits. To stop early, use `detach` and stop the background run.
+   - The hook allows only these and a few other read-only playwright-cli commands. `screenshot`, `run-code`, and `open` are denied.
 4. Fix one failure at a time:
    - Locator: update the field in the page class, not the spec.
    - Timing: replace the check with a web-first assertion (`await expect(locator).toBeVisible()`). Never add `waitForTimeout` or `networkidle`.
