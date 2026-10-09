@@ -1,0 +1,87 @@
+{
+  "id": "integration-api",
+  "title": "Write an integration test for a route handler",
+  "skill": "qa-unit",
+  "kind": "integration",
+  "server": null,
+  "user": "/qa-unit Write an integration test for app/api/session/route.ts. This is API.",
+  "userOld": "/qa Write an integration test for app/api/session/route.ts. This is API.",
+  "setup": {
+    "remove": ["test/integration/api/session/route.test.ts"],
+    "edits": []
+  },
+  "expect": {
+    "outcome": "pass",
+    "file": "test/integration/api/session/route.test.ts",
+    "mayWrite": ["test/integration/api/session/route.test.ts"],
+    "mayWriteOld": ["vitest.config.ts"],
+    "minTests": 2,
+    "content": [
+      {
+        "glob": "test/integration/api/session/route.test.ts",
+        "absent": ["@vitest-environment jsdom"],
+        "why": "a route handler runs in Node"
+      },
+      {
+        "glob": "test/integration/api/session/route.test.ts",
+        "absent": ["readFileSync", "readFile("],
+        "why": "a test runs the source, it does not read the file as text"
+      }
+    ],
+    "minKilled": 1,
+    "mutants": [
+      {
+        "file": "app/api/session/route.ts",
+        "find": "{ error: 'Email or password is incorrect' }, { status: 401 }",
+        "replace": "{ error: 'Email or password is incorrect' }, { status: 403 }",
+        "note": "wrong credentials answer 403"
+      },
+      {
+        "file": "app/api/session/route.ts",
+        "find": "{ error: problem }, { status: 400 }",
+        "replace": "{ error: problem }, { status: 422 }",
+        "note": "an invalid field answers 422"
+      },
+      {
+        "file": "app/api/session/route.ts",
+        "find": "{ httpOnly: true, sameSite: 'lax', path: '/' }",
+        "replace": "{ sameSite: 'lax', path: '/' }",
+        "note": "the session cookie is not httpOnly"
+      },
+      {
+        "file": "app/api/session/route.ts",
+        "find": "return Response.json({ user })",
+        "replace": "return Response.json({ user: null })",
+        "note": "a good sign-in returns no user"
+      },
+      {
+        "file": "app/api/session/route.ts",
+        "find": "{ error: 'Not signed in' }, { status: 401 }",
+        "replace": "{ error: 'Not signed in' }, { status: 403 }",
+        "note": "GET without a session answers 403"
+      },
+      {
+        "file": "app/api/session/route.ts",
+        "find": "new Response(null, { status: 204 })",
+        "replace": "new Response(null, { status: 200 })",
+        "note": "DELETE answers 200"
+      }
+    ]
+  },
+  "reference": {
+    "restore": ["test/integration/api/session/route.test.ts"],
+    "edits": [],
+    "reply": {
+      "Job": "write",
+      "Source": "app/api/session/route.ts",
+      "Test file": "test/integration/api/session/route.test.ts",
+      "Command": "RTK_DISABLED=1 npx vitest run test/integration/api/session/route.test.ts",
+      "Cause": "none",
+      "Fix": "none",
+      "Before": "none",
+      "After": "QA-VERDICT: PASS (passed 13, failed 0, skipped 0, files 1)",
+      "Verdict": "PASS",
+      "Bug": "none"
+    }
+  }
+}

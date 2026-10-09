@@ -12,6 +12,12 @@
         "command": ".cursor/hooks/guard-test-writes.py",
         "failClosed": true
       }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": ".cursor/hooks/guard-test-writes.py",
+        "failClosed": true
+      }
     ]
   }
 }

@@ -1,0 +1,10 @@
+# Dependencies. No lockfile is committed, so every install resolves the
+# versions a new user would get.
+node_modules/
+package-lock.json
+
+# Next.js build output and generated types
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo

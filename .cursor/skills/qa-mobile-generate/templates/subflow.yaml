@@ -1,0 +1,11 @@
+# start steps of: test/mobile/plan/FEATURE.plan.md
+appId: ${APP_ID}
+---
+# STEP
+- tapOn:
+    id: ${output.OBJECT.NAME}
+- inputText: "VALUE"
+# STEP
+- hideKeyboard
+- tapOn:
+    id: ${output.OBJECT.NAME}

@@ -1,0 +1,97 @@
+name: Bug report
+description: Something in the kit does not work as the README or a skill says.
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report a security problem here. Use **Report a vulnerability** on the Security tab. See `SECURITY.md`.
+
+        One problem per issue. Paste text, not screenshots of text.
+  - type: input
+    id: kit-version
+    attributes:
+      label: Kit version
+      description: The content of `.cursor/qa/VERSION` in your app. If the file is missing, give the commit or date you copied the kit from.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: cursor-version
+    attributes:
+      label: Cursor version
+      description: The version number that Cursor shows in its About window.
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: The model picked in the Cursor chat. The skills are written for small models, so this matters.
+    validations:
+      required: true
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating system
+      placeholder: "macOS 26.0, Ubuntu 26.04, Windows 11"
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      description: The output of `node --version`.
+    validations:
+      required: true
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      description: The output of `python3 --version` in the shell Cursor uses. The hook needs Python 3.
+    validations:
+      required: true
+  - type: dropdown
+    id: job
+    attributes:
+      label: Which job did you run?
+      options:
+        - "/qa-unit: write or fix a Vitest unit or integration test"
+        - "/qa-plan: plan end-to-end coverage"
+        - "/qa-generate: turn a plan into page classes and a spec"
+        - "/qa-heal: fix a failing Playwright spec"
+        - "/qa-mobile-plan: plan Maestro coverage"
+        - "/qa-mobile-generate: turn a mobile plan into flows"
+        - "/qa-mobile-heal: fix a failing Maestro flow"
+        - "/qa, or a plain request with no slash name"
+        - "None. The problem is in the install, a config file, or the hook"
+    validations:
+      required: true
+  - type: textarea
+    id: prompt
+    attributes:
+      label: The prompt
+      description: What you typed in the chat, word for word.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what you expected
+      description: Say which file the agent wrote or changed, if any.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: The agent's reply and the test output
+      description: Paste the reply form the agent ended with, and the test output. Keep the line that starts with `QA-VERDICT:`.
+      render: text
+  - type: textarea
+    id: deny-message
+    attributes:
+      label: The hook's deny message
+      description: If the hook denied something, paste its message and the command or file it denied. Leave this empty if nothing was denied.
+      render: text

@@ -1,0 +1,5 @@
+You are not running inside Cursor. Read this first. It replaces nothing below.
+
+- Your project folder is {{SANDBOX}}. Run every command from that folder and write only inside it.
+- The hook named in AGENTS.md does not run here, so nothing stops a wrong write or a wrong command. Follow the rules as if it did.
+- The app server for this case: {{BASE_URL}}. Do not start or stop a server.

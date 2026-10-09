@@ -1,0 +1,26 @@
+{
+  // Type check for this repository's own TypeScript: the two runner configs
+  // and the files under test/. Run it with `npm run typecheck`.
+  //
+  // Users do not copy this file into their app. Their app's own tsconfig.json
+  // decides how these files are checked there.
+  //
+  // examples/ is left out on purpose. The example app has its own tsconfig.json.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    // The same module resolution as examples/next-app/tsconfig.json.
+    "moduleResolution": "Bundler",
+    // Vitest and Playwright compile one file at a time.
+    "isolatedModules": true,
+    // Node globals such as `process`. Other @types packages load only when a file imports them.
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    // Check this repository's files, not the declaration files inside node_modules.
+    // Without it the check fails inside @testing-library/jest-dom and vitest.
+    "skipLibCheck": true
+  },
+  "include": ["vitest.config.ts", "playwright.config.ts", "test/**/*.ts"]
+}

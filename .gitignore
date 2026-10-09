@@ -5,11 +5,24 @@ node_modules/
 __pycache__/
 *.pyc
 
-# Test output and tool state
+# Next.js build output
+.next/
+
+# Test output and tool state.
+# The four report folders start with a slash, so they match in the project
+# root only. Vitest and Playwright write them next to their config files, which
+# sit in the root. A folder of the same name deeper down, such as
+# app/coverage/, is application source and stays visible to git.
 .vitest/
-coverage/
-playwright-report/
-test-results/
-blob-report/
-.playwright-cli/
+/coverage/
+/playwright-report/
+/test-results/
+/blob-report/
 .playwright/
+
+# Page snapshots and console logs that playwright-cli saves
+.playwright-cli/
+
+# Maestro. By default it writes to ~/.maestro/tests, outside the repository.
+# This folder appears only when a person passes --debug-output=.
+.maestro/tests/

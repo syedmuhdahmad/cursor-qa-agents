@@ -1,8 +1,13 @@
 ---
 name: playwright-cli
-description: Automate browser interactions, test web pages and work with Playwright tests. Read only when the QA role is driving the browser.
-allowed-tools: Bash(playwright-cli:*) Bash(npx playwright:*) Bash(npx --no-install playwright:*)
+description: "The upstream manual for playwright-cli, the command-line tool that the qa skills use to drive a browser. A reference for looking up a command, not a job. The hook denies many of the commands in it. Usage: /playwright-cli what does find print"
 disable-model-invocation: true
+metadata:
+  source: "npm package @playwright/cli, folder skills/playwright-cli"
+  version: "0.1.22"
+  repository: "https://github.com/microsoft/playwright-cli"
+  license: "Apache-2.0. Copyright (c) Microsoft Corporation. The full text is in the LICENSE file in this folder."
+  changes: "Changed by cursor-qa-agents: this frontmatter only. The description was rewritten, allowed-tools was removed, and disable-model-invocation and metadata were added. The text below the frontmatter and every file in references/ are byte for byte as published."
 ---
 
 # Browser Automation with playwright-cli
@@ -216,7 +221,7 @@ Some pages register their own tools for agents through the experimental WebMCP A
 has them, the page status says so, and the snapshot lists them at the top. Run `webmcp-list` to
 get the same list and schemas without taking a snapshot:
 
-```text
+```
 - Page URL: https://example.com/
 - 2 webmcp tools available on the page
 ```
@@ -259,13 +264,11 @@ playwright-cli --raw localstorage-get theme
 ```
 
 For structured output wrapping every reply as JSON, pass --json
-
 ```bash
 playwright-cli list --json
 ```
 
 ## Open parameters
-
 ```bash
 # Use specific browser when creating session
 playwright-cli open --browser=chrome

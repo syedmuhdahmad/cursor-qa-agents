@@ -1,0 +1,27 @@
+{
+  // Markdown lint for this repository. Run it with `npm run lint:md`.
+  // The file patterns are set here, so the command takes no arguments.
+  "config": {
+    // Line length. Tables, links, and long commands do not fit in 80 columns.
+    "MD013": false,
+    // The same heading may repeat under different parents,
+    // such as "Added" under each version in CHANGELOG.md.
+    "MD024": { "siblings_only": true }
+  },
+  // .mdc files are the Cursor rules in .cursor/rules/.
+  "globs": ["**/*.md", "**/*.mdc"],
+  // Skip everything a .gitignore file names: node_modules/, test-results/, and so on.
+  "gitignore": true,
+  "ignores": [
+    // Copied from other projects and kept byte for byte.
+    // A lint fix here would turn an unmodified copy into a modified one.
+    ".cursor/skills/qa-unit/references/**",
+    // The whole folder, SKILL.md included. Only its frontmatter is written here,
+    // and `npm run check:playwright-cli-skill` fails when the rest changes.
+    ".cursor/skills/playwright-cli/**",
+    // License texts, whatever their file extension.
+    "**/LICENSE*",
+    // Installed packages, also where no .gitignore file names them.
+    "**/node_modules/**"
+  ]
+}

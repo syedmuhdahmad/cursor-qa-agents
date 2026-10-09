@@ -1,0 +1,53 @@
+# Dependabot version updates.
+#
+# This file only makes Dependabot open pull requests for newer versions.
+# Dependabot alerts and Dependabot security updates are repository settings.
+# The owner turns them on in Settings, under "Advanced Security".
+version: 2
+updates:
+  # The root package.json. Users copy its test dependencies into their apps,
+  # so the ranges here should stay current.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # Packages that must move together arrive in one pull request.
+      #
+      # A pull request that moves @playwright/cli fails the CI job "Copied
+      # playwright-cli skill" until the copy in .cursor/skills/playwright-cli/
+      # is made again. On its branch, run `npm ci`, then
+      # `node scripts/ci/playwright-cli-skill.mjs --write`, and commit the result.
+      playwright:
+        patterns:
+          - "@playwright/*"
+      vitest:
+        patterns:
+          - vitest
+          - "@vitest/*"
+      testing-library:
+        patterns:
+          - "@testing-library/*"
+
+  # The example app. Its package.json holds only the app's own packages.
+  # scripts/install-into.mjs adds the test dependencies from the root
+  # package.json when the example is tested, so the three groups above
+  # have nothing to match here.
+  - package-ecosystem: npm
+    directory: /examples/next-app
+    schedule:
+      interval: weekly
+    groups:
+      # react and react-dom must have the same version.
+      react:
+        patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
+
+  # The actions that .github/workflows/ pins.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

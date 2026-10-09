@@ -1,17 +1,34 @@
 ---
-description: Naming and layout for Vitest and Playwright tests
+description: Where test files go and how they are named
 globs: test/**
 alwaysApply: false
 ---
 
-# Test files
+# Test file layout
 
-Vitest files are `*.test.ts` in `test/unit/` or `test/integration/`. No `.tsx`, no JSX.
+| Kind | Path | Example |
+| --- | --- | --- |
+| Unit test | `test/unit/**/<Name>.test.ts` | `test/unit/components/SignIn.test.ts` |
+| Integration test | `test/integration/**/<name>.test.ts` | `test/integration/api/session/route.test.ts` |
+| E2e spec | `test/e2e/<name>.spec.ts` | `test/e2e/sign-in.spec.ts` |
+| Page class | `test/e2e/pages/<screen>-page.ts` | `test/e2e/pages/sign-in-page.ts` |
+| E2e plan | `test/e2e/plan/<name>.plan.md` | `test/e2e/plan/sign-in.plan.md` |
+| E2e seed | `test/e2e/seed.spec.ts` | `test/e2e/seed.spec.ts` |
+| Mobile flow | `test/mobile/<feature>/<nn>-<scenario>.flow.yaml` | `test/mobile/sign-in/01-valid-account.flow.yaml` |
+| Mobile plan | `test/mobile/plan/<feature>.plan.md` | `test/mobile/plan/sign-in.plan.md` |
+| Mobile element file, one for each screen and platform | `test/mobile/elements/<platform>/<screen>.js` | `test/mobile/elements/android/sign-in.js` |
+| Mobile element loader | `test/mobile/elements/load.yaml` | `test/mobile/elements/load.yaml` |
+| Mobile subflow | `test/mobile/subflows/<name>.yaml` | `test/mobile/subflows/open-sign-in.yaml` |
+| Mobile suite file, optional | `test/mobile/config.yaml` | `test/mobile/config.yaml` |
 
-- UI tests start with `// @vitest-environment jsdom`.
-- Server tests use the default Node environment.
+A page class holds one field for each element and one `goto` method, nothing else.
 
-Playwright specs are `test/e2e/<name>.spec.ts`. Page classes are `test/e2e/pages/<screen>-page.ts`. Plans are `test/e2e/plan/<name>.plan.md`.
+A unit or integration test mirrors the source path. Drop a leading `src/` or `app/` (the first folder only).
 
-- Locators live on the page class. Prefer `getByRole`.
-- Assertions live in the spec.
+| Source file | Test file |
+| --- | --- |
+| `src/components/SignIn.tsx` | `test/unit/components/SignIn.test.ts` |
+| `app/api/session/route.ts` | `test/integration/api/session/route.test.ts` |
+| `lib/validation.ts` | `test/unit/lib/validation.test.ts` |
+
+Never create a `.tsx` test file or a `tests/`, `specs/`, or `__tests__/` folder.

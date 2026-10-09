@@ -1,0 +1,80 @@
+{
+  "id": "unit-plain",
+  "title": "Write a unit test for plain functions",
+  "skill": "qa-unit",
+  "kind": "unit",
+  "server": null,
+  "user": "/qa-unit Write a unit test for lib/validation.ts.",
+  "userOld": "/qa Write a unit test for lib/validation.ts.",
+  "setup": {
+    "remove": ["test/unit/lib/validation.test.ts"],
+    "edits": []
+  },
+  "expect": {
+    "outcome": "pass",
+    "file": "test/unit/lib/validation.test.ts",
+    "mayWrite": ["test/unit/lib/validation.test.ts"],
+    "minTests": 2,
+    "content": [
+      {
+        "glob": "test/unit/lib/validation.test.ts",
+        "absent": ["@vitest-environment jsdom"],
+        "why": "plain functions run in Node"
+      },
+      {
+        "glob": "test/unit/lib/validation.test.ts",
+        "absent": ["readFileSync", "readFile("],
+        "why": "a test runs the source, it does not read the file as text"
+      }
+    ],
+    "minKilled": 1,
+    "mutants": [
+      {
+        "file": "lib/validation.ts",
+        "find": "export const MIN_PASSWORD_LENGTH = 8",
+        "replace": "export const MIN_PASSWORD_LENGTH = 6",
+        "note": "a password of 6 or 7 characters is accepted"
+      },
+      {
+        "file": "lib/validation.ts",
+        "find": "return 'Enter your email'",
+        "replace": "return 'Email is required'",
+        "note": "the empty-email message changed"
+      },
+      {
+        "file": "lib/validation.ts",
+        "find": "return 'Enter a valid email address'",
+        "replace": "return 'Email is invalid'",
+        "note": "the bad-format message changed"
+      },
+      {
+        "file": "lib/validation.ts",
+        "find": "return 'Password must be at least 8 characters'",
+        "replace": "return 'Password is too short'",
+        "note": "the password message changed"
+      },
+      {
+        "file": "lib/validation.ts",
+        "find": "return value.trim().toLowerCase()",
+        "replace": "return value.trim()",
+        "note": "normalizeEmail keeps capital letters"
+      }
+    ]
+  },
+  "reference": {
+    "restore": ["test/unit/lib/validation.test.ts"],
+    "edits": [],
+    "reply": {
+      "Job": "write",
+      "Source": "lib/validation.ts",
+      "Test file": "test/unit/lib/validation.test.ts",
+      "Command": "RTK_DISABLED=1 npx vitest run test/unit/lib/validation.test.ts",
+      "Cause": "none",
+      "Fix": "none",
+      "Before": "none",
+      "After": "QA-VERDICT: PASS (passed 14, failed 0, skipped 0, files 1)",
+      "Verdict": "PASS",
+      "Bug": "none"
+    }
+  }
+}

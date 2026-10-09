@@ -1,0 +1,191 @@
+# Runs the checks of this repository on every pull request and on every push
+# to main.
+#
+# To run a job on your own machine, run its `run:` lines from the repository
+# root, in order. Two kinds of line are for the runner only: the one that
+# writes to $GITHUB_OUTPUT, and `npx playwright install-deps`, which installs
+# system packages.
+#
+# Every action is pinned to a full commit SHA. The comment after the SHA is the
+# release that commit belongs to. .github/dependabot.yml asks Dependabot to
+# keep both up to date.
+#
+# Node versions come from "engines" in package.json. scripts/ci/node-version.mjs
+# reads the lowest version and the highest major version from it, so a change
+# to "engines" changes what runs here.
+#
+# Not here: a job for the mobile skills. Maestro flows run against an app on an
+# Android emulator or an iOS simulator, and this repository has no mobile app.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # One group for each pull request. A push to main gets a group of its own.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  # A new commit on a pull request stops the run for the commit before it.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  hook:
+    name: Hook tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Ubuntu 24.04 by name: setup-python has no Python 3.9 for Ubuntu 26.04.
+        os: [ubuntu-24.04, macos-latest]
+        # The oldest Python the README supports, and the newest stable one.
+        # On macOS the newest 3.9 that setup-python has for Apple silicon is 3.9.13.
+        python: ['3.9', '3.14']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      # The tests start the hook with the Python that runs them.
+      # This fails when python3 is not the version this job is named after.
+      - name: Check that python3 is Python ${{ matrix.python }}
+        run: python3 --version | grep -F "Python ${{ matrix.python }}."
+      - name: Run the hook tests
+        run: python3 -m unittest discover -s .cursor/hooks
+
+  node-tests:
+    name: Reporter and script tests (${{ matrix.node }} Node)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [lowest, highest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the ${{ matrix.node }} Node version from package.json
+        id: node
+        run: node scripts/ci/node-version.mjs ${{ matrix.node }} >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+      # These tests use Node built-ins only, so nothing is installed.
+      - run: npm run test:reporters
+      - run: node --test "scripts/*.test.mjs"
+      - run: node --test "eval/*.test.mjs"
+
+  lint-md:
+    name: Markdown lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Any Node that "engines" in package.json allows.
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
+      - run: npm run lint:md
+
+  playwright-cli-skill:
+    name: Copied playwright-cli skill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Any Node that "engines" in package.json allows.
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
+      # Compares .cursor/skills/playwright-cli/ with the skill inside the
+      # installed @playwright/cli package. It fails when a pull request moves
+      # that package to a new version and leaves the copy as it was. The
+      # message names the command that copies the skill again.
+      - run: npm run check:playwright-cli-skill
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Any Node that "engines" in package.json allows.
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  configs:
+    name: Config loading (${{ matrix.node }} Node)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [lowest, highest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the ${{ matrix.node }} Node version from package.json
+        id: node
+        run: node scripts/ci/node-version.mjs ${{ matrix.node }} >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+          cache: npm
+      - run: npm ci
+      # This loads vitest.config.ts. The kit has no unit or integration tests of
+      # its own, so the last line of output is `QA-VERDICT: FAIL ... no tests ran`
+      # and the exit code is 0. That is the expected result here.
+      - run: npx vitest run --passWithNoTests
+      # This loads playwright.config.ts. It needs no browser and no running app.
+      - run: npx playwright test --list
+
+  example:
+    name: Example app (${{ matrix.node }} Node)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [lowest, highest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the ${{ matrix.node }} Node version from package.json
+        id: node
+        run: node scripts/ci/node-version.mjs ${{ matrix.node }} >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+          cache: npm
+      # Only for the next step. The script below installs into its own folder.
+      - run: npm ci
+      # The system packages Chromium needs. The script downloads Chromium without them.
+      - run: npx playwright install-deps chromium
+      # Installs the kit into a copy of examples/next-app by the README's own
+      # copy list, then builds the app and runs its unit, integration, and
+      # end-to-end tests. It uses port 3000.
+      - run: node scripts/test-example.mjs

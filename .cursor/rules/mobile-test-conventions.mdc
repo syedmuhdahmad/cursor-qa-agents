@@ -1,0 +1,46 @@
+---
+description: Where Maestro flows and element files go and the rules every flow follows
+globs: test/mobile/**
+alwaysApply: false
+---
+
+# Mobile test layout
+
+| Kind | Path | Example |
+| --- | --- | --- |
+| Plan | `test/mobile/plan/<feature>.plan.md` | `test/mobile/plan/sign-in.plan.md` |
+| Element file, Android | `test/mobile/elements/android/<screen>.js` | `test/mobile/elements/android/sign-in.js` |
+| Element file, iOS | `test/mobile/elements/ios/<screen>.js` | `test/mobile/elements/ios/sign-in.js` |
+| Loader, runs the element files | `test/mobile/elements/load.yaml` | `test/mobile/elements/load.yaml` |
+| Flow, one for each scenario | `test/mobile/<feature>/<nn>-<scenario>.flow.yaml` | `test/mobile/sign-in/01-valid-account.flow.yaml` |
+| Subflow, the start steps of a plan | `test/mobile/subflows/<name>.yaml` | `test/mobile/subflows/open-sign-in.yaml` |
+| Suite file, optional | `test/mobile/config.yaml` | `test/mobile/config.yaml` |
+
+## Element files
+
+- An element file holds one name and one selector for each element of one screen, in one object: `output.signIn = { email: 'sign-in-email', }`. It holds no other code.
+- The selector is the id of the element. Only an element with no id gets its whole visible text, and then its name ends in `Text`. Never use screen coordinates.
+- The two platforms have separate files. A job that is told `This is Android.` works only in `test/mobile/elements/android/`, and a job that is told `This is iOS.` only in `test/mobile/elements/ios/`. It never reads, creates, or edits a file of the other platform.
+- The loader has one `runFlow` block for each platform, with `when:` and `platform: Android` or `platform: iOS`, and one `- runScript:` line for each element file. A `runScript` path starts at the loader's folder: `android/sign-in.js`. A line that names a file that does not exist stops every flow on both platforms with `Parsing Failed`. A job never changes the block of the other platform.
+- A wrong selector is fixed once, in the element file, never in a flow.
+
+## Flow rules
+
+- One flow file serves Android and iOS. Never write one file for each platform. A step that must differ goes in a `runFlow` block with `when:` and `platform: Android` or `platform: iOS`.
+- Line 3 of a flow is `appId: ${APP_ID}`. The run command gives the app id.
+- The first command of a flow is `- runFlow: ../elements/load.yaml`. The second is `launchApp` with `clearState: true` and `clearKeychain: true`. No flow needs another flow to run first.
+- A flow holds no id. What a step taps or types into is a name from an element file: `id: ${output.signIn.email}`, or `${output.signIn.forgotPasswordText}` alone for a name that ends in `Text`. The texts of a `runFlow` block for a system dialog or for the iOS keyboard stay in the flow.
+- A text that a check expects stays in the flow, in double quotes. A check of an element that has an id gives `id:` with its name and `text:`, so the text is checked too. Leave `text:` out only for a text that changes from run to run, such as an order number.
+- Write `- hideKeyboard` between typing and the next tap, and nowhere else. With no keyboard open it presses back on Android.
+- There is no command that waits a fixed time. `tapOn` and `assertVisible` wait up to 17 seconds by themselves. For a slower screen use `extendedWaitUntil` with `timeout: 60000`.
+- A product bug is marked with the tag `fixme`, and the line above `- fixme` is a comment that names the source line: `# product bug: src/screens/SignIn.tsx:41 expected "Wrong email or password", got "Login failed"`. Never tag a flow `fixme` for another reason.
+
+## Run a feature's folder
+
+`RTK_DISABLED=1 maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/sign-in`
+
+Change only the platform word (`android` or `ios`), the app id, and the folder. The second part of the generate job uses this command. The plan job, the first part of the generate job, and the heal job use the maestro MCP server. A `maestro test` run removes Maestro's helper app from the device when it ends, and the MCP server then cannot reach the device until it is turned off and on.
+
+`maestro check-syntax` does not read an element file and does not check a name. Only a run does.
+
+The user starts the device and installs the app. Never start a device, and never switch to the other platform.

@@ -16,6 +16,12 @@ A redirect can only create a file named from the alphabet in that directory.
 
 Every command bash ran must be a stage the hook saw, with the same words.
 The seeds are fixed, so a failure can be reproduced.
+
+Two more tests use the same harness. One adds `#` to the alphabet: the hook
+denies a line with a comment, and every other line must still split the way
+bash splits it. The other checks the one heredoc the hook reads, the message
+form `"$(cat <<'EOF' ... EOF ... )"`: the text the hook puts in its place
+must be the word bash passes to the command.
 """
 
 import importlib.util
@@ -34,16 +40,28 @@ SAMPLES_PER_SEED = 400
 WORDS = ["m", "a", "b", "m a", " ", " ", "'", '"', "\\", "\\'", '\\"', "\\\\", "\\;", "\\ "]
 SEPARATORS = [";", "|", "&", "&&", "||", "\n", "\\\n"]
 REDIRECTS = ["\t", "|&", ">", ">>", "2>", "&>", ">&", ">|", "<", "2>&1", "1", "2", "x", "\\>", "\\&", "\\|"]
+COMMENTS = ["#", " #", "#a", "\\#", "a#", "'#'"]
+# Pieces of a message body. None is a quote, a backtick, `$`, a backslash, or
+# a round bracket: the hook denies a body that holds one of those.
+BODY = ["m", "a b", " ", " ", "\n", "\n", "#", ";", "&", "&&", "|", ">", "<", "*", "~", "-", "EOF", "EOF\n", "{a,b}", "!", "="]
+# What may follow the message in the same command line.
+TAILS = ["", " a", " && m b", "; m b", "\nm b", " | m b", " 'b c'"]
 
 # Records each command bash runs. bash flushes its output at a newline, so a
 # newline inside a word is written as \035. Each record is then one write, and
 # records from commands that run at the same time cannot interleave.
+# `cat` stands in for the real program, which the empty PATH hides: it copies
+# its input, so the message heredoc gives the text of its body.
 HANDLER = r"""
 command_not_found_handle() {
     local record="" word
     for word in "$@"; do record+="${word//$'\n'/$'\035'}"$'\037'; done
     printf '%s\036' "$record" >> "$SPLIT_LOG"
     return 0
+}
+cat() {
+    local line
+    while IFS= read -r line || [ -n "$line" ]; do printf '%s\n' "$line"; done
 }
 """
 
@@ -65,9 +83,14 @@ def bash_major_version():
 
 
 def hook_stages(hook, command):
-    """Stages as the hook sees them, or None when it cannot parse the line and so denies it."""
+    """Stages as the hook sees them, or None when it cannot parse the line and so denies it.
+
+    The hook denies a line that holds a comment before it splits anything.
+    """
     stages = []
     try:
+        if hook.word_start_problem(hook.join_continuations(command)):
+            return None
         for _, segment in hook.split_compound(hook.join_continuations(command)):
             for stage in hook.split_pipes(segment):
                 stages.append(tuple(hook.command_words(stage)))
@@ -104,23 +127,40 @@ def bash_commands(command, workdir):
 class SplitMatchesBash(unittest.TestCase):
     """Compares the hook's view of random command lines with the commands bash runs."""
 
-    def check(self, pieces, seed):
-        """Build SAMPLES_PER_SEED random lines from pieces and compare the two views of each."""
+    def check(self, pieces, seed, build=None):
+        """Build SAMPLES_PER_SEED random lines from pieces and compare the two views of each.
+
+        build(rng) makes one line when the default, a run of 1 to 14 pieces, is not wanted.
+        Returns how many lines the hook read, as opposed to denied.
+        """
         hook = load_hook()
         rng = random.Random(seed)
         ran_something = 0
+        read = 0
         with tempfile.TemporaryDirectory() as workdir:
             with open(os.path.join(workdir, "handler.sh"), "w") as handle:
                 handle.write(HANDLER)
             for _ in range(SAMPLES_PER_SEED):
-                command = "".join(rng.choice(pieces) for _ in range(rng.randint(1, 14)))
+                if build:
+                    command = build(rng)
+                else:
+                    command = "".join(rng.choice(pieces) for _ in range(rng.randint(1, 14)))
                 executed = bash_commands(command, workdir)
                 if not executed:
                     continue
                 ran_something += 1
+                try:
+                    command = hook.inline_message_heredocs(command)
+                except hook.Denied:
+                    continue
+                # A heredoc the hook did not replace, such as a body with an early `EOF` line, is still
+                # inside `$(...)`, which the hook denies.
+                if build and hook.expansion_problem(command):
+                    continue
                 seen = hook_stages(hook, command)
                 if seen is None:
                     continue
+                read += 1
                 for words in executed:
                     self.assertIn(
                         words,
@@ -130,6 +170,7 @@ class SplitMatchesBash(unittest.TestCase):
                     seen.remove(words)
         # Guards against a broken harness that compares nothing.
         self.assertGreater(ran_something, SAMPLES_PER_SEED // 10)
+        return read
 
     def test_quotes_and_separators(self):
         """Quotes, backslashes, and the operators that separate commands."""
@@ -140,6 +181,24 @@ class SplitMatchesBash(unittest.TestCase):
         """The same pieces, with redirects added."""
         for seed in (11, 12):
             self.check(WORDS + SEPARATORS + REDIRECTS, seed)
+
+    def test_comments(self):
+        """The same pieces, with `#` added. A line the hook does not deny has no comment for bash either."""
+        for seed in (21, 22):
+            read = self.check(WORDS + SEPARATORS + COMMENTS, seed)
+            # Most lines have a `#` somewhere. Some must be left, or nothing was compared.
+            self.assertGreater(read, SAMPLES_PER_SEED // 20)
+
+    def test_message_heredoc(self):
+        """The text the hook puts in place of `"$(cat <<'EOF' ... EOF ... )"` is the word bash passes on."""
+
+        def build(rng):
+            body = "".join(rng.choice(BODY) for _ in range(rng.randint(0, 10)))
+            return "m \"$(cat <<'EOF'\n" + body + "\nEOF\n)\"" + rng.choice(TAILS)
+
+        for seed in (31, 32):
+            read = self.check(None, seed, build)
+            self.assertGreater(read, SAMPLES_PER_SEED // 4)
 
 
 if __name__ == "__main__":
