@@ -1,0 +1,9 @@
+# Runs the element files of the platform the flow runs on.
+# A runScript path starts at this folder. Name only files that exist.
+appId: ${APP_ID}
+---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - runScript: android/FILE.js

@@ -3,9 +3,9 @@ appId: ${APP_ID}
 ---
 # STEP
 - tapOn:
-    id: "ID"
+    id: ${output.OBJECT.NAME}
 - inputText: "VALUE"
 # STEP
 - hideKeyboard
 - tapOn:
-    id: "ID"
+    id: ${output.OBJECT.NAME}

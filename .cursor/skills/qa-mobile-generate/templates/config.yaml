@@ -1,6 +1,6 @@
 # Settings for a run of the whole folder: maestro test test/mobile
 # Flows sit one folder down, one folder for each feature.
-# Subflows and plans are not flows, so they are not run.
+# Subflows, the loader, element files, and plans are not flows, so they are not run.
 flows:
   - "*/*.flow.yaml"
 # A flow tagged fixme records a product bug. The run leaves it out.

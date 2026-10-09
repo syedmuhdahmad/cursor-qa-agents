@@ -6,14 +6,14 @@ disable-model-invocation: true
 
 # Plan Maestro coverage for one feature
 
-You explore one feature of a mobile app on a device and write one plan file. You write no flow and you run no test. One plan serves Android and iOS. You walk it on the platform the prompt names.
+You explore one feature of a mobile app on a device and write one plan file. You write no flow and no element file, and you run no test. One plan serves Android and iOS. You walk it on the platform the prompt names. The plan names screens and elements the way a user sees them. It holds no id: `/qa-mobile-generate` finds the ids on each platform.
 
 Read application source (`app/`, `src/`, and similar). Never edit it.
 
 - Plan: `test/mobile/plan/profile.plan.md`. `profile` is the feature name. Change only that part.
 - Template: `.cursor/skills/qa-mobile-plan/templates/plan.md`.
 
-The examples are from another app. Take your ids and texts from the prompt, the device, and the source.
+The examples are from another app. Take your names and texts from the prompt, the device, and the source.
 
 Do the steps in order. In every table, use the first row that matches. When a step says BLOCKED, stop work, go to step 10, and put the sentence after `Verdict: BLOCKED:`.
 
@@ -47,7 +47,7 @@ Why: with the keyboard open, a tap can close the keyboard and miss the button. W
 
 An action that has no lines above: do not act. Name the step under `Not checked:`.
 
-A `run` that failed replies with `Failed to run flow:` and the error. An error with `Device server died`, at any step: BLOCKED: `the maestro MCP server cannot read the device. Turn the server off and on in Cursor settings, then ask again.`
+A `run` that failed replies with `Failed to run flow:` and the error. An error with `Device server died`, at any step and before any row of a table: BLOCKED: `the maestro MCP server cannot read the device. Turn the server off and on in Cursor settings, then ask again.`
 
 `inspect_screen` reads the screen. Give it the `device_id`. Do not take a screenshot. The reply is JSON: a tree of objects under `"elements"`. Each object holds the objects inside it under `"c"`: read those too. Here are a button and a message, with the keys `b` and `cls` left out.
 
@@ -56,15 +56,14 @@ A `run` that failed replies with `Failed to run flow:` and the error. An error w
 {"txt":"That name is taken","rid":"profile-error"}
 ```
 
-| Key | Use in the plan |
+| Key | Use |
 | --- | --- |
-| `rid` | The id. Copy it letter for letter. An object with no `rid`, inside the `c` of an object that has one, takes that `rid`, as "Save profile" does above. Neither has one: write `(no id)`. |
+| `rid` | The id, for your own `run` calls. It never goes into the plan. An object with no `rid`, inside the `c` of an object that has one, takes that `rid`, as "Save profile" does above. Neither has one: tap it by its whole text. |
 | `txt` | The text the user sees: the name of a button or a message. Copy it letter for letter, never from memory. In a field it is the typed value, not the name. |
 | `hint` | The grey text in an empty field: the name of the field |
 | `a11y` | The text a screen reader says: the name of a field with no `hint`, and of another element with no `txt` |
 | No row matches | Ignore the key. |
 
-- An id is only what `rid` shows. A React Native `testID` shows there as it is written, but check that before you copy an id from the source.
 - The reply also holds the status bar, the keyboard when it is open, and the device's home screen when the app is closed. They are not the app. On Android, ignore every object whose `rid` starts with `com.android.systemui`, or has `inputmethod` or `launcher` in it.
 
 ## Steps
@@ -99,7 +98,7 @@ A `run` that failed replies with `Failed to run flow:` and the error. An error w
    | `is not connected` | BLOCKED, with the sentence for your platform from step 2. |
    | No row matches | BLOCKED: `the app com.example.app did not launch. Check that it is installed on the device.` Put the error from the reply under `Not checked:`. |
 
-4. **Read the screen.** Call `inspect_screen`. Note the name and the `rid` of each field, button, and message. The reply shows nothing of the app, only the status bar, the home screen, or another app: call `inspect_screen` again. Still nothing of the app after 3 calls: BLOCKED: `the app com.example.app is not on the screen of the device. Close what covers it, then ask again.`
+4. **Read the screen.** Call `inspect_screen`. Note the name and the `rid` of each field, button, and message. Give the screen a name of one or two words, letters only, from its heading or from what it is for, such as `Profile` or `Order history`. Name every later screen the same way, and use the same name every time. The reply shows nothing of the app, only the status bar, the home screen, or another app: call `inspect_screen` again. Still nothing of the app after 3 calls: BLOCKED: `the app com.example.app is not on the screen of the device. Close what covers it, then ask again.`
 
 5. **Reach the feature's screen.**
 
@@ -136,7 +135,7 @@ A `run` that failed replies with `Failed to run flow:` and the error. An error w
 9. **Walk one scenario, add it to the plan file, then take the next.**
 
    1. Call `run` with one `yaml`: the two first lines, the `launchApp` block, the start steps, the scenario's actions, and the last line. Stop at an action that opens a new screen or shows a message.
-   2. Call `inspect_screen`. Copy each name and id that the scenario uses from it. More actions follow on the new screen: call `run` again without the `launchApp` block.
+   2. Call `inspect_screen`. Copy each name that the scenario uses from it. More actions follow on the new screen: call `run` again without the `launchApp` block.
    3. Add the scenario to the plan file, in the template's form, with the sentence forms below.
 
    | The `run` reply contains | Do |
@@ -146,26 +145,25 @@ A `run` that failed replies with `Failed to run flow:` and the error. An error w
    | `Couldn't hide the keyboard` | Do A3. |
    | No row matches | Drop the scenario. Name it and the error under `Not checked:`. |
 
-   Sentence forms. Change only the quoted text, the values, and the ids. Step 1 of every scenario is the `Launch` line. With start steps, step 2 is the `Do the start steps.` line. Without them, leave that line out. Do not write a step for closing the keyboard.
+   Sentence forms. Change only the screen name, the quoted text, and the values. Every `type` line, `tap` line, and Expect line names its screen. Step 1 of every scenario is the `Launch` line. With start steps, step 2 is the `Do the start steps.` line. Without them, leave that line out. Do not write a step for closing the keyboard.
 
    ```markdown
    1. Launch the app with cleared state.
    2. Do the start steps.
-   3. Type `Grace Hopper` into "Display name" (id `profile-name`).
-   4. Tap "Save profile" (id `profile-save`).
-   5. Tap "Change photo" (no id).
+   3. On the Profile screen, type `Grace Hopper` into "Display name".
+   4. On the Profile screen, tap "Save profile".
+   5. On the Profile screen, tap "+" next to "Work email".
 
-   - The text "Profile saved" is visible.
-   - "Edit profile" (id `account-edit`) is visible.
-   - The element with id `profile-updated` is visible.
-   - The text "That name is taken" is not visible.
+   - On the Account screen, "Profile saved" is visible.
+   - On the Account screen, a text that starts with "Saved at" is visible.
+   - On the Profile screen, "That name is taken" is not visible.
    ```
 
-   | The element you expect | Expect line |
+   | The text | Line |
    | --- | --- |
-   | Has an id, and its text holds an order number, a date, a time, or another value that changes from run to run | The `The element with id` form, with no text |
-   | Has an id | The `"Edit profile" (id ...)` form. The flow checks the id and the text. |
-   | No row matches: it has no id | The `The text` form |
+   | An expected text that holds an order number, a date, a time, or another value that changes from run to run | The `a text that starts with` form, with the part that stays the same |
+   | The name of an element you tap, and another element on the screen has the same name | The `next to` form, with a text that stands beside the one you mean and comes before it in the `inspect_screen` reply |
+   | No row matches | The whole text, in quotes |
 
    - The `**Flow:**` line of a scenario is `test/mobile/profile/01-new-name.flow.yaml`: the feature's folder, the scenario's place in the plan as `01` to `08`, and two or three words of its name.
    - A scenario passes a system dialog, or must go back: do section A.
@@ -178,7 +176,7 @@ A `run` that failed replies with `Failed to run flow:` and the error. An error w
     Platform: Android
     Device: emulator-5554
     Scenarios: 4
-    Elements with no id: "Change photo" on the profile screen
+    Screens: Profile, Account
     Texts from source, not seen on the device: none
     Verdict: DONE
     Not checked: iOS
@@ -190,7 +188,7 @@ A `run` that failed replies with `Failed to run flow:` and the error. An error w
 
 - Call another tool of the maestro server. The others upload to a cloud service, open a viewer, or fetch from the network.
 - Use `takeScreenshot`, `startRecording`, `runScript`, or `evalScript` in a `yaml`. They write files or run code outside the device.
-- Add a `testID` to the source. Report the element under `Elements with no id:`.
+- Write an id into the plan, or add a `testID` to the source.
 
 ## A. Dialogs, going back, and the iOS keyboard
 

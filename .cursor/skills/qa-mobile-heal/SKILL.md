@@ -1,18 +1,22 @@
 ---
 name: qa-mobile-heal
-description: "Fix one failing Maestro flow. Edits flows only and reports a product bug instead of hiding it. Usage: /qa-mobile-heal test/mobile/profile/02-taken-name.flow.yaml. This is Android. App id com.example.app"
+description: "Fix one failing Maestro flow. Fixes a selector once in the element file and reports a product bug instead of hiding it. Usage: /qa-mobile-heal test/mobile/profile/02-taken-name.flow.yaml. This is Android. App id com.example.app"
 disable-model-invocation: true
 ---
 
 # Fix one failing Maestro flow
 
-Read application source (`app/`, `src/`, and similar). Never edit it. Edit only the flow and the subflow it runs. One flow file serves Android and iOS. Never copy a flow for the other platform.
+Read application source (`app/`, `src/`, and similar). Never edit it. Edit only the flow, the subflow it runs, the loader, and the element files of your platform.
 
 - Flow, the input: `test/mobile/profile/02-taken-name.flow.yaml`
-- Subflow, when the flow has a `runFlow` line: `test/mobile/subflows/open-profile.yaml`
+- Subflow, when the flow runs one: `test/mobile/subflows/open-profile.yaml`
+- Element file, which holds the selectors of one screen: `test/mobile/elements/android/profile.js` on Android, `test/mobile/elements/ios/profile.js` on iOS. `${output.profile.saveProfile}` in a flow is the name `saveProfile` in `profile.js`, and `output.orderHistory` is in `order-history.js`.
+- Loader, which runs the element files: `test/mobile/elements/load.yaml`
 - Plan, named on line 1 of the flow: `test/mobile/plan/profile.plan.md`
 
-The examples are from another app. Take your ids, texts, and paths from the prompt, the flow, and the device.
+One flow file serves Android and iOS: never copy a flow for the other platform. The element files are separate: work only in the folder of your platform, `android` or `ios`, and never read, create, or edit a file in the other one. The paths and commands below show `android`: on iOS, write `ios` there. A wrong selector is fixed once, in the element file. Never write an id into a flow.
+
+The examples are from another app. Take your names, texts, and paths from the prompt, the flow, and the device.
 
 Do the steps in order. In every table, use the first row that matches. When a step says BLOCKED, stop work, go to step 10, and put the sentence after `Verdict: BLOCKED:`.
 
@@ -82,7 +86,18 @@ Why: `maestro test` removes Maestro's helper app from the device when it ends. T
    | `"success":false` | The `error` value in the reply is the failure. Go to step 5. |
    | No row matches | BLOCKED: `the run did not finish.` Put the reply under `Not checked:`. |
 
-5. **Read the failure and the screen.** The error has one of these forms. In the reply, each `"` inside the error has a `\` in front of it. Leave the `\` out when you copy the error.
+5. **Read the failure.** In the reply, each `"` inside the error has a `\` in front of it. Leave the `\` out when you copy the error. This table is for an error that names no element. Your error is in it: do the fix and go to step 9. The class is **Data or setup**, and the cause is the first sentence of the row.
+
+   | The error has | The one fix |
+   | --- | --- |
+   | `Parsing Failed at` and the path of the loader | A `- runScript:` line of the loader names a file that does not exist. Run `ls test/mobile/elements/android`. A line in the block of your platform names a file that `ls` does not print: correct that line. Otherwise: BLOCKED: `the loader names an element file of the other platform that does not exist.` |
+   | `Invalid File Path at` and the path of a flow | The `runFlow` line there names a file that does not exist. Write `../elements/load.yaml`, or `../subflows/` and the file name. |
+   | `SyntaxError`, as in `SyntaxError: <eval>:4:2 Expected comma but found ident` | An element file is broken at line `4`. The error ends with that line, such as `saveProfile: 'profile-save',`. Run `grep -rn "saveProfile" test/mobile/elements/android` with a word of it to find the file. Give every line in the braces that form. Most often a comma or a quote is missing one line up. |
+   | `TypeError`, as in `TypeError: Cannot read property 'saveProfile' of undefined` | The element file of a screen did not run. The flow line with `.saveProfile}` names it: `output.profile` is `profile.js`. Run `ls test/mobile/elements/android`. The file is not there: BLOCKED: `the element file test/mobile/elements/android/profile.js does not exist. Ask /qa-mobile-generate with element files only.` Otherwise correct the first of these that is wrong. The first command of the flow is `- runFlow: ../elements/load.yaml`. The block of your platform in the loader has `- runScript: android/profile.js`. The file has the line `output.profile = {`. |
+   | `regex: undefined` or `id: undefined` | A flow line has a name that its element file does not have: the first `${output...}` of the flow, or of its subflow, whose name is not in the file. Call `inspect_screen` and find the element that the comment above that line names. Add the name to the element file, above the closing `}`, with its `rid`, or with its whole text when the name ends in `Text`. The element is not on the screen: go to step 10 with `Verdict: FAIL`. |
+   | No row matches | The error names an element. Go on below this table. |
+
+   An error that names an element has one of these forms.
 
    ```text
    Element not found: Id matching regex: profile-save
@@ -93,24 +108,23 @@ Why: `maestro test` removes Maestro's helper app from the device when it ends. T
    Assertion is false: "That name is taken" is not visible
    ```
 
-   Find the line of the flow that has the id or text from the error. That is the failing line. The flow does not have it: look in the subflow that the flow's `runFlow` line names. Then call `inspect_screen`.
+   Find the failing line. A text of the error is in the flow, or in the subflow it runs: that line fails. Otherwise run `grep -rn "profile-save" test/mobile/elements/android` with the id or text. It prints the line of the element file, such as `saveProfile: 'profile-save',`. The first line of the flow or its subflow with `.saveProfile}` fails. Then call `inspect_screen`.
 
 6. **Classify.** The plan line is the comment above the failing line. Check it against the plan file. The row gives the class and the one edit. Step 8 shows the mark and the waiting check. Do not edit yet.
 
    | The error, or the screen from step 5 | Class | The one edit |
    | --- | --- | --- |
-   | The error has `Invalid File Path` | **Data or setup** | The `runFlow` line names a file that does not exist. Write `../subflows/` and the file name. |
    | The error has `Couldn't hide the keyboard` | **Data or setup** | Section A, the keyboard |
    | The error has `is not visible`, and you can name the source line that shows the element | **Product bug** | The product bug mark |
    | The error has `is not visible` | **Data or setup** | None. Go to step 10 with `Verdict: FAIL`. |
    | The error names no id and no text | None | BLOCKED: `the app com.example.app did not launch. Check that it is installed on the device.` Put the error under `Not checked:`. |
-   | The screen shows the element of the failing line, with every id and text that the line has, letter for letter | **Timing** | The waiting check on the line above the failing line. Keep the failing line. |
+   | The screen shows the element of the failing line, with every id and text that the line and its element file give, letter for letter | **Timing** | The waiting check on the line above the failing line. Keep the failing line. |
    | A system dialog on top of the app | **Data or setup** | Section A, the dialog |
    | A screen of another app with no button to close it, such as a Google sign-in screen | None | BLOCKED: `another app covers the app on the device. Close it, then ask again.` |
-   | The element with another id | **Selector** | Change the id in the failing line to the `rid` from the screen, letter for letter. |
-   | Another text where the failing line has its text, and only an order number, a date, or a time that changes from run to run differs | **Data or setup** | Delete the `text:` line under the `id:` line. Keep the `id:` line, and name the element under `Not checked:`. |
-   | Another text where the failing line has its text, and the plan has the flow's text | **Product bug** | The product bug mark |
-   | Another text where the failing line has its text, and the plan has the screen's text | **Data or setup** | Write the plan's text. |
+   | The element with another id | **Selector** | In the element file of your platform, change the selector of that name to the `rid` from the screen, letter for letter. Change no flow. |
+   | Another text where the flow has an expected text, and only an order number, a date, or a time that changes from run to run differs | **Data or setup** | Delete the `text:` line under the `id:` line. Keep the `id:` line, and name the element under `Not checked:`. |
+   | Another text than the flow or the element file has, and the plan has that old text | **Product bug** | The product bug mark |
+   | Another text than the flow or the element file has, and the plan has the screen's text | **Data or setup** | Write the plan's text: in the flow for an expected text, in the element file for a name that ends in `Text`. |
    | Another screen than the plan line describes | **Data or setup** | A line of the flow differs from its plan line: write the plan's value. Otherwise section A, the keyboard or going back. |
    | The right screen without the element, and the source should show it there | **Product bug** | The product bug mark |
    | No row matches | Pick the closest class and name it under `Not checked:`. | The edit of that class's row |
@@ -131,62 +145,62 @@ Why: `maestro test` removes Maestro's helper app from the device when it ends. T
    ---
    ```
 
-   The waiting check. The first form is for a failing line with an id, the second for one with only a text. Change only the id or the text. Keep `timeout: 60000`: `tapOn` and `assertVisible` already wait 17 seconds by themselves.
+   The waiting check. Under `visible:` go the same lines as under the failing command. Keep `timeout: 60000`: `tapOn` and `assertVisible` already wait 17 seconds by themselves.
 
    ```yaml
    - extendedWaitUntil:
        visible:
-         id: "account-edit"
+         id: ${output.account.editProfile}
        timeout: 60000
    - extendedWaitUntil:
        visible: "Profile saved"
        timeout: 60000
    ```
 
-   - Before you edit a subflow, run `grep -rl "subflows/open-profile.yaml" test/mobile` with the file name of the subflow. It prints each flow that runs it. Your edit reaches all of them.
-   - Change only the lines that caused the failure. Do not rewrite, rename, reorder, or reformat anything else.
+   - An edit of an element file or a subflow reaches every flow that uses it: the cause is fixed once. Run `grep -rl "profile.saveProfile}" test/mobile` with the name, or `grep -rl "subflows/open-profile.yaml" test/mobile` with the file name. It prints those flows. Name each of them but your own under `Not checked:`, because you do not run them.
+   - Change only the lines that caused the failure. Do not rewrite, rename, reorder, or reformat anything else. In an element file, never rename or remove a name, and never add code.
    - Do not add `optional: true`, `retry`, `repeat`, or a longer timeout on another line. Keep every existing check.
 
    Why: Maestro has no command that marks a flow as an expected failure. A folder run with `--exclude-tags=fixme` leaves the tagged flow out, and the comment says why.
 
-9. **Check the file, then run again.** `maestro check-syntax test/mobile/profile/02-taken-name.flow.yaml` with the file you edited. It prints `OK`. Anything else names the fault: correct the file and check again. You marked a product bug: do not run the flow again, because it still fails. Go to step 10 with `After: marked fixme`. Otherwise call `run` as in step 4. You have 3 rounds. One edit and one `run` call is one round.
+9. **Check the file, then run again.** You edited a flow, a subflow, or the loader: run `maestro check-syntax test/mobile/profile/02-taken-name.flow.yaml` with that file. It prints `OK`. Anything else names the fault: correct the file and check again. Do not run it on an element file. You marked a product bug: do not run the flow again, because it still fails. Go to step 10 with `After: marked fixme`. Otherwise call `run` as in step 4. You have 3 rounds. One edit and one `run` call is one round.
 
    | The reply contains | Do |
    | --- | --- |
    | `"success":true`, after a Timing fix | Call `run` once more. `"success":true` again: go to step 10. Otherwise go to step 10 with `Verdict: FAIL`. |
    | `"success":true` | Go to step 10. |
-   | `"success":false` with the same error | The fix was wrong. Put the old line back by editing the file. Do not use `git restore` or `git checkout`: they also remove your earlier fixes. Then call `inspect_screen` and go to step 6. |
+   | `"success":false` with the same error | The fix was wrong. Put the old line back by editing the file. Do not use `git restore` or `git checkout`: they also remove your earlier fixes. Then go to step 5. |
    | `"success":false` with another error | The fix worked. Keep it. Go to step 5. |
    | No row matches | Go to step 10 with `Verdict: FAIL`. |
 
-   After round 3, do not go back to step 5 or 6. Go to step 10 with `Verdict: FAIL`. You edited a subflow: name each other flow that `grep` printed under `Not checked:`.
+   After round 3, do not go back to step 5. Go to step 10 with `Verdict: FAIL`.
 
 10. **Reply** with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
 
     ```text
     Flow: test/mobile/profile/02-taken-name.flow.yaml
     Platform: Android
-    Class: Product bug
-    Cause: the screen shows "Name unavailable" and plan line 2.1 expects "That name is taken"
-    Fix: tag fixme in test/mobile/profile/02-taken-name.flow.yaml, product bug at src/screens/EditProfile.tsx:41
-    Before: Assertion is false: "That name is taken" is visible
-    After: marked fixme
+    Class: Selector
+    Cause: the error has the id profile-save and the screen shows "Save profile" with the rid profile-save-button
+    Fix: saveProfile in test/mobile/elements/android/profile.js, from 'profile-save' to 'profile-save-button'
+    Before: Element not found: Id matching regex: profile-save
+    After: "success":true
     Verdict: PASS
-    Not checked: iOS
+    Not checked: iOS, test/mobile/profile/01-new-name.flow.yaml
     ```
 
-    `Class:` is `Selector`, `Timing`, `Data or setup`, or `Product bug`. `Fix:` is the file and line you changed. `Before:` is the `error` value of the first run, copied exactly. `After:` is `"success":true`, or the `error` value of the last run, or `marked fixme`. `Verdict:` is `PASS` when `After:` is `"success":true` or `marked fixme`. Otherwise it is `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you. `Not checked:` always names the platform you did not run on.
+    `Class:` is `Selector`, `Timing`, `Data or setup`, or `Product bug`. `Fix:` is the file and the line you changed, or `tag fixme` and the source line of the bug. `Before:` is the `error` value of the first run, copied exactly. `After:` is `"success":true`, or the `error` value of the last run, or `marked fixme`. `Verdict:` is `PASS` when `After:` is `"success":true` or `marked fixme`. Otherwise it is `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you. `Not checked:` always names the platform you did not run on.
 
 ## Never
 
 - Delete a flow or a check, or weaken one: `optional: true`, or a text such as `".*"` that matches anything. The `text:` line of step 6, for a text that changes from run to run, is the one exception.
 - Tag a flow `fixme` for anything but a product bug you can point to in the source.
-- Use `point:` or other screen coordinates, or any wait but `extendedWaitUntil`.
+- Write an id, `point:`, or other screen coordinates into a flow, or use any wait but `extendedWaitUntil`.
 - Call a tool of the maestro server other than `list_devices`, `run`, and `inspect_screen`.
 
 ## A. Dialogs, the keyboard, and going back
 
-Enter only from step 6. A line that must differ by platform goes into the one file, in a `runFlow` block with `platform: Android` or `platform: iOS`. Leave out the block of a platform that needs no line.
+Enter only from step 6. A line that must differ by platform goes into the one flow file, in a `runFlow` block with `platform: Android` or `platform: iOS`. Leave out the block of a platform that needs no line. The texts of a system dialog, and the text that the iOS block taps, stay in the flow.
 
 - **The dialog.** Add this block above the failing line. Copy both texts from the screen. They differ on the other platform.
 

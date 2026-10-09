@@ -16,6 +16,8 @@ alwaysApply: false
 | E2e seed | `test/e2e/seed.spec.ts` | `test/e2e/seed.spec.ts` |
 | Mobile flow | `test/mobile/<feature>/<nn>-<scenario>.flow.yaml` | `test/mobile/sign-in/01-valid-account.flow.yaml` |
 | Mobile plan | `test/mobile/plan/<feature>.plan.md` | `test/mobile/plan/sign-in.plan.md` |
+| Mobile element file, one for each screen and platform | `test/mobile/elements/<platform>/<screen>.js` | `test/mobile/elements/android/sign-in.js` |
+| Mobile element loader | `test/mobile/elements/load.yaml` | `test/mobile/elements/load.yaml` |
 | Mobile subflow | `test/mobile/subflows/<name>.yaml` | `test/mobile/subflows/open-sign-in.yaml` |
 | Mobile suite file, optional | `test/mobile/config.yaml` | `test/mobile/config.yaml` |
 

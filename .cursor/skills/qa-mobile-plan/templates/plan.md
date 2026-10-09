@@ -10,8 +10,8 @@
 
 **Subflow:** `test/mobile/subflows/open-FEATURE.yaml`
 
-1. Type `VALUE` into "LABEL" (id `ID`).
-2. Tap "LABEL" (id `ID`).
+1. On the SCREEN screen, type `VALUE` into "NAME".
+2. On the SCREEN screen, tap "NAME".
 
 ## 1. GROUP
 
@@ -23,10 +23,9 @@
 
 1. Launch the app with cleared state.
 2. Do the start steps.
-3. Type `VALUE` into "LABEL" (id `ID`).
-4. Tap "LABEL" (id `ID`).
+3. On the SCREEN screen, type `VALUE` into "NAME".
+4. On the SCREEN screen, tap "NAME".
 
 **Expect:**
 
-- The text "MESSAGE" is visible.
-- "LABEL" (id `ID`) is visible.
+- On the SCREEN screen, "TEXT" is visible.
