@@ -3123,6 +3123,9 @@ class FileContent(ProjectCase):
             ("first line of the file", "test.fixme('Wrong password', async () => {})\n"),
             ("a blank line between", fixme.replace("test.fixme(", PRODUCT_BUG + "\ntest.fixme(")),
             ("another comment", fixme.replace("test.fixme(", "// bug: the text is wrong\ntest.fixme(")),
+            ("a marker with no source file and line", fixme.replace("test.fixme(", "// product bug: the app does not go to the dashboard\ntest.fixme(")),
+            ("a marker with a file and no line", fixme.replace("test.fixme(", "// product bug: src/components/SignIn.tsx is wrong\ntest.fixme(")),
+            ("a marker that names a test file", fixme.replace("test.fixme(", "// product bug: test/e2e/pages/sign-in-page.ts:9 wrong name\ntest.fixme(")),
             ("the line after, not before", fixme.replace("})\n", "})\n" + PRODUCT_BUG)),
             ("a whole describe", "test.describe.fixme('Errors', () => {})\n"),
             ("one marked and one not", marked + "test.fixme('Empty email', async () => {})\n"),
@@ -3130,7 +3133,7 @@ class FileContent(ProjectCase):
             with self.subTest(name=name):
                 text = self.message("test/e2e/sign-in.spec.ts", content)
                 self.assertIn("`test/e2e/sign-in.spec.ts` is blocked: the new text adds test.fixme( with no product bug line", text)
-                self.assertIn("starts with `// product bug:` directly above it", text)
+                self.assertIn("starts with `// product bug:` and then the source file and line that are wrong directly above it", text)
                 self.assertIn("such as `// product bug: src/components/SignIn.tsx:7 expected", text)
 
     def test_fixme_anywhere_else(self):

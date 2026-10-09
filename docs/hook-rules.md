@@ -149,6 +149,7 @@ The hook compares the new text with the file on disk and denies only what the wr
 | `Write {"file_path": "test/e2e/a.spec.ts", "content": "test.fixme('adds', async () => {})"}` | deny |
 | `Write {"file_path": "test/e2e/a.spec.ts", "content": "// product bug: src/a.ts:7 expected \"1\", got \"2\"\ntest.fixme('adds', async () => {})"}` | allow |
 | `Write {"file_path": "test/unit/a.test.ts", "content": "// product bug: src/a.ts:7 expected \"1\", got \"2\"\ntest.fixme('adds', () => {})"}` | deny |
+| `Write {"file_path": "test/e2e/a.spec.ts", "content": "// product bug: the app is wrong\ntest.fixme('adds', async () => {})"}` | deny |
 | `Write {"file_path": "test/e2e/plan/a.plan.md", "content": "Do not use test.skip( or waitForTimeout("}` | allow |
 | `Write {"file_path": "test/mobile/sign-in/01-a.flow.yaml", "content": "- waitForTimeout(\n"}` | allow |
 | `Write {"file_path": ".cursor/skills/x/SKILL.md", "content": "it.only("}` | allow |
@@ -159,7 +160,7 @@ The hook compares the new text with the file on disk and denies only what the wr
 - A write may not add `.only(`, `.skip(`, `.todo(`, or `.fails(` on a test function (`it`, `test`, `describe`, `suite`, `bench`, and names built on them such as `test.describe`), or `test.fail(`, `skipIf(`, or `runIf(`.
 - Under `test/e2e/` it may not add `waitForTimeout(` or `networkidle`.
 - Under `test/e2e/` it may not add `force: true` as an option of a Playwright action (`click`, `dblclick`, `tap`, `check`, `uncheck`, `hover`, `fill`, `selectOption`, `setChecked`, `setInputFiles`, `dragTo`, `clear`, `selectText`, `scrollIntoViewIfNeeded`). A `force: true` passed to `fs.rm` or `rmSync`, as a globalSetup or fixture uses to clear a temp folder, is not an action and is allowed. The option object must open with `{` on the same line as the action call.
-- `test.fixme(` is allowed only in a spec directly in `test/e2e/`, and only when the line above it starts with `// product bug:`.
+- `test.fixme(` is allowed only in a spec directly in `test/e2e/`, and only when the line above it starts with `// product bug:` and then names the application source file and line that are wrong, as in `// product bug: src/a.ts:7 expected "1", got "2"`. A marker with no file and line, or one that names a file under `test/`, does not count.
 - The check is on plain text. The same text in a comment or a string counts.
 - A write may not add `testOutputDir` to `config.yaml` or `config.yml` under `test/mobile/`. See "maestro".
 

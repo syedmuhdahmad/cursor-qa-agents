@@ -156,6 +156,11 @@ def call_pattern(method):
 
 # The line that must sit directly above test.fixme( in a spec.
 FIXME_MARKER = "// product bug:"
+# What must follow the marker: the source file and line that are wrong, as in
+# `src/components/SignIn.tsx:7`. A model that cannot point to a line in the
+# source has not found a product bug, and the line keeps it from parking a
+# test for a failure it only guessed at.
+FIXME_SOURCE = re.compile(r"\s*(?P<file>[^\s:]+\.[A-Za-z0-9]+):(?P<line>\d+)\b")
 FIXME = call_pattern("fixme")
 # Plain text that every match of FIXME holds. See content_problem().
 FIXME_TEXT = ".fixme("
@@ -959,9 +964,11 @@ DENY_PATH_PLACEHOLDER = (
 DENY_FORBIDDEN_TEXT = "`{path}` is blocked: the new text adds `{token}`. {advice}"
 DENY_FIXME_MARKER = (
     "`{path}` is blocked: the new text adds test.fixme( with no product bug line above it. Put a line that "
-    "starts with `" + FIXME_MARKER + "` directly above it, such as `" + FIXME_MARKER
+    "starts with `" + FIXME_MARKER + "` and then the source file and line that are wrong directly above it, "
+    "such as `" + FIXME_MARKER
     + ' src/components/SignIn.tsx:7 expected "Email or password is incorrect", got "Something went wrong"`. '
-    "Use test.fixme( for a product bug only."
+    "The file is application source, not a file under test/. If you cannot point to a line in the source, "
+    "it is not a product bug: fix the test, or leave it failing and report it."
 )
 DENY_FIXME_PLACE = (
     "`{path}` is blocked: the new text adds test.fixme(, which is allowed only in a spec such as "
@@ -1907,13 +1914,28 @@ def mobile_config_problem(paths, tool_input, cwd):
 
 
 def unmarked_fixmes(text):
-    """How many test.fixme( calls in text have no product bug line directly above them."""
+    """How many test.fixme( calls in text have no product bug line directly above them.
+
+    The line counts only when it names a source file and line after the marker.
+    """
     lines = text.splitlines()
     count = 0
     for index, line in enumerate(lines):
-        if not (index and lines[index - 1].lstrip().startswith(FIXME_MARKER)):
+        if not (index and names_source_line(lines[index - 1])):
             count += len(FIXME.findall(line))
     return count
+
+
+def names_source_line(line):
+    """True for `// product bug: src/a.tsx:7 ...`: the marker, then a source file and a line number."""
+    stripped = line.lstrip()
+    if not stripped.startswith(FIXME_MARKER):
+        return False
+    match = FIXME_SOURCE.match(stripped[len(FIXME_MARKER):])
+    if not match:
+        return False
+    file = match.group("file").lstrip("./")
+    return not (file == "test" or file.startswith("test/"))
 
 
 def content_problem(paths, tool_input, cwd):
@@ -1926,7 +1948,8 @@ def content_problem(paths, tool_input, cwd):
     (old_string) is compared with that fragment, which gives the same answer.
 
     test.fixme( marks a known product bug. It is allowed in a spec directly
-    in test/e2e/, on a line that follows a `// product bug:` line. Anywhere
+    in test/e2e/, on a line that follows a `// product bug:` line that names
+    the source file and line. Anywhere
     else it counts like the other forbidden text. test.describe.fixme( is
     held to the same rule.
     """
