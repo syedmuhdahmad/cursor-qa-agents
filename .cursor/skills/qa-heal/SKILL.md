@@ -41,6 +41,7 @@ Do the steps in order. In every table, use the first row that matches. When a st
    | The error contains | Look at | Class |
    | --- | --- | --- |
    | `ERR_CONNECTION_REFUSED` | Nothing | The app is not running. BLOCKED: `start the app with npm run dev, then ask again.` |
+   | `Executable doesn't exist` | Nothing | Do not run the install command it suggests. BLOCKED: `Playwright has no browser to start. Run npx playwright install chromium yourself, then ask again.` |
    | `strict mode violation` | The numbered elements under it | **Locator** |
    | `expect(received).toBe(expected)` on a line with `isVisible()`, `isEnabled()`, `textContent()`, `inputValue()`, or `count()` | That line | **Timing** |
    | `Expected:` and `Received:` with different values | The plan line for this check. No plan: the `// Expect:` comment above the failing line. | The plan has the expected value: **Product bug**. The plan has the received value: **Data or setup**. |

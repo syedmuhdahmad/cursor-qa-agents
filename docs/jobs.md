@@ -52,7 +52,7 @@ npx --no-install playwright-cli goto http://localhost:3000/account && sleep 2 &&
 npx --no-install playwright-cli close
 ```
 
-- **The browser.** `playwright-cli` starts the Google Chrome that is installed on your machine, without a window. `npx playwright install chromium` installs the browser for test runs only.
+- **The browser.** `playwright-cli` starts the Google Chrome that is installed on your machine, without a window. `npx playwright install chromium` installs the browser for test runs only. Cursor's agent runs shell commands in a sandbox that points Playwright's browser folder at a place of its own, so that browser is often missing there. `playwright.config.ts` then starts Google Chrome for the test run too.
 - **The page.** `snapshot` prints the page as a list of elements, such as `- button "Save profile" [ref=e9]`. The agent gives the `e9` to `click` and `fill`. The other commands print at most a link to a saved file, so the skills run `snapshot` after `open`, `goto`, and `click`, in the same shell command. The two seconds of `sleep` give a slow page time to change first.
 - **Saved files.** The tool saves page snapshots and console logs in `.playwright-cli/`. `.gitignore` and `.cursorignore` name that folder, and the hook denies the agent a read of it.
 - **The address.** The hook lets `open` and `goto` load only `http://localhost` and `http://127.0.0.1`, with any port. It does not see where a link or a redirect takes the browser after that.

@@ -1104,6 +1104,7 @@ The hook reads tool calls and command lines. It is a guardrail and not a sandbox
 
 ## Known limits and unverified behaviour
 
+- **Seen in Cursor.** On 2026-10-09, with Composer 2.5, a denied shell command reached the model as `Rejected: Command execution was blocked by a hook:` followed by the hook's own message, word for word, and a line from Cursor that tells the model not to suggest workarounds. A `cd lib`, a read of `package-lock.json`, and a `playwright-cli open` on localhost each got the answer this document gives. A denied file write was not tried in that session.
 Not seen in a real Cursor session:
 
 - **MCP payloads.** No MCP call is in Cursor's hook logs on the machine these rules were written on. The two payload shapes are read from the code of Cursor 3.23.23 and from Cursor's documentation. The hook's tests send those shapes. Whether Cursor sends exactly these, whether both events fire in the command-line agent, and whether the agent sees the deny message are UNVERIFIED.

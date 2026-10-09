@@ -142,6 +142,7 @@ The hook now denies these. It allowed them before.
 
 ### Fixed
 
+- A spec could not start a browser from Cursor's agent shell. The sandbox there points Playwright's browser folder at a place of its own, and the run ended with `Executable doesn't exist`. `playwright.config.ts` now starts Google Chrome when Playwright's own Chromium is not where the shell looks. Seen with Composer 2.5 in Cursor on 2026-10-09; the fix was checked outside Cursor with an empty browser folder.
 - `next build` failed in an app that had the kit, with `'passWithNoTests' does not exist in type`, because `vitest.config.ts` set that option inside its two project blocks.
 - An import through an alias from `tsconfig.json`, such as `@/lib/db`, did not resolve in Vitest. It now resolves in every file that `tsconfig.json` includes. For test files in an app that leaves out `test/`, `test/tsconfig.json` is needed.
 - UI tests failed to parse in an app whose `tsconfig.json` has `"jsx": "preserve"`.

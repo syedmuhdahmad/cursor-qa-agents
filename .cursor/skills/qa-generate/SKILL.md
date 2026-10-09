@@ -124,6 +124,7 @@ Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByR
    | No `QA-VERDICT:` line | BLOCKED: `the test command did not finish.` Put the last output line under `Not checked:`. |
    | `QA-VERDICT: PASS-WITH-FIXME` | The spec already had a marked product bug. Go to step 9 with `Verdict: PASS` and its `// product bug:` line under `Bug:`. |
    | `ERR_CONNECTION_REFUSED` | BLOCKED: `start the app with npm run dev, then ask again.` |
+   | `Executable doesn't exist` | Do not run the install command it suggests. BLOCKED: `Playwright has no browser to start. Run npx playwright install chromium yourself, then ask again.` |
    | `Cannot find module` | Make the import match the file name of the page class: `./pages/profile-page`. |
    | `strict mode violation` | The field matches two elements. Put the role of its parent in front: `page.getByRole('main').getByRole('alert')`. |
    | `Expected:` and `Received:` with different values | The spec's value differs from the plan: write the plan's value. The spec has the plan's value: the app contradicts the plan. |

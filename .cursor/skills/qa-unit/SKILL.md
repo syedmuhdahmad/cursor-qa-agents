@@ -18,7 +18,8 @@ When a step says BLOCKED, stop work, go to step 10, and put the sentence after `
 
    | The prompt names | Do |
    | --- | --- |
-   | No file, more than one, or a file that does not exist | Reply `Which file? For example: /qa-unit src/components/ProfileForm.tsx` and stop. |
+   | No file, or more than one | Reply `Which file? For example: /qa-unit src/components/ProfileForm.tsx` and stop. |
+   | A path with no file at it, counted from the project root | Do not use a file of the same name in another folder. Reply `No file at that path. Which file?` and stop. |
    | One file under `test/` | Fix job. Go to step 7 and run that file. |
    | Any other file | Write job. Go to step 2. |
 

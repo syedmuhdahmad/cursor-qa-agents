@@ -1,7 +1,13 @@
-import { defineConfig, devices } from '@playwright/test'
+import { existsSync } from 'node:fs'
+import { chromium, defineConfig, devices } from '@playwright/test'
 
 // Set BASE_URL to test an app you start yourself. Without it, Playwright runs `npm run dev`.
 const baseURL = process.env.BASE_URL ?? 'http://localhost:3000'
+
+// Playwright's own Chromium can be missing where this shell looks for it.
+// Cursor's agent sandbox, for one, points the browser cache at a folder of its
+// own. Google Chrome is used then, which playwright-cli needs in any case.
+const ownChromium = existsSync(chromium.executablePath())
 
 export default defineConfig({
   testDir: './test/e2e',
@@ -32,7 +38,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], ...(ownChromium ? {} : { channel: 'chrome' }) },
     },
   ],
 })

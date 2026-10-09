@@ -141,7 +141,7 @@ npx --no-install playwright-cli open http://localhost:3000/profile && sleep 2 &&
 
 Earlier copies of the kit used the Playwright MCP server for this. The shell commands cost fewer tokens: no MCP tool list goes into every request, and the page is printed only when the agent asks for a snapshot. The saving was not measured.
 
-- `playwright-cli` starts the Google Chrome that is installed on your machine, without a window. `npx playwright install chromium` installs the browser for test runs only.
+- `playwright-cli` starts the Google Chrome that is installed on your machine, without a window. `npx playwright install chromium` installs the browser for test runs only. Cursor's agent runs shell commands in a sandbox that points Playwright's browser folder at a place of its own, so that browser is often missing there. `playwright.config.ts` then starts Google Chrome for the test run too.
 - The hook lets it open only `http://localhost` and `http://127.0.0.1`, with any port.
 - [`.cursor/skills/playwright-cli/`](.cursor/skills/playwright-cli/) is the tool's own manual and not a job. It is the text that ships in the `@playwright/cli` package, with only the frontmatter of `SKILL.md` changed, and a check in this repository keeps it equal to the installed package. Each job skill lists the commands it needs.
 
