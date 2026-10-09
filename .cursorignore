@@ -1,14 +1,14 @@
 # Paths the agent never needs to read. Syntax follows .gitignore.
 #
-# Cursor already skips everything in .gitignore; this file adds paths that
-# are tracked or useful to humans but only waste agent context.
+# Cursor already skips everything in .gitignore. Some of those paths are
+# repeated here because the hook reads only this file.
 #
-# .cursor/hooks/guard-test-writes.py also reads this file and denies shell
-# reads (cat, grep, sed, and so on) of the paths below. Lines starting with
-# `#` or `!` are skipped by that hook, so negation patterns have no effect
-# there.
+# .cursor/hooks/guard-test-writes.py reads this file and denies a shell
+# command that names one of the paths below as a file to read (cat, grep,
+# sed, and so on). Lines starting with `#` or `!` are skipped by that hook,
+# so negation patterns have no effect there.
 #
-# test-results/ is deliberately absent: the healer skill reads
+# test-results/ is deliberately absent: the qa-heal skill reads
 # error-context.md from it.
 
 # Lockfiles: large, generated, and never needed to write a test.
@@ -34,3 +34,10 @@ blob-report/
 .vitest/
 .playwright-cli/
 .playwright/
+
+# Page snapshots and console logs that the Playwright MCP server saves.
+.playwright-mcp/
+
+# Maestro debug output. It lands here when a person passes --debug-output=.
+# A device log can be about 300 KB per flow.
+.maestro/tests/

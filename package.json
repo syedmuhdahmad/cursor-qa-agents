@@ -1,12 +1,27 @@
 {
-  "name": "cursor-agent-testing-for-react",
+  "name": "cursor-qa-agents",
+  "description": "Cursor agent setup for writing tests: a qa role, Vitest and Playwright skills, and a hook that stops the agent editing application source.",
+  "license": "MIT",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/syedmuhdahmad/cursor-qa-agents.git"
+  },
+  "bugs": "https://github.com/syedmuhdahmad/cursor-qa-agents/issues",
+  "homepage": "https://github.com/syedmuhdahmad/cursor-qa-agents#readme",
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
   "scripts": {
-    "test:unit": "vitest run --project unit",
-    "test:integration": "vitest run --project integration",
+    "test:unit": "vitest run --project unit --passWithNoTests",
+    "test:integration": "vitest run --project integration --passWithNoTests",
     "test:e2e": "playwright test",
-    "test:e2e:list": "playwright test --list"
+    "test:e2e:list": "playwright test --list",
+    "test:hook": "python3 -m unittest discover -s .cursor/hooks",
+    "test:reporters": "node --test \".cursor/qa/*.test.mjs\"",
+    "lint:md": "markdownlint-cli2",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@playwright/cli": "^0.1.22",
@@ -17,6 +32,8 @@
     "@types/node": "^26.6.3",
     "@vitest/coverage-v8": "^5.0.3",
     "jsdom": "^30.1.1",
+    "markdownlint-cli2": "^0.23.3",
+    "typescript": "^7.0.2",
     "vitest": "^5.0.3"
   }
 }

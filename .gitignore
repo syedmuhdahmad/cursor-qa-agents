@@ -5,6 +5,9 @@ node_modules/
 __pycache__/
 *.pyc
 
+# Next.js build output
+.next/
+
 # Test output and tool state
 .vitest/
 coverage/
@@ -13,3 +16,12 @@ test-results/
 blob-report/
 .playwright-cli/
 .playwright/
+
+# Page snapshots and console logs that the Playwright MCP server saves
+.playwright-mcp/
+
+# Maestro. By default it writes to ~/.maestro/tests, outside the repository.
+# These appear only when a person passes --debug-output=. or --format with no --output.
+.maestro/tests/
+/report.xml
+/report.html
