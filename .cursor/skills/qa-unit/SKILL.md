@@ -71,7 +71,7 @@ When a step says BLOCKED, stop work, go to step 10, and put the sentence after `
    - A function that takes no `Request`: call it with its own arguments and check what it returns.
    - Before you save, check that no token is left.
 
-7. **Run.** `RTK_DISABLED=1 npx vitest run test/unit/components/ProfileForm.test.ts`. Change only the path. Give the full path of the test file.
+7. **Run.** `RTK_DISABLED=1 npx vitest run test/unit/components/ProfileForm.test.ts`. Change only the path. Give the full path of the test file. Read the output where it prints. Do not save it to a file.
 
 8. **Verdict.** Copy the line that starts with `QA-VERDICT:`. PASS means done. Anything else is not a pass.
 

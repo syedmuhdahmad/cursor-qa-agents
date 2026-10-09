@@ -104,7 +104,7 @@ Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByR
    - The spec file exists: keep its tests and add only the scenarios whose title is not in it.
    - A page class or a field the plan needs is missing: BLOCKED: `a page class or field is missing. Ask again with page classes only.`
 
-7. **Part 2: run it.** `RTK_DISABLED=1 npx playwright test test/e2e/profile.spec.ts`. Change only the path. If the prompt gave another base URL, put it in front: `RTK_DISABLED=1 BASE_URL=http://localhost:4000 npx playwright test test/e2e/profile.spec.ts`. The hook allows only `localhost` and `127.0.0.1` there. Another host: BLOCKED: `the tests run only against an app on this machine.` Copy the line that starts with `QA-VERDICT:`. PASS means done: go to step 9. Anything else is not a pass: go to step 8.
+7. **Part 2: run it.** `RTK_DISABLED=1 npx playwright test test/e2e/profile.spec.ts`. Change only the path. If the prompt gave another base URL, put it in front: `RTK_DISABLED=1 BASE_URL=http://localhost:4000 npx playwright test test/e2e/profile.spec.ts`. The hook allows only `localhost` and `127.0.0.1` there. Another host: BLOCKED: `the tests run only against an app on this machine.` Copy the line that starts with `QA-VERDICT:`. PASS means done: go to step 9. Anything else is not a pass: go to step 8. Read the output where it prints. Do not save it to a file.
 
 8. **Part 2: not a pass.** Take the first error in the output. Do what its row says, then go back to step 7. After the third run that is not a pass, go to step 9 with `Verdict: FAIL`.
 

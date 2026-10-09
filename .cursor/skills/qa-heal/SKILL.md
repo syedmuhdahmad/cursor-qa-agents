@@ -20,7 +20,7 @@ Do the steps in order. In every table, use the first row that matches. When a st
 
 1. **Spec.** Take the spec path from the prompt. No path in the prompt, or no file at that path: reply `Which spec?` and stop.
 
-2. **Run it.** `RTK_DISABLED=1 npx playwright test test/e2e/profile.spec.ts`. Change only the path. If the prompt gave a base URL, put it in front: `RTK_DISABLED=1 BASE_URL=http://localhost:4000 npx playwright test test/e2e/profile.spec.ts`. The hook allows only `localhost` and `127.0.0.1` there. Another host: BLOCKED: `the tests run only against an app on this machine.` Copy the line that starts with `QA-VERDICT:`.
+2. **Run it.** `RTK_DISABLED=1 npx playwright test test/e2e/profile.spec.ts`. Change only the path. If the prompt gave a base URL, put it in front: `RTK_DISABLED=1 BASE_URL=http://localhost:4000 npx playwright test test/e2e/profile.spec.ts`. The hook allows only `localhost` and `127.0.0.1` there. Another host: BLOCKED: `the tests run only against an app on this machine.` Copy the line that starts with `QA-VERDICT:`. Read the output where it prints. Do not save it to a file.
 
    | The line says | Do |
    | --- | --- |

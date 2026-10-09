@@ -59,15 +59,18 @@ Do the steps in order. In every table, use the first row that matches. When a st
 
 7. **Start the plan file.** Read the template. Write the plan file with only the lines above `## 1. GROUP`, the words in CAPITALS replaced. `DATA` is the account or records the scenarios use, or `none`.
 
-8. **Walk one scenario, add it to the plan file, then take the next.** Stay on the feature's pages.
+8. **Take the scenarios from step 6 one at a time.** Every one of them goes into the plan file. Stay on the feature's pages.
+
+   | The scenario | Do |
+   | --- | --- |
+   | Its first step is a `Mock` step | Do not use the browser for it: these browser tools do not mock. Still add it to the plan file, in the same form as the others. Copy its message from the source, and name that text in your reply. |
+   | Any other scenario | Walk it in the browser with sub-steps 1 to 5. |
 
    1. `browser_navigate` to the full URL, then `browser_snapshot`.
    2. Do the steps. `browser_type` fills a field. `browser_click` clicks. Give each call the `ref` of the element from the latest snapshot.
    3. `browser_snapshot` again. Copy every label, button name, heading, and message from the snapshots, letter for letter. Do not write a text from memory.
-   4. Add the scenario to the plan file, in the template's form, with the sentence forms below.
+   4. Add the scenario to the plan file, in the template's form, with the sentence forms below. Its `Expect` list names at least one text the user sees in the last snapshot: a heading, a message, or other text. A URL line alone is not enough.
    5. `browser_close`. It also signs the browser out, so the next scenario starts clean.
-
-   Do not walk a scenario with a `Mock` step: these browser tools do not mock. Take its message from the source and name that text in your reply.
 
    Sentence forms. Change only the quoted text, the values, and the role word (`textbox`, `button`, `link`, `checkbox`, `heading`), which comes from the snapshot line. A `Mock` step is always step 1.
 
@@ -86,7 +89,7 @@ Do the steps in order. In every table, use the first row that matches. When a st
 
    No form fits: write one short sentence in the same style and name it under `Not checked:`.
 
-9. **Reply** with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
+9. **Check the plan file, then reply.** Count the `###` headings in the plan file. The count must equal your list from step 6. A scenario is missing: add it now. Then reply with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
 
    ```text
    Plan file: test/e2e/plan/profile.plan.md
