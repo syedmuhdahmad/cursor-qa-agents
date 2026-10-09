@@ -2,7 +2,7 @@
 
 This kit is a set of Cursor files that you copy into a React or Next.js app, so that the Cursor agent writes and fixes the app's tests: Vitest unit and integration tests, Playwright end-to-end tests, and Maestro flows for a mobile app (a preview). The agent reads your application source and does not edit it. When a test fails because the product is wrong, it reports the bug instead of weakening the test.
 
-It is written for low-cost and mid-tier models: each job is one skill of numbered steps, every test run ends with one verdict line, and a hook enforces the rules that a small model drops. [Example app and evaluation](#example-app-and-evaluation) says how far that is measured.
+It is written for low-cost and mid-tier models: each job is one skill of numbered steps, every test run ends with one verdict line, and a hook enforces the rules that a small model drops. In Cursor's own agent, Composer 2.5 passed 18 of 18 runs of the kit's evaluation cases and Claude Opus 5 passed 9 of 9. [Example app and evaluation](#example-app-and-evaluation) has the results and what they do not cover.
 
 The hook applies to every Cursor agent in the folder. It denies an edit to application source and a command such as `npm install`, so run those yourself. See [Limits](#limits).
 
@@ -272,7 +272,28 @@ Neither is part of the files you copy.
 
 [`eval/`](eval/) holds nine fixed test jobs on the example app and a scorer that needs no model. The scorer runs the tests itself, and marks a reply that says the work passed over a failing run as `FALSE PASS`. See [`eval/README.md`](eval/README.md).
 
-Three rounds are recorded, with Claude Haiku 4.5 as a stand-in for a low-tier model and Claude Sonnet 5.5 for a mid-tier one. [eval/results/README.md](eval/results/README.md) says how the rounds were run and what was wrong with them.
+### Results
+
+Four rounds are recorded in [`eval/results/runs.jsonl`](eval/results/runs.jsonl). [docs/evaluation.md](docs/evaluation.md) has the results by case, and [eval/results/README.md](eval/results/README.md) says how each round was run and what was wrong with it.
+
+**Round 4** ran in Cursor's own agent, started with the Cursor CLI. Cursor attached the skill, loaded `AGENTS.md`, and ran the hook. Composer 2.5 is the low tier and Claude Opus 5 the mid tier.
+
+| Case | Composer 2.5 | Claude Opus 5 |
+| --- | --- | --- |
+| Unit test for a component | 2 of 2 | 1 of 1 |
+| Unit test for plain functions | 2 of 2 | 1 of 1 |
+| Integration test for a route handler | 2 of 2 | 1 of 1 |
+| Fix a failing unit test | 2 of 2 | 1 of 1 |
+| Unit test that fails because the app is wrong | 2 of 2 | 1 of 1 |
+| Plan | 2 of 2 | 1 of 1 |
+| Generate | 2 of 2 | 1 of 1 |
+| Heal a wrong locator | 2 of 2 | 1 of 1 |
+| Heal when the app is wrong | 2 of 2 | 1 of 1 |
+| All | 18 of 18 | 9 of 9 |
+
+Every run passed every check, and no reply claimed a pass over a failing run. In the product-bug cases both models reported the bug with its source file and line, and left the test's expectation alone. Seven prompts were also run by hand in the Cursor window with Composer 2.5, and all seven ended as they should.
+
+**Rounds 1 to 3** ran outside Cursor, without the hook in the loop, with Claude Haiku 4.5 as a stand-in for a low-tier model and Claude Sonnet 5.5 for a mid-tier one.
 
 - **Round 1**, with one run for each case: the new skills passed 9 of 9 cases on both stand-in models and the old skills, with `/qa` only, 7 of 9 on the low-tier one, but two of the cases could be passed by copying the skills' own examples, which were replaced afterwards.
 - **Round 2**, with two runs for each case on the low tier and one on the mid tier: the mid-tier model passed 9 of 9 runs and the low-tier model 13 of its 16 valid runs, and the results note explains the three failures.
@@ -281,7 +302,17 @@ Three rounds are recorded, with Claude Haiku 4.5 as a stand-in for a low-tier mo
 
 - **Round 3**, the first round with the skills driving `playwright-cli` themselves, with two runs for each case on the low tier and one on the mid tier: the mid-tier model passed 9 of 9 runs and the low-tier model 17 of 18. The one failure parked a test as a product bug without naming a source line, and the hook now denies that.
 
-Read these numbers as a first sign and not as proof. The models are stand-ins. They ran outside Cursor with the skill text as the prompt and without the hook in the loop. Rounds 1 and 2 ran before the switch to `playwright-cli`, on skills that still named the browser tools of the Playwright MCP server. [docs/evaluation.md](docs/evaluation.md) has the results by case.
+### What the results do not cover
+
+Read the numbers as a good sign and not as proof.
+
+- Each case had one or two runs, and every case is on the one example app.
+- No agent tried anything the hook forbids in round 4, so the round does not show how a model goes on after a deny.
+- Round 4 used the CLI without its sandbox. Only the seven prompts by hand ran in the Cursor window.
+- The mobile skills were not run on any model, and nothing was run on iOS, on Windows, or, apart from the hook's tests, on macOS.
+- The hook's rules for MCP tools were not seen working in a live session.
+
+[Issue 30](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/30) tracks these.
 
 ## Checks and CI
 
