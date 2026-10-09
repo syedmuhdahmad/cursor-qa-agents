@@ -13,7 +13,7 @@ The hook applies to every Cursor agent in the folder. It denies an edit to appli
 - **Python 3.9 or later**, started as `python3`, with no packages. The hook is a Python script.
 - **Cursor 2.4 or later**, by Cursor's changelog the first version with skills, subagents, and the `preToolUse` hook event.
 - **Linux.** macOS was not run. Windows is not expected to work as shipped: it cannot start the hook by its `.py` path.
-- **Google Chrome**, for the plan and generate jobs.
+- **Google Chrome**, for the plan and generate jobs. `playwright-cli` starts it.
 
 Run so far: everything on Linux with Node 24, and the hook's tests on Python 3.9 and 3.14. Not run: this version in a live Cursor session. The install notes have [the detail](docs/install-notes.md#requirements-in-detail), and say what to do [if every action is denied](docs/install-notes.md#if-every-action-is-denied). The mobile skills need more: see [Mobile](#mobile).
 
@@ -82,7 +82,7 @@ node scripts/install-into.mjs ../my-app
 
 The first command prints what would change and writes nothing. The second does the steps above, and adds `test/tsconfig.json` when your app has a `tsconfig.json`. It does not run `npm install`.
 
-It merges the kit's entries into your own `.cursor/hooks.json` and `.cursor/mcp.json`. Any other file of yours with other content is skipped, unless you pass `--force`. It never deletes a file and never writes through a symbolic link. Read the end of the output: a `WARNING:` there means that a skipped file leaves part of the kit switched off. See [What the installer does](docs/install-notes.md#what-the-installer-does).
+It merges the kit's entries into your own `.cursor/hooks.json` and `.cursor/mcp.json`. Any other file of yours with other content is skipped, unless you pass `--force`. It never deletes a file and never writes through a symbolic link. Read the end of the output: a `WARNING:` there means that a skipped file leaves part of the kit switched off, and a `NOTE:` names what an earlier version of the kit left in your app and this version no longer uses. See [What the installer does](docs/install-notes.md#what-the-installer-does).
 
 ### If your app already has these files
 
@@ -109,7 +109,7 @@ In Agent chat, type `/` and pick a skill from the menu. Then add the file or the
 | Heal | `/qa-heal test/e2e/sign-in.spec.ts` | Runs one failing spec and fixes the test, one line at a time, in at most three rounds. |
 
 - A `route.ts` file, or a file under an `api/` folder, gets an integration test in `test/integration/`.
-- Before plan and generate, start the app and turn on the `playwright` MCP server. See [Tools and the app under test](#tools-and-the-app-under-test).
+- Before plan and generate, start the app. Both jobs open it with `playwright-cli` shell commands, so there is no MCP server to turn on. See [Tools and the app under test](#tools-and-the-app-under-test).
 - `/qa-plan sign-in` opens `http://localhost:3000/sign-in`. For another place, say so: `/qa-plan checkout. Base URL http://localhost:4000. Route /cart/checkout.` Give a test account the same way.
 - `/qa-heal` also takes a spec that fails with no failing test: a `.skip` or `.only` mark, or a spec that does not load.
 - When the app is wrong, no skill changes what the test expects. `/qa-unit` and `/qa-generate` leave the test failing and name the source line under `Bug:`. `/qa-heal` marks that one test `test.fixme(`, under a `// product bug:` comment that names the source line.
@@ -133,11 +133,25 @@ QA-VERDICT: PASS-WITH-FIXME (passed 5, failed 0, skipped 0, fixme 1, files 1)
 
 ## Tools and the app under test
 
-[`.cursor/mcp.json`](.cursor/mcp.json) lists two MCP servers: `playwright`, for exploring a live page in `/qa-plan` and `/qa-generate`, and `maestro`, for reading the device screen in `/qa-mobile-plan` and `/qa-mobile-heal`. Turn one on in Cursor settings for the jobs that need it. An enabled server adds its tool list to each request, so keep both off while you only write unit or integration tests.
+`/qa-plan` and `/qa-generate` look at the running app with `playwright-cli`, the command-line tool of the dev dependency `@playwright/cli`. The agent runs it as shell commands:
+
+```bash
+npx --no-install playwright-cli open http://localhost:3000/profile && sleep 2 && npx --no-install playwright-cli snapshot
+```
+
+Earlier copies of the kit used the Playwright MCP server for this. The shell commands cost fewer tokens: no MCP tool list goes into every request, and the page is printed only when the agent asks for a snapshot. The saving was not measured.
+
+- `playwright-cli` starts the Google Chrome that is installed on your machine, without a window. `npx playwright install chromium` installs the browser for test runs only.
+- The hook lets it open only `http://localhost` and `http://127.0.0.1`, with any port.
+- [`.cursor/skills/playwright-cli/`](.cursor/skills/playwright-cli/) is the tool's own manual and not a job. It is the text that ships in the `@playwright/cli` package, with only the frontmatter of `SKILL.md` changed, and a check in this repository keeps it equal to the installed package. Each job skill lists the commands it needs.
+
+[docs/jobs.md](docs/jobs.md#the-browser-for-plan-and-generate) has more on the browser steps and on each way they stop.
+
+[`.cursor/mcp.json`](.cursor/mcp.json) lists one MCP server: `maestro`, for reading the device screen in `/qa-mobile-plan` and `/qa-mobile-heal`. Turn it on in Cursor settings for those jobs only, because an enabled server adds its tool list to each request. If you installed an earlier copy of the kit, delete the `playwright` entry from your `.cursor/mcp.json` and run `npm uninstall @playwright/mcp`.
 
 The agent runs every test command with `RTK_DISABLED=1` in front. See [Using RTK](#using-rtk) for why.
 
-End-to-end tests open the app at `http://localhost:3000`, and Playwright starts it with `npm run dev` when nothing is listening there. The browser tool starts nothing, and the hook denies `npm run dev` to the agent. So start the app yourself before a plan or generate job. Otherwise the reply is `BLOCKED: start the app with npm run dev, then ask again.`
+End-to-end tests open the app at `http://localhost:3000`, and Playwright starts it with `npm run dev` when nothing is listening there. `playwright-cli` starts nothing but its browser, and the hook denies `npm run dev` to the agent. So start the app yourself before a plan or generate job. Otherwise the reply is `BLOCKED: start the app with npm run dev, then ask again.`
 
 If your app runs somewhere else, start it yourself and set `BASE_URL`:
 
@@ -145,7 +159,7 @@ If your app runs somewhere else, start it yourself and set `BASE_URL`:
 BASE_URL=http://localhost:4000 npm run test:e2e
 ```
 
-In a prompt, name the address in words: `/qa-plan sign-in. Base URL http://localhost:4000.` The agent's own test commands accept only `localhost` and `127.0.0.1`. With another host, `/qa-generate` and `/qa-heal` stop with `BLOCKED: the tests run only against an app on this machine.`
+In a prompt, name the address in words: `/qa-plan sign-in. Base URL http://localhost:4000.` The agent's own test commands and browser commands accept only `localhost` and `127.0.0.1`. With another host, `/qa-plan`, `/qa-generate`, and `/qa-heal` stop with `BLOCKED: the tests run only against an app on this machine.`
 
 ## Using RTK
 
@@ -208,7 +222,7 @@ test/tsconfig.json         Makes import aliases work in tests (added by the inst
 test/mobile/               Maestro plans and flows, see Mobile
 
 AGENTS.md                  Write scope, the table from request to skill, and the test commands
-.cursor/                   The skills, the hook, the MCP servers, and the verdict reporters
+.cursor/                   The skills, the hook, the Maestro MCP server, and the verdict reporters
 ```
 
 To run the tests yourself, use `npm run test:unit`, `npm run test:integration`, and `npm run test:e2e`. `npm run test:e2e:list` prints the Playwright tests without running them. The install notes list [every path of the kit](docs/install-notes.md#what-the-kit-puts-in-your-app).
@@ -219,7 +233,8 @@ Cursor starts [`.cursor/hooks/guard-test-writes.py`](.cursor/hooks/guard-test-wr
 
 - **File edits.** The agent's file tools may write in `test/**`, `vitest.config.ts`, `playwright.config.ts`, the root `README.md`, `.gitignore`, `AGENTS.md`, `.cursor/skills/**`, and `.cursor/agents/**`, and nowhere else in the project.
 - **Test files.** A new file under `test/` must fit the layout: `.ts` and never `.tsx`, and no `__tests__/` folder. A write may not add text that hides a failing test, such as `.only(`, `.skip(`, or `waitForTimeout(`. `test.fixme(` needs a `// product bug:` line above it.
-- **Shell.** Allowed: a test run that names a path under `test/`, the four `npm run test:*` scripts, reads such as `ls`, `cat`, and `grep`, and `git` and `gh` within limits. Denied: everything else, such as `npm install`, `npm run dev`, `curl`, `cd`, and a runner option that removes the verdict line.
+- **Shell.** Allowed: a test run that names a path under `test/`, the four `npm run test:*` scripts, reads such as `ls`, `cat`, and `grep`, `git` and `gh` within limits, and the browser commands below. Denied: everything else, such as `npm install`, `npm run dev`, `curl`, `cd`, and a runner option that removes the verdict line.
+- **Browser.** `playwright-cli` may open a URL on `http://localhost` or `http://127.0.0.1`, print the page, click, fill in, close the browser, and step through a paused test. The hook denies its other commands, such as `run-code`, `screenshot`, and `install`, and every option that names a file, a browser, a profile, or a configuration.
 - **MCP tools.** A file that an MCP tool writes must be inside the paths above. A few tools are denied by name.
 - **Reads.** The hook denies a shell read of a path in [`.cursorignore`](.cursorignore): lockfiles, build output, and test reports.
 
@@ -231,6 +246,7 @@ The hook is a guardrail and not a sandbox.
 
 - It checks file-editing tool calls, the text of shell commands, and the name and file arguments of MCP tool calls. Its MCP rules have not been seen working in a live Cursor session.
 - It does not check what a program does after it starts. A test is code that runs with your permissions, so a test that writes to `src/` passes the hook.
+- It checks the URL the agent opens, not where a link, a redirect, or a script on that page takes the browser next.
 - It will not hold against an agent that follows injected instructions, and it can read a command line wrongly. Gaps of that kind were closed in [issue 8](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/8), [issue 9](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/9), and this version. More may exist.
 - `.cursorignore` saves context and keeps no secrets. An untrusted workspace loads no project hooks.
 
@@ -249,23 +265,20 @@ You start the device and install the app, and every flow clears the app's data t
 
 Neither is part of the files you copy.
 
-[`examples/next-app/`](examples/next-app/) is a small Next.js app with a sign-in form and hand-written reference tests in the layout the skills produce. `node scripts/test-example.mjs` copies it to a temporary folder, installs the kit there with the installer, and runs `npm install`, the build, the three test commands, and a type check of the tests. Pass `--port 3100` when port 3000 is busy.
+[`examples/next-app/`](examples/next-app/) is a small Next.js app with a sign-in form and hand-written reference tests in the layout the skills produce. `node scripts/test-example.mjs` copies it to a temporary folder, installs the kit there with the installer, and runs `npm install`, the build, the three test commands, and a type check of the tests. Its last stage opens the app with `playwright-cli`, as the plan and generate jobs do. Pass `--port 3100` when port 3000 is busy, and `--no-browse` on a machine without Google Chrome.
 
 [`eval/`](eval/) holds nine fixed test jobs on the example app and a scorer that needs no model. The scorer runs the tests itself, and marks a reply that says the work passed over a failing run as `FALSE PASS`. See [`eval/README.md`](eval/README.md).
 
-The first round, on 2026-10-09, was one run for each case:
+Three rounds are recorded, with Claude Haiku 4.5 as a stand-in for a low-tier model and Claude Sonnet 5.5 for a mid-tier one. [eval/results/README.md](eval/results/README.md) says how the rounds were run and what was wrong with them.
 
-| Skills | Model | Cases passed |
-| --- | --- | --- |
-| New | Claude Haiku 4.5, as a low-tier proxy | 9 of 9 |
-| New | Claude Sonnet 5.5, as a mid-tier proxy | 9 of 9 |
-| Old, with `/qa` only | Claude Haiku 4.5, as a low-tier proxy | 7 of 9 |
+- **Round 1**, with one run for each case: the new skills passed 9 of 9 cases on both stand-in models and the old skills, with `/qa` only, 7 of 9 on the low-tier one, but two of the cases could be passed by copying the skills' own examples, which were replaced afterwards.
+- **Round 2**, with two runs for each case on the low tier and one on the mid tier: the mid-tier model passed 9 of 9 runs and the low-tier model 13 of its 16 valid runs, and the results note explains the three failures.
 
-<!-- eval:round-2 -->
+<!-- eval:round-3 -->
 
-Round 2 is not recorded yet.
+- **Round 3**, the first round with the skills driving `playwright-cli` themselves, with two runs for each case on the low tier and one on the mid tier: the mid-tier model passed 9 of 9 runs and the low-tier model 17 of 18. The one failure parked a test as a product bug without naming a source line, and the hook now denies that.
 
-Read these numbers as a first sign and not as proof. The models are stand-ins. They ran outside Cursor with the skill text as the prompt, without the hook in the loop and without the MCP browser tools. One run for each case says little, and in two cases the skill text of that round held part of the answer, which is fixed since. See [docs/evaluation.md](docs/evaluation.md).
+Read these numbers as a first sign and not as proof. The models are stand-ins. They ran outside Cursor with the skill text as the prompt and without the hook in the loop. Rounds 1 and 2 ran before the switch to `playwright-cli`, on skills that still named the browser tools of the Playwright MCP server. [docs/evaluation.md](docs/evaluation.md) has the results by case.
 
 ## Checks and CI
 
@@ -278,13 +291,14 @@ npm run test:reporters
 node --test "scripts/*.test.mjs"
 node --test "eval/*.test.mjs"
 npm run lint:md
+npm run check:playwright-cli-skill
 npm run typecheck
 npx vitest run --passWithNoTests
 npx playwright test --list
 node scripts/test-example.mjs
 ```
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same commands on every pull request and on every push to `main`: the hook tests on Ubuntu and macOS with Python 3.9 and 3.14, and the reporter, script, config, and example checks on Ubuntu with the lowest and the highest Node version that `engines` allows. The workflow has not run on GitHub yet. Its commands were run on one Linux machine and in Linux containers.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same commands on every pull request and on every push to `main`: the hook tests on Ubuntu and macOS with Python 3.9 and 3.14, the reporter, script, config, and example checks on Ubuntu with the lowest and the highest Node version that `engines` allows, and the Markdown lint, the type check, and the check of the copied `playwright-cli` skill on Ubuntu with one Node version. The workflow has not run on GitHub yet. Its commands were run on one Linux machine and in Linux containers. Whether the GitHub runner has the Google Chrome that the example check needs was not checked.
 
 ## Upgrading
 
@@ -296,4 +310,4 @@ To upgrade, copy the files again or run the installer: its dry run lists every f
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) says how a skill is laid out and which files must stay in step. Everyone who takes part follows the [code of conduct](CODE_OF_CONDUCT.md).
 - [SECURITY.md](SECURITY.md) says how to report a security problem in private.
-- [MIT](LICENSE) is the license for the files written for this project. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every other source with its license. Three Vitest reference files in `.cursor/skills/qa-unit/references/` are unchanged MIT-licensed copies. Their license files sit in the same folder, so keep them when you copy `.cursor/`. The plan, generate, and heal skills began from Playwright's agent definitions, under Apache-2.0.
+- [MIT](LICENSE) is the license for the files written for this project. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every other source with its license. Three Vitest reference files in `.cursor/skills/qa-unit/references/` are unchanged MIT-licensed copies. Their license files sit in the same folder, so keep them when you copy `.cursor/`. `.cursor/skills/playwright-cli/` is an Apache-2.0 copy of the skill in the `@playwright/cli` package, with its `LICENSE` file in the folder. The plan, generate, and heal skills began from Playwright's agent definitions, under Apache-2.0.

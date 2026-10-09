@@ -17,7 +17,7 @@ This file holds the detail behind [Requirements](../README.md#requirements) and 
 - **Python 3.9 or later**, started as `python3`, with no packages. The hook is a Python script.
 - **Cursor 2.4 or later.** Cursor's changelog names 2.4 as the first version with skills, subagents, and the `preToolUse` hook event.
 - **Linux.** macOS was not run. Windows is not expected to work as shipped: `.cursor/hooks.json` starts the hook by its `.py` path, and Windows cannot start a file that way. The hook is registered with `failClosed: true`, and Cursor's documentation says a hook that fails then blocks the action. So on Windows every action would be blocked.
-- **Google Chrome**, for the plan and generate jobs. The Playwright MCP server drives the installed Chrome. `npx playwright install chromium` installs the browser for test runs only.
+- **Google Chrome**, for the plan and generate jobs. `playwright-cli` starts the installed Chrome, without a window. `npx playwright install chromium` installs the browser for test runs only.
 - **The executable bit on the hook.** Cursor starts `.cursor/hooks/guard-test-writes.py` by its path. Git and the installer keep the bit. If a copy lost it, run `chmod +x .cursor/hooks/guard-test-writes.py`, or run the installer again.
 
 What was run:
@@ -53,7 +53,7 @@ It does not run `npm install`.
 
 What it does with something your app already has:
 
-- **`.cursor/hooks.json` and `.cursor/mcp.json`** are merged. Your own entries stay. The kit's hook entries and MCP servers that are missing are added, and nothing is added twice. This is the same with `--force`. A file that is not valid JSON cannot be merged: it is skipped, or replaced with `--force`.
+- **`.cursor/hooks.json` and `.cursor/mcp.json`** are merged. Your own entries stay. The kit's hook entries and its MCP server, `maestro`, are added when they are missing, and nothing is added twice. This is the same with `--force`. A file that is not valid JSON cannot be merged: it is skipped, or replaced with `--force`.
 - **Any other file, a dependency range, or a script** with other content is left alone and listed as skipped. Merge those by hand, or pass `--force` to take the kit's version of every one of them. A `test/tsconfig.json` of your own is always kept.
 - **A symbolic link** is never written through, with or without `--force`. If `AGENTS.md` is a link to `CLAUDE.md`, or `.cursor` is a link to a shared folder, those paths are listed as skipped and what they point at stays as it is.
 - **The hook's executable bit** is set again when the file is the kit's and the bit is missing.
@@ -66,9 +66,11 @@ Read the end of the output. If a skipped file leaves part of the kit switched of
 | --- | --- |
 | `the hook is not registered, so nothing is guarded` | `.cursor/hooks.json` was skipped, and yours does not start the kit's hook for all three events. |
 | `Vitest runs print no QA-VERDICT line`, and the same for Playwright | A config file was skipped, and yours does not load the reporter from `.cursor/qa/`. The skills then stop with `BLOCKED`. |
-| `the kit's MCP servers are not registered` | `.cursor/mcp.json` was skipped and lacks a server of the kit. |
+| `the kit's MCP server is not registered` | `.cursor/mcp.json` was skipped and lacks the `maestro` server. |
 
 The command exits with 0 then too.
+
+A `NOTE:` names what an earlier version of the kit left in your app and this version no longer uses. Today that is the Playwright MCP server: an entry in `.cursor/mcp.json` that starts `@playwright/mcp`, and that package in your `package.json`. The installer removes neither. Delete both, unless you use the server yourself.
 
 Not checked: the installer on macOS and Windows, and a merged `hooks.json` or `mcp.json` loaded in Cursor. The installer treats a file with comments in it as not valid JSON.
 
@@ -79,7 +81,7 @@ This is the merge by hand, for the files the installer skips and for a copy with
 | File | What to do |
 | --- | --- |
 | `.cursor/hooks.json` | Keep yours. Add the kit's three entries, `preToolUse`, `beforeShellExecution`, and `beforeMCPExecution`, each with the command `.cursor/hooks/guard-test-writes.py` and `failClosed: true`. The installer does this merge. |
-| `.cursor/mcp.json` | Keep yours. Add the `playwright` entry from the kit's file, and the `maestro` entry if you test a mobile app. The installer adds both. |
+| `.cursor/mcp.json` | Keep yours. Add the `maestro` entry from the kit's file if you test a mobile app. The installer adds it. The web jobs need no entry. If your file has the `playwright` entry of an earlier version of the kit, delete it. |
 | `.cursor/rules/` | Your rules stay. The kit adds `test-file-conventions.mdc` and `mobile-test-conventions.mdc`. |
 | `AGENTS.md` | Keep yours and put the kit's text at the top. |
 | `.cursorignore` | Keep yours and add the kit's lines. The hook reads this file too. Without the file, the hook holds back lockfiles only. Add your app's large fixtures or generated code there. |
@@ -107,13 +109,16 @@ vitest.config.ts           The unit and integration projects, and the verdict re
 playwright.config.ts       The end-to-end settings, and the verdict reporter
 .cursorignore              Paths the agent does not read
 .cursor/skills/qa-*/       One skill for each job, with its templates
+.cursor/skills/playwright-cli/  The manual of playwright-cli, copied from its package
 .cursor/agents/qa.md       The /qa router
 .cursor/rules/             Where each kind of test file goes
 .cursor/hooks/             The hook and its tests
 .cursor/hooks.json         Registers the hook with Cursor
-.cursor/mcp.json           The playwright and maestro MCP servers
+.cursor/mcp.json           The maestro MCP server
 .cursor/qa/                The verdict reporters and the VERSION file
 ```
+
+`.cursor/skills/playwright-cli/` is not a job. It is the skill that ships inside the `@playwright/cli` package, version 0.1.22, under Apache-2.0, with its `LICENSE` file. Only the frontmatter of its `SKILL.md` was changed. Each job skill lists the `playwright-cli` commands it needs, and the hook denies many of the others in the manual. You do not need `playwright-cli install --skills` in your app. By its code, which was read and not run, it copies the skill a second time, into `.claude/skills/` or `.agents/skills/`, with the package's own frontmatter.
 
 Unit and integration test files end in `.test.ts` and contain no JSX. The test files and plans are yours. The other paths are the kit's.
 
@@ -134,10 +139,12 @@ Unit and integration test files end in `.test.ts` and contain no JSX. The test f
   The installer adds it when your app has a `tsconfig.json` and no `test/tsconfig.json`. If you copied the kit by hand, add it yourself. Do not add it to an app without a `tsconfig.json`: every Vitest run then stops with `Failed to load tsconfig`. Playwright specs resolve the alias with or without the file. `/qa-unit` writes imports and `vi.mock` paths as relative paths, such as `../../../lib/db`. In a test file it is asked to fix, it rewrites an `@/` path the same way before anything else.
 - **A JavaScript app needs a `tsconfig.json` for an alias.** Vitest reads the alias from `tsconfig.json` only, not from `jsconfig.json`, and only for the files that `tsconfig.json` includes. A source file that imports `@/lib/sum` then fails in every test that loads it, with `Cannot find package '@/lib/sum'`. Add a `tsconfig.json` with `"allowJs": true` and the `paths` of your `jsconfig.json`. An app that uses no alias needs nothing.
 - **In a monorepo, install into the app package.** Give the installer the folder of the package that holds the app, such as `packages/web`, and open that folder in Cursor as the workspace. The hook and the two config files look for `.cursor/` in the folder they run in. With `.cursor/` at the repository root and the configs in the package, Vitest stops with `Failed to load custom Reporter from ./.cursor/qa/vitest-verdict.mjs`, and the hook denies a write to `packages/web/test/`.
-- **The `maestro` MCP server needs Maestro.** The kit's `.cursor/mcp.json` has two servers, and the installer adds both. On a machine without the Maestro CLI the `maestro` server cannot start. If you do not test a mobile app, delete the `maestro` entry, or leave that server off in Cursor settings. What Cursor shows for a server that cannot start was not seen.
+- **The `maestro` MCP server needs Maestro.** The kit's `.cursor/mcp.json` has one server, `maestro`, and the installer adds it. On a machine without the Maestro CLI the `maestro` server cannot start. If you do not test a mobile app, delete the `maestro` entry, or leave that server off in Cursor settings. What Cursor shows for a server that cannot start was not seen.
 - **`next dev` adds to `AGENTS.md`.** Under a coding agent, Next.js 16.4 adds its own block to `AGENTS.md` when `next dev` starts. The block tells the agent to read files under `node_modules/`, which the hook denies. Set `agentRules: false` in `next.config.ts` to stop it. The example app does.
 - **`vitest.config.ts` needs Vite 8.** Vitest 5 installs Vite 8 unless your app already depends on Vite 6 or 7. With Vite 7 an import alias such as `@/lib/db` does not resolve, and `tsc` reports `'tsconfigPaths' does not exist in type 'AllResolveOptions'`. Vite 6 was not tried.
 - **A Vite warning starts every Vitest run** in an app whose `package.json` has no `"type": "module"`. It begins with `(!) Your Vite config uses features`. The run is not affected, and `/qa-unit` is told to ignore it.
+- **Plan and generate need Google Chrome and `@playwright/cli`.** When `playwright-cli` finds no browser, the two skills reply `BLOCKED: playwright-cli found no browser. Install Google Chrome, then ask again.` When `npx` cannot find the package, they reply `BLOCKED: playwright-cli is not installed. Add the dev dependency @playwright/cli, then ask again.` The error text that the skills look for when Chrome is missing was read in the code of `playwright-cli` 0.1.22. A machine without Chrome was not tried.
+- **`playwright-cli` asks the npm registry for a newer version once a day.** Set `NO_UPDATE_NOTIFIER=1` to turn that off. This was read in the code of version 0.1.22 and not observed.
 
 Not checked: a `tsconfig.json` with project references, `"composite": true`, or `"rootDir"`, and an `include` that leaves out `test/` without an `exclude`.
 
@@ -173,10 +180,17 @@ A copy without that file is older than 0.1.0. [CHANGELOG.md](../CHANGELOG.md) li
 
 To upgrade, copy the files again. A dry run of the installer lists every file of yours that differs from the new version as skipped.
 
-- **Safe to overwrite:** `.cursor/skills/qa-*/`, `.cursor/agents/qa.md`, `.cursor/hooks/`, `.cursor/qa/`, and the kit's two files in `.cursor/rules/`, unless you changed them yourself.
+- **Safe to overwrite:** `.cursor/skills/qa-*/`, `.cursor/skills/playwright-cli/`, `.cursor/agents/qa.md`, `.cursor/hooks/`, `.cursor/qa/`, and the kit's two files in `.cursor/rules/`, unless you changed them yourself.
 - **Merge by hand:** `AGENTS.md`, `vitest.config.ts`, `playwright.config.ts`, `.cursorignore`, `.gitignore`, `test/setup.ts`, and the scripts and dev dependencies in `package.json`. The installer merges `.cursor/hooks.json` and `.cursor/mcp.json` itself. If you copy by hand, merge those two as well.
 - **Delete by hand:** a skill folder that the new version no longer has. A copy over the old `.cursor/` leaves it behind, and the installer never deletes.
 
 The installer's `--force` replaces every file that differs, the ones to merge by hand included. Use it only when you have no changes of your own in them.
 
-Version 0.1.0 renamed the skills. Delete `vitest-unit-integration`, `playwright-planner`, `playwright-generator`, `playwright-healer`, `playwright-page-objects`, and `playwright-cli` from `.cursor/skills/`. Type `/qa-unit`, `/qa-plan`, `/qa-generate`, or `/qa-heal` where you typed `/qa`.
+Version 0.1.0 renamed the skills. Delete `vitest-unit-integration`, `playwright-planner`, `playwright-generator`, `playwright-healer`, and `playwright-page-objects` from `.cursor/skills/`. Type `/qa-unit`, `/qa-plan`, `/qa-generate`, or `/qa-heal` where you typed `/qa`.
+
+Version 0.1.0 also stopped using the Playwright MCP server. `/qa-plan` and `/qa-generate` now look at the app with `playwright-cli` shell commands, which the hook allows for `http://localhost` and `http://127.0.0.1` only. In your app:
+
+- Delete the `playwright` entry from `.cursor/mcp.json`.
+- Run `npm uninstall @playwright/mcp`, unless you use the package for something else. Keep `@playwright/cli`.
+- Overwrite `.cursor/skills/playwright-cli/` with the new folder. The old copy had no `LICENSE` file.
+- Copy the new `.cursor/hooks/`. The old hook denies `playwright-cli open`, `goto`, and `close`.

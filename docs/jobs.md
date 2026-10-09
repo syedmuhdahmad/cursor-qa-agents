@@ -9,7 +9,7 @@ This file holds the detail behind [Start a job](../README.md#start-a-job) in the
 - **`/qa-generate`** has two parts. The first uses the browser and writes the page classes. The second writes the spec and runs it. Ask for one part with `page classes only` or `spec only` after the path of the plan.
 - **`/qa-heal`** runs one spec and fixes the test, one line at a time, in at most three rounds. It also takes a spec that fails with no failing test: a test marked `.skip` or `.only`, or a spec that does not load. It removes the mark, or corrects the import, and runs the spec again.
 
-`/qa-plan` and the first part of `/qa-generate` only use the browser, so they work against an app at any address. `/qa-heal` and the second part of `/qa-generate` run tests, and the hook allows a test run only against `localhost` or `127.0.0.1`. With another host in the prompt they stop with `BLOCKED: the tests run only against an app on this machine.`
+Every web job needs the app on this machine. `/qa-plan` and the first part of `/qa-generate` open it in a browser with `playwright-cli`, and the hook lets that browser open only `http://localhost` and `http://127.0.0.1`, with any port. `/qa-heal` and the second part of `/qa-generate` run tests, and the hook allows a test run only against the same two hosts. With another host in the prompt, all three skills stop with `BLOCKED: the tests run only against an app on this machine.`
 
 `/qa` and a plain request, such as "Write a unit test for src/components/SignIn.tsx", also work. [`AGENTS.md`](../AGENTS.md) is always in the model's context, and it has a table from the kind of request to the one skill file to read. `/qa` asks the model to hand the request to the subagent in [`.cursor/agents/qa.md`](../.cursor/agents/qa.md), which has the same table. On both routes the model must pick the skill file and read it. With a slash skill, Cursor attaches the skill's text to your message. Whether a skill name that is typed or pasted, and not picked from the menu, attaches the skill was not checked.
 
@@ -32,12 +32,48 @@ The examples inside the skills come from an imaginary app with a profile form, n
 
 | Tool | Used for |
 | --- | --- |
-| `playwright` MCP | Exploring a live page in `/qa-plan` and `/qa-generate` |
+| `playwright-cli` | Looking at the running app in `/qa-plan` and `/qa-generate`, and at the page of a paused spec in `/qa-heal` (a spec run with `--debug=cli`, then `playwright-cli attach`) |
 | `maestro` MCP | Reading the device screen in `/qa-mobile-plan` and `/qa-mobile-heal` |
-| `playwright-cli` | Looking at the page of a paused spec in `/qa-heal` (a spec run with `--debug=cli`, then `playwright-cli attach`) |
 | `npx vitest` | Running unit and integration tests from the shell |
 
-Turn an MCP server on in Cursor settings for the jobs that need it, and restart it if Cursor does not show it. The Playwright MCP server drives the Google Chrome that is installed on your machine. `npx playwright install chromium` installs the browser for test runs only.
+Turn the `maestro` MCP server on in Cursor settings for the jobs that need it, and restart it if Cursor does not show it. The web jobs need no MCP server.
+
+### The browser for plan and generate
+
+`/qa-plan` and `/qa-generate` look at the running app with `playwright-cli`, the command-line tool of the dev dependency `@playwright/cli`. Earlier copies of the kit used the Playwright MCP server here. The shell commands cost fewer tokens: no MCP tool list goes into every request, and the page is printed only when the agent asks for a snapshot. The saving was not measured.
+
+The agent runs commands such as these:
+
+```bash
+npx --no-install playwright-cli open http://localhost:3000/profile && sleep 2 && npx --no-install playwright-cli snapshot
+npx --no-install playwright-cli fill e5 'Grace Hopper'
+npx --no-install playwright-cli click e9 && sleep 2 && npx --no-install playwright-cli snapshot
+npx --no-install playwright-cli goto http://localhost:3000/account && sleep 2 && npx --no-install playwright-cli snapshot
+npx --no-install playwright-cli close
+```
+
+- **The browser.** `playwright-cli` starts the Google Chrome that is installed on your machine, without a window. `npx playwright install chromium` installs the browser for test runs only.
+- **The page.** `snapshot` prints the page as a list of elements, such as `- button "Save profile" [ref=e9]`. The agent gives the `e9` to `click` and `fill`. The other commands print at most a link to a saved file, so the skills run `snapshot` after `open`, `goto`, and `click`, in the same shell command. The two seconds of `sleep` give a slow page time to change first.
+- **Saved files.** The tool saves page snapshots and console logs in `.playwright-cli/`. `.gitignore` and `.cursorignore` name that folder, and the hook denies the agent a read of it.
+- **The address.** The hook lets `open` and `goto` load only `http://localhost` and `http://127.0.0.1`, with any port. It does not see where a link or a redirect takes the browser after that.
+- **The end.** The skills tell the agent to start every scenario of a plan with `open`, which starts a new browser with no cookies, and to end each job with `close`, also when it stops with `BLOCKED`. If a job is cut off, the browser can stay open. Run `npx --no-install playwright-cli close` in the app folder to end it.
+- **Other commands.** The hook allows a closed list of `playwright-cli` commands and denies the rest, such as `run-code`, `eval`, `screenshot`, and `install`. See [playwright-cli](hook-rules.md#playwright-cli) in the hook rules.
+- **A limit.** The skills have no step for a text that starts with `--`. `playwright-cli` reads such a text as an option, and the hook denies it.
+
+The browser steps can stop a job in these ways:
+
+| Reply after `BLOCKED:` | Cause |
+| --- | --- |
+| `start the app with npm run dev, then ask again.` | Nothing answers at the base URL. |
+| `the tests run only against an app on this machine.` | The prompt gives a base URL on another host. |
+| `playwright-cli found no browser. Install Google Chrome, then ask again.` | `playwright-cli` found no browser to start. |
+| `playwright-cli is not installed. Add the dev dependency @playwright/cli, then ask again.` | `npx` cannot find the package. |
+| `no page at http://localhost:3000/profile. Ask again with the route.` | The route answers 404. In `/qa-generate` the sentence ends with `Correct the route in the plan.` |
+| `this page needs a signed-in user. Ask again with a test account.` | In `/qa-plan`: the app redirects, and the prompt names no account. |
+| `http://localhost:3000/profile redirects to another page. Correct the plan.` | In `/qa-generate`: the app redirects, and the plan does not start on the page it redirects to. |
+| `the browser did not open.` | Anything else. The first line of the output is under `Not checked:`. |
+
+[`.cursor/skills/playwright-cli/`](../.cursor/skills/playwright-cli/) is the manual of `playwright-cli` and not a job. It is the skill that ships inside the `@playwright/cli` package, under Apache-2.0, with only the frontmatter of `SKILL.md` changed. Its name in the `/` menu is `/playwright-cli`, for looking a command up. No job reads it: each job skill lists the commands it needs, and the hook denies many of the others.
 
 ## The reply form
 
