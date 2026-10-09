@@ -335,7 +335,200 @@ The four scripts may run the whole suite, so they need no path. The options a di
 
 ### playwright-cli
 
-Limited to the commands the healer uses on a test paused by `--debug=cli`: `attach`, `list`, `pause-at`, `resume`, `step-over`, `snapshot`, `find`, `generate-locator`, `console`, `requests`, `request`, `click`, `dblclick`, `fill`, `type`, `press`, `hover`, `select`, `check`, and `uncheck`.
+The kit browses the app with `playwright-cli`: the skills open a page, read it, and act on it with shell commands. The `qa-heal` skill also drives a test paused by `--debug=cli` with it. The hook allows that and nothing more. The rules were read from `playwright-cli --help` and the help of each command, in `@playwright/cli` 0.1.22.
+
+The command line is an allow list. Each command takes a fixed number of arguments and a closed list of options.
+
+| Command | Arguments | Options of its own |
+| --- | --- | --- |
+| `open`, `goto` | one URL of the app on this machine | none |
+| `snapshot` | none, or one ref | `--depth`, `--boxes` |
+| `find` | one text, or none with `--regex` | `--regex` |
+| `generate-locator`, `check`, `uncheck`, `hover` | one ref | none |
+| `click`, `dblclick` | one ref, and a button if you want one | `--modifiers` |
+| `fill` | one ref and one text | `--submit` |
+| `type` | one text | `--submit` |
+| `press` | one key | none |
+| `select` | one ref and one value | none |
+| `close` | none | none |
+| `console` | none, or one level | `--clear` |
+| `requests` | none | `--static`, `--filter`, `--clear` |
+| `request` | one number from the output of `requests` | none |
+| `list` | none | `--all` |
+| `attach` | the session name of a paused test | none |
+| `pause-at` | one place, written as `file:line` | none |
+| `step-over`, `resume` | none | none |
+
+Every command but `attach` also takes a session name, written `-s=NAME`, `-s NAME`, `--session=NAME`, or `--session NAME`. Every command takes `--raw`, `--json`, and `--help`. With `--help`, `playwright-cli` prints the help of the command and runs nothing, so the arguments are not checked.
+
+#### Browsing the app
+
+| Command | Decision |
+| --- | --- |
+| `npx --no-install playwright-cli open http://localhost:3000/profile` | allow |
+| `npx --no-install playwright-cli goto http://localhost:3000/profile` | allow |
+| `npx --no-install playwright-cli open http://127.0.0.1:5173/` | allow |
+| `npx --no-install playwright-cli snapshot` | allow |
+| `npx --no-install playwright-cli snapshot --depth=2` | allow |
+| `npx --no-install playwright-cli --raw snapshot` | allow |
+| `npx --no-install playwright-cli find "Save profile"` | allow |
+| `npx --no-install playwright-cli generate-locator e9` | allow |
+| `npx --no-install playwright-cli click e9` | allow |
+| `npx --no-install playwright-cli fill e5 "Ada Lovelace"` | allow |
+| `npx --no-install playwright-cli type "Ada Lovelace"` | allow |
+| `npx --no-install playwright-cli press Enter` | allow |
+| `npx --no-install playwright-cli select e7 "Canada"` | allow |
+| `npx --no-install playwright-cli check e4` | allow |
+| `npx --no-install playwright-cli uncheck e4` | allow |
+| `npx --no-install playwright-cli hover e3` | allow |
+| `npx --no-install playwright-cli close` | allow |
+| `npx --no-install playwright-cli -s=plan open http://localhost:3000/profile` | allow |
+| `npx --no-install playwright-cli -s plan snapshot` | allow |
+| `npx --no-install playwright-cli --session=plan find "Save profile"` | allow |
+| `npx --no-install playwright-cli --session plan close` | allow |
+| `npx --no-install playwright-cli open http://localhost:3000/profile 2>&1 \| tail -40` | allow |
+| `npx --no-install playwright-cli open` | deny |
+| `npx --no-install playwright-cli fill e5` | deny |
+| `npx --no-install playwright-cli fill e5 Ada Lovelace` | deny |
+| `npx --no-install playwright-cli type Ada Lovelace` | deny |
+| `npx --no-install playwright-cli close now` | deny |
+| `npx --no-install playwright-cli` | deny |
+| `npx --no-install playwright-cli --help` | deny |
+| `npx --no-install playwright-cli fill --help` | allow |
+
+- A command with too few or too many arguments is denied with the form to copy. A text of several words goes in quotes: `fill e5 Ada Lovelace` has three arguments.
+- A ref is the `e9` in a snapshot line such as `- button "Save profile" [ref=e9]`. The hook does not check its form, because `playwright-cli` also takes a selector there.
+- After `open` or an action, `playwright-cli` may print a link to a file in `.playwright-cli/` in place of the page. Reading that file is denied. See "Paths the agent does not read". `snapshot` prints the page.
+- `playwright-cli` with no command and `playwright-cli --help` are denied with the list of allowed commands. The full help is about 140 lines.
+
+#### The URL of `open` and `goto`
+
+The URL must start with `http://localhost` or `http://127.0.0.1`. After the host comes a port, a path, a query, or the end.
+
+| Command | Decision |
+| --- | --- |
+| `npx --no-install playwright-cli open http://localhost` | allow |
+| `npx --no-install playwright-cli open http://localhost:3000/#/profile` | allow |
+| `npx --no-install playwright-cli open http://localhost:3000/users/ada@example.com` | allow |
+| `npx --no-install playwright-cli open "http://localhost:3000/search?q=shoes&page=2"` | allow |
+| `npx --no-install playwright-cli open 'http://localhost:3000/search?q=a;b'` | allow |
+| `npx --no-install playwright-cli open http://localhost:3000/search?q=shoes` | deny |
+| `npx --no-install playwright-cli open http://localhost:3000/search?q=shoes&page=2` | deny |
+| `npx --no-install playwright-cli open https://example.com` | deny |
+| `npx --no-install playwright-cli open http://localhost@example.com/` | deny |
+| `npx --no-install playwright-cli open http://localhost:3000@example.com/` | deny |
+| `npx --no-install playwright-cli open http://user:secret@localhost:3000/` | deny |
+| `npx --no-install playwright-cli open http://localhost.example.com/` | deny |
+| `npx --no-install playwright-cli open http://127.0.0.1.example.com/` | deny |
+| `npx --no-install playwright-cli open http://0.0.0.0:3000/` | deny |
+| `npx --no-install playwright-cli open "http://[::1]:3000/"` | deny |
+| `npx --no-install playwright-cli open HTTP://LOCALHOST:3000/` | deny |
+| `npx --no-install playwright-cli open https://localhost:3000/` | deny |
+| `npx --no-install playwright-cli open file:///etc/passwd` | deny |
+| `npx --no-install playwright-cli open "javascript:alert(1)"` | deny |
+| `npx --no-install playwright-cli open about:blank` | deny |
+| `npx --no-install playwright-cli open localhost:3000` | deny |
+| `npx --no-install playwright-cli goto "http://localhost:3000/a b"` | deny |
+| `npx --no-install playwright-cli goto 'http://localhost\@example.com/'` | deny |
+| `npx --no-install playwright-cli open http://localhost:3000/;rm -rf src` | deny |
+| `npx --no-install playwright-cli open "http://localhost:3000/?q=$(cat .env)"` | deny |
+| `npx --no-install playwright-cli open http://localhost:3000/ > src/page.txt` | deny |
+
+- Only the two spellings `localhost` and `127.0.0.1` are accepted, in lower case, with `http`. Other names for this machine (`[::1]`, `0.0.0.0`, `127.1`) and `https` are denied, to keep the rule short.
+- A user name in front of a host (`localhost@example.com`), a host that only starts with `localhost` (`localhost.example.com`), and a port followed by `@` are denied: the browser would load the other host.
+- The rest of the URL may hold letters, digits, and the characters a URL is written with. A space, a quote, a backslash, a tab, and a line break are denied. The URL standard that browsers follow drops a tab or a line break from a URL and reads a backslash as a slash, which would change the host. Checked with node's `URL`: `http://localhost`, a tab, and `.example.com/` give the host `localhost.example.com`.
+- A URL with `?` or `*` outside quotes is denied with a message that says to put it in double quotes. bash reads them as wildcards and passes the word on when no file matches. zsh is documented to stop with "no matches found", which was not run here. A query usually has `&` too, where every shell ends the command.
+- A `;`, `|`, `>`, or `&&` after the URL is shell syntax. What follows is checked as a command or a redirect of its own.
+- A carriage return outside quotes is denied in a `playwright-cli` command. The hook splits words at one and bash does not, and the URL standard drops it from a URL. `open http://localhost`, a carriage return, and `--raw` would pass the hook as a URL and an option, and node's `URL` reads the one word bash passes as the host `localhost--raw`.
+
+#### Options
+
+| Command | Decision |
+| --- | --- |
+| `npx --no-install playwright-cli snapshot --boxes` | allow |
+| `npx --no-install playwright-cli snapshot --depth 2` | allow |
+| `npx --no-install playwright-cli find --regex 'Save.*'` | allow |
+| `npx --no-install playwright-cli click e9 --modifiers=Shift` | allow |
+| `npx --no-install playwright-cli fill e5 "Ada Lovelace" --submit` | allow |
+| `npx --no-install playwright-cli --json list --all` | allow |
+| `npx --no-install playwright-cli fill e5 -- "--submit"` | allow |
+| `npx --no-install playwright-cli snapshot --filename=src/a.yml` | deny |
+| `npx --no-install playwright-cli snapshot --filename=test/e2e/a.yml` | deny |
+| `npx --no-install playwright-cli find "Save" --filename test/found.txt` | deny |
+| `npx --no-install playwright-cli type "--filename=src/a.yml"` | deny |
+| `npx --no-install playwright-cli open http://localhost:3000 --headed` | deny |
+| `npx --no-install playwright-cli open http://localhost:3000 --config=test/cli.json` | deny |
+| `npx --no-install playwright-cli open http://localhost:3000 --profile=test/profile` | deny |
+| `npx --no-install playwright-cli open http://localhost:3000 --persistent` | deny |
+| `npx --no-install playwright-cli open http://localhost:3000 --browser=firefox` | deny |
+| `npx --no-install playwright-cli open http://localhost:3000 --extension` | deny |
+| `npx --no-install playwright-cli attach --cdp=http://localhost:9222` | deny |
+| `npx --no-install playwright-cli attach tw-6eef1e --config=test/cli.json` | deny |
+| `npx --no-install playwright-cli click e9 --submit` | deny |
+| `npx --no-install playwright-cli snapshot --zzz` | deny |
+| `npx --no-install playwright-cli --zzz snapshot run-code "x"` | deny |
+| `npx --no-install playwright-cli -- run-code "x"` | deny |
+| `npx --no-install playwright-cli type --submit true` | deny |
+| `npx --no-install playwright-cli snapshot --depth=two` | deny |
+| `npx --no-install playwright-cli -s=../../x snapshot` | deny |
+| `npx --no-install playwright-cli -s=a -s=b snapshot` | deny |
+
+- No allowed option names a file, a configuration, a browser, a profile, an extension, or code. `--filename` is denied on every command, inside the write scope too: the shell may not write file content under `test/`. `--config`, `--profile`, `--persistent`, `--browser`, `--device`, `--mobile`, `--idle-timeout`, `--headed`, `--cdp`, `--endpoint`, and `--extension` are denied, each with its reason.
+- An option of another command, or one `playwright-cli` does not have, is denied with the form of the command to copy.
+- `playwright-cli` gives an option it does not know the next word as its value. In `--zzz snapshot run-code "x"` the command that runs is `run-code`. So an option the hook cannot place, and a `--` in front of the command, are denied.
+- A flag takes no value, but `playwright-cli` reads `true` or `false` after it as one. Run: `fill e5 --submit true` stopped with `'text' argument: expected string, received undefined`. The hook denies such a command first. Put the flag at the end.
+- A text that starts with two dashes is read by `playwright-cli` as an option. Put `--` in front of it: `fill e5 -- "--submit"` fills in the text `--submit`.
+- A session name may hold only letters, digits, `-`, and `_`, and is given once. `playwright-cli` puts the name into the path of a file it writes, `<name>.err` in its cache folder. Run with `attach ../../../../tmp/zz`: it tried to open `/home/<user>/tmp/zz.err` for writing.
+- `--depth` takes a number, and `--modifiers` one of `Alt`, `Control`, `ControlOrMeta`, `Meta`, and `Shift`.
+
+`.cursor/hooks/test_cli_words_match_playwright_cli.py` compares the hook's reading of a command line with `playwright-cli`'s own parser, and the table above with the list of commands and options in the installed package.
+
+#### Every other command
+
+| Command | Decision |
+| --- | --- |
+| `npx --no-install playwright-cli run-code "async page => page.title()"` | deny |
+| `npx --no-install playwright-cli eval "() => document.title"` | deny |
+| `npx --no-install playwright-cli screenshot` | deny |
+| `npx --no-install playwright-cli screenshot --filename=test/e2e/page.png` | deny |
+| `npx --no-install playwright-cli pdf` | deny |
+| `npx --no-install playwright-cli upload test/e2e/fixtures/avatar.png` | deny |
+| `npx --no-install playwright-cli drop e4 --path=src/secret.env` | deny |
+| `npx --no-install playwright-cli state-save test/e2e/state.json` | deny |
+| `npx --no-install playwright-cli state-load test/e2e/state.json` | deny |
+| `npx --no-install playwright-cli cookie-set session abc` | deny |
+| `npx --no-install playwright-cli cookie-list` | deny |
+| `npx --no-install playwright-cli localstorage-set theme dark` | deny |
+| `npx --no-install playwright-cli route "**/api/session" --status=500` | deny |
+| `npx --no-install playwright-cli tracing-start` | deny |
+| `npx --no-install playwright-cli video-start test/e2e/run.webm` | deny |
+| `npx --no-install playwright-cli install` | deny |
+| `npx --no-install playwright-cli install-browser chromium` | deny |
+| `npx --no-install playwright-cli config-print` | deny |
+| `npx --no-install playwright-cli show` | deny |
+| `npx --no-install playwright-cli tab-new http://localhost:3000/profile` | deny |
+| `npx --no-install playwright-cli tab-new https://example.com` | deny |
+| `npx --no-install playwright-cli reload` | deny |
+| `npx --no-install playwright-cli delete-data` | deny |
+| `npx --no-install playwright-cli kill-all` | deny |
+| `npx --no-install playwright-cli close-all` | deny |
+| `npx --no-install playwright-cli -s=plan run-code "x"` | deny |
+| `node_modules/.bin/playwright-cli run-code "x"` | deny |
+
+Every such deny carries one message with the list of allowed commands. For the commands a model reaches for most it ends with what to use instead. What a denied command does is taken from its help text. None of them was run.
+
+| Denied | Why | What the message says to use |
+| --- | --- | --- |
+| `run-code`, `eval` | They run code the hook cannot check. | `snapshot` or `find` to read the page, and the action commands to act on it |
+| `screenshot`, `pdf`, `video-start`, `tracing-start`, `show`, `highlight` | They write a file or open a window. | `snapshot`, which prints the page as text |
+| `upload`, `drop`, `state-save`, `state-load` | They read or write a local file. | nothing |
+| `install`, `install-browser` | They install files or a browser. | Stop and tell the user what is missing |
+| `tab-new`, `tab-select`, `tab-close`, `tab-list`, `reload`, `go-back`, `go-forward` | A tab may load any URL. The tab commands are denied as a group to keep the URL rule in one place. | `goto` with the URL |
+| `kill-all`, `close-all`, `delete-data` | They end or delete sessions the agent did not start. | `close`, or `resume` for a paused test |
+
+The cookie, storage, and `route` commands read or change what the page stores or loads. They and the rest of the list (`drag`, `resize`, the mouse and key commands, the emulation commands, `webmcp-call`, and the others) are denied because no skill uses them.
+
+#### A paused test
 
 | Command | Decision |
 | --- | --- |
@@ -347,20 +540,50 @@ Limited to the commands the healer uses on a test paused by `--debug=cli`: `atta
 | `npx --no-install playwright-cli -s=tw-6eef1e generate-locator e9` | allow |
 | `npx --no-install playwright-cli -s=tw-6eef1e click e9` | allow |
 | `npx --no-install playwright-cli -s=tw-6eef1e fill e5 ada@example.com` | allow |
+| `npx --no-install playwright-cli -s=tw-6eef1e step-over` | allow |
+| `npx --no-install playwright-cli -s=tw-6eef1e goto http://localhost:3000/profile` | allow |
 | `npx --no-install playwright-cli -s=tw-6eef1e resume` | allow |
 | `npx --no-install playwright-cli -s=tw-6eef1e detach` | deny |
+| `npx --no-install playwright-cli -s=tw-6eef1e close` | deny |
+| `npx --no-install playwright-cli -s=tw-6eef1e open http://localhost:3000/profile` | deny |
 | `npx --no-install playwright-cli -s=tw-XXXXXX snapshot` | deny |
-| `npx --no-install playwright-cli open http://localhost:3000` | deny |
+| `npx --no-install playwright-cli attach` | deny |
+| `npx --no-install playwright-cli attach ../../../../tmp/zz` | deny |
+| `npx --no-install playwright-cli attach ws://localhost:9222/` | deny |
+| `npx --no-install playwright-cli attach tw-6eef1e --session=heal` | deny |
 | `npx --no-install playwright-cli -s=tw-6eef1e screenshot` | deny |
 | `npx --no-install playwright-cli -s=tw-6eef1e run-code "x"` | deny |
-| `npx --no-install playwright-cli --zzz snapshot run-code "x"` | deny |
-| `npx --no-install playwright-cli -s=tw-6eef1e snapshot --filename=src/a.yml` | deny |
-| `npx --no-install playwright-cli -s=tw-6eef1e snapshot --filename=test/e2e/a.yml` | allow |
-| `npx --no-install playwright-cli attach tw-6eef1e --config=test/cli.json` | deny |
 
-- `detach` is denied because it leaves the test paused. The run is ended with `resume`.
+- `detach` is denied because it leaves the test paused, with no command to end it. The run is ended with `resume`.
+- `close` and `open` on a session whose name starts with `tw-` are denied for the same reason. Run on a paused test: after `-s=tw-c928a3 close` the test run was still waiting, and after `-s=tw-c928a3 open http://localhost:4317/` the command `resume` answered "Debugger is not paused". A new `attach` and then `resume` ended the run.
+- `attach` takes the name the `--debug=cli` run printed and no session name of its own. The session then has the name of the test, which is how the hook knows it. By its source, `playwright-cli` connects to a name it does not know as an endpoint, so a name with `://`, a dot, or a slash is denied.
 - `tw-XXXXXX` is the stand-in the skills print for the session name. Copied as it is, it is denied with a message that says where to find the real name.
-- `--cdp`, `--endpoint`, `--extension`, and `--config` are denied.
+
+#### Text given to `fill`, `type`, and `find`
+
+The text is data. Inside quotes `;`, `|`, `&`, `>`, `#`, and brackets stay text. A `$` or a backtick stays text only inside single quotes.
+
+| Command | Decision |
+| --- | --- |
+| `npx --no-install playwright-cli fill e5 "a;b && c \| d > e"` | allow |
+| `npx --no-install playwright-cli type "rm -rf src; echo done"` | allow |
+| `npx --no-install playwright-cli fill e5 'Total: $5'` | allow |
+| `npx --no-install playwright-cli fill e5 'pa$$word'` | allow |
+| `npx --no-install playwright-cli fill e5 "Total: \$5"` | allow |
+| `npx --no-install playwright-cli fill e5 "Total: $"` | allow |
+| `npx --no-install playwright-cli fill e5 "Total: $5"` | deny |
+| `npx --no-install playwright-cli fill e5 "$HOME"` | deny |
+| `npx --no-install playwright-cli fill e5 "pa$$word"` | deny |
+| `npx --no-install playwright-cli type "$(cat .env)"` | deny |
+| ``npx --no-install playwright-cli type "`cat .env`"`` | deny |
+| `npx --no-install playwright-cli type a; rm -rf src` | deny |
+| `npx --no-install playwright-cli type hello > src/a.txt` | deny |
+| `npx --no-install playwright-cli type "abc` | deny |
+| `npx --no-install playwright-cli find "<text>"` | deny |
+
+- In a `playwright-cli` command, a `$` that a shell would replace is denied with a message that says to put the text in single quotes, or to write `\$` inside double quotes when the text has an apostrophe. That covers `$NAME`, `${...}`, `$(...)`, `$5`, and also `$$`, `$?`, `$#`, and `$!`, which other commands may use: in `fill e5 "pa$$word"` the shell would fill in its process number. A `$` at the end of a word or in front of a space is left alone by bash and dash, and is allowed.
+- A text outside quotes with `;`, `|`, or `>` in it is shell syntax. What follows is checked as a command or a redirect of its own.
+- A text that looks like a placeholder, such as `"<text>"`, is denied as one. See "Text the shell rewrites or skips".
 
 ### maestro
 
@@ -484,11 +707,15 @@ The read programs are `ls`, `cat`, `head`, `tail`, `grep`, `rg`, `wc`, `cut`, `s
 | `git blame package-lock.json` | deny |
 | `git grep lodash -- package-lock.json` | deny |
 | `rtk read package-lock.json` | deny |
+| `cat .playwright-cli/page-2026-10-09T12-07-31-808Z.yml` | deny |
+| `grep -n button .playwright-cli/page-2026-10-09T12-07-31-808Z.yml` | deny |
 | `cat package.json` | allow |
 | `git show HEAD:package.json` | allow |
 | `ls node_modules` | allow |
 | `find node_modules -name package.json` | allow |
 | `git diff` | allow |
+
+`.playwright-cli/` is where `playwright-cli` saves page snapshots and console logs. After `open` or an action it prints a link to such a file in place of the page. A read of one is denied like any other path on the list, with a message of its own: run `npx --no-install playwright-cli snapshot` to print the page, with the same `-s` option as the command that saved the file, and use `console` for the console messages.
 
 Three more cases depend on what is on disk, so they are not in the table:
 
@@ -776,6 +1003,8 @@ Cursor raises two events for one MCP call, according to its code (version 3.23.2
 
 In a `beforeMCPExecution` payload, `command` is the line that started the MCP server. The hook never reads it as a shell command. Arguments in a shape the hook does not expect, such as text that is not JSON, are treated as no arguments, so an odd payload cannot make the hook deny every MCP call.
 
+The kit's `.cursor/mcp.json` starts the Maestro server. The kit does not start a Playwright MCP server: it browses with `playwright-cli`, under the rules above. The `browser_*` rows below are for a Playwright MCP server you add yourself. The hook does not hold `browser_navigate` to a URL on this machine.
+
 Most MCP tools pass. The hook does two things:
 
 1. It denies a few tools by name.
@@ -831,7 +1060,7 @@ Most MCP tools pass. The hook does two things:
 | Tool | Server | Why |
 | --- | --- | --- |
 | `browser_run_code_unsafe` | Playwright | It runs JavaScript in the server's own process, outside the page. Its description says "RCE-equivalent". It could write any file. |
-| `browser_install` | Playwright | It would download and install a browser. The version the kit installs (`@playwright/mcp` 0.0.83) has no tool of this name: its README has a "Browser installation" section with nothing in it. The rule is there for a version that has one. |
+| `browser_install` | Playwright | It would download and install a browser. `@playwright/mcp` 0.0.83, the version these rules were checked against, has no tool of this name: its README has a "Browser installation" section with nothing in it. The rule is there for a version that has one. |
 | `run_on_cloud` | Maestro | It uploads the app and the flows to Maestro Cloud. |
 | `list_cloud_devices`, `get_cloud_run_status`, `describe_cloud_run` | Maestro | They use Maestro Cloud. |
 | `open_maestro_viewer` | Maestro | It returns a page for a person to watch. |
@@ -841,12 +1070,12 @@ A name with a server name in front, such as `playwright_browser_run_code_unsafe`
 Tools that stay allowed, and why:
 
 - `browser_evaluate` runs JavaScript inside the page. The browser keeps it there: it cannot write files or start programs. Its `filename` argument is checked.
-- The other 23 tools the Playwright server lists drive the page or read from it.
+- The other 23 tools a Playwright MCP server lists (`@playwright/mcp` 0.0.83) drive the page or read from it.
 - Maestro's `list_devices`, `inspect_screen`, `take_screenshot`, and `run` work on a connected device. `cheat_sheet` fetches a help text from Maestro's server and sends nothing.
 
 ### Files a tool names
 
-Relative paths are resolved against the project root. The Playwright MCP server says in its tool descriptions that it resolves relative file names against the workspace root.
+Relative paths are resolved against the project root. A Playwright MCP server says in its tool descriptions that it resolves relative file names against the workspace root.
 
 - **A file the tool writes** must be inside the write scope, whatever the tool is. The keys are `filename`, `output`, `output_path`, `output_file`, `output_dir`, `output_directory`, `outfile`, `outdir`, `save_path`, `save_as`, `save_to`, `download_path`, `download_dir`, `destination`, `destination_path`, `dest`, `dest_path`, `target_path`, and `target_file`, in any mix of upper case, `_`, and `-`.
 - **A file or folder the tool is given** (`path`, `paths`, `file`, `files`, `file_path`, `file_paths`, `dir`, `directory`, `folder`, `notebook_path`, `target_notebook`) must be inside the write scope for `browser_file_upload`, `browser_drop`, and `run`, and for any tool whose name has one of these words in it: `write`, `create`, `edit`, `update`, `delete`, `remove`, `move`, `rename`, `copy`, `save`, `download`, `export`, `append`, `patch`, `replace`, `upload`, `mkdir`, `touch`.
@@ -861,9 +1090,11 @@ Why `path` is not checked on every tool: many tools use it for something that is
 The hook reads tool calls and command lines. It is a guardrail and not a sandbox.
 
 - **Code the test runners run.** A test file, `vitest.config.ts`, `playwright.config.ts`, and a Maestro flow are code. The runners execute them with your permissions. A test can write to `src/`, read any file, or call the network, and the hook does not see it.
-- **Output the runners write by default.** `coverage/`, `test-results/`, `playwright-report/`, `.vitest/`, and `.playwright-mcp/` are outside the write scope and still get written. Only a path given on the command line is checked.
+- **Output the runners write by default.** `coverage/`, `test-results/`, `playwright-report/`, `.vitest/`, and `.playwright-cli/` are outside the write scope and still get written. `playwright-cli` saves a page snapshot and a console log in `.playwright-cli/` after `open` and after an action. Only a path given on the command line is checked.
 - **What an MCP tool does.** The hook sees the tool's name and arguments, not its effect. A tool of another server that runs commands or writes a file named by a key the hook does not know passes. Inline flow text given to Maestro's `run` tool is not read.
-- **Where the browser goes.** `browser_navigate` may open any URL.
+- **Where the browser goes after the first page.** `open` and `goto` take a URL on this machine. A link the agent clicks, a redirect, or a script on the page can take the browser to any site, and the hook does not see it. An MCP tool such as `browser_navigate` may open any URL.
+- **What the page does with what is typed.** The text of `fill` and `type` goes to the page, and the page may send it anywhere.
+- **The configuration of `playwright-cli`.** Its help says it reads `.playwright/cli.config.json` by default. The hook does not read that file. It is outside the write scope, so the agent cannot create or change it.
 - **Reads.** The shell and the read tools may read any file on the machine. Only the paths in `.cursorignore` are held back, and only on the routes listed under "Paths the agent does not read". That list saves context. It does not keep secrets.
 - **What is staged.** `git add -A` and `git add -f` stage any file in the repository, and `git push` publishes what is committed.
 - **Text typed into a running program.** Cursor reports only the length of such input to the hook.
@@ -880,11 +1111,15 @@ Not seen in a real Cursor session:
 - **The `Delete` tool.** The name is read from Cursor's code. No call was logged.
 - **Windows.** The hook accepts the byte order mark that Cursor on Windows puts in front of the payload. It was not run on Windows. `hooks.json` names a `.py` file, which Windows cannot start by itself.
 - **macOS and zsh.** Not run. The comparison with the shell was made on bash 5.3 and 5.2. The message heredoc was also run on bash 3.2 and 4.0 and on dash.
+- **Other versions of `playwright-cli`.** The command and option lists were read from `@playwright/cli` 0.1.22 on Linux. A version that adds an option to an allowed command fails `test_cli_words_match_playwright_cli.py` until the option is put on a list. Until then the hook denies the new option, because the lists are closed.
 
 Rules that deny more than they must:
 
 - `cat *.json` is denied by the wildcard rule. Write `cat ./*.json`, which is then checked against the ignore list.
-- A test title with something like an HTML tag in it, as in `-g "renders <b> bold"`, is read as a placeholder.
+- A test title with something like an HTML tag in it, as in `-g "renders <b> bold"`, is read as a placeholder. So is such a text given to `playwright-cli`, as in `fill e5 "<b>"`.
+- `playwright-cli open https://localhost:3000` and `open "http://[::1]:3000/"` are denied, although they name this machine. `BASE_URL` may use `https`.
+- A text for `playwright-cli` that starts with two dashes is read as an option and denied. Put `--` in front of it.
+- `playwright-cli` commands that only read, such as `cookie-list`, `tab-list`, and `reload`, are denied because no skill uses them.
 - `rg` skips what `.gitignore` names, but the hook denies `rg "text"` at the project root whenever the root holds an ignored path.
 - A long option that takes its value as the next word is read correctly only in the cases listed above. `mkdir --mo 755 test/x` is denied for `755`.
 - A message heredoc with an apostrophe or a bracket in it is denied, although current shells handle it.
@@ -897,6 +1132,8 @@ Rules that deny less than they could:
 - A wildcard or a search that would make the hook look at more than 20,000 directory entries is allowed without an answer.
 - `sed` can read a file with its `r` command, and the test runners can read anything. Neither is checked against the ignore list.
 - `mv` and `git restore` can put a file under `test/` without the content rules.
+- A paused test is known by its session name, which starts with `tw-`. `close` on a session of another name is allowed.
+- Outside a `playwright-cli` command, the hook reads a carriage return as a space and bash reads it as part of a word. Each part is checked on its own, and no way to use the difference was found.
 
 ## How to debug a deny
 
@@ -930,6 +1167,7 @@ python3 -m unittest discover -s .cursor/hooks
 - The run takes a little over two minutes. Most of that is starting Python once for each case.
 - `test_guard_test_writes.py` pipes payloads into the hook, as Cursor does, and checks the decision and the message.
 - `test_split_matches_bash.py` runs random command lines through bash and through the hook and compares where each command starts and ends. It needs bash 4 or later and skips itself otherwise, so on macOS with the stock bash it reports OK without running.
+- `test_cli_words_match_playwright_cli.py` compares the hook's list of `playwright-cli` commands and options with the installed package, and gives random command lines to the hook and to `playwright-cli`'s own parser. It needs `node_modules/playwright-core`, and node for the second part, and skips itself otherwise.
 - `RulesDocument` in the first file runs every table row of this document that ends in `allow` or `deny`. In an app that has the kit but not this file, it skips itself.
 
 To add a rule, add an allow case and a deny case, and a row here.

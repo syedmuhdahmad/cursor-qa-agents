@@ -20,7 +20,10 @@ must be a test runner, a known read-only program, an allowed git or gh
 command, or a file operation whose targets are all inside the write scope.
 Every command must start in the project root and leave the shell there.
 Test runs must name a file under test/ and may not watch, open a window,
-retry, or update snapshots. The shell may not write file content under test/,
+retry, or update snapshots. playwright-cli may open the app on this machine,
+read the page, and act on it, and may drive a test paused by --debug=cli; it
+may not run code, write a file, or load another site (see
+playwright_cli_allowed). The shell may not write file content under test/,
 because only a write tool goes through the content rules.
 Anything the hook cannot classify is denied.
 
@@ -291,24 +294,93 @@ PLAYWRIGHT_VALUE_OPTIONS = {
 PLAYWRIGHT_WINDOW_OPTIONS = {"--ui", "--ui-host", "--ui-port", "--headed"}
 # `playwright test` options that make a failing or slow test pass.
 PLAYWRIGHT_MASKING_OPTIONS = {"--retries", "--timeout"}
-# playwright-cli commands the healer uses to inspect a test paused by `--debug=cli`.
-# `detach` is not one of them: it leaves the test paused, with no command to end it.
-PLAYWRIGHT_CLI_COMMANDS = {
-    "attach", "list",
-    "pause-at", "resume", "step-over",
-    "snapshot", "find", "generate-locator", "console", "requests", "request",
-    "click", "dblclick", "fill", "type", "press", "hover", "select", "check", "uncheck",
+# playwright-cli. The command line is an allow list, read from `playwright-cli
+# --help` and `--help <command>` of @playwright/cli 0.1.22. Each command has
+# (fewest arguments, most arguments, options it may carry, what it takes in
+# words, the form shown in a deny message). A command that is not here is
+# denied: it runs code (run-code, eval), writes a file (screenshot, pdf,
+# state-save, tracing, video), sends a local file to the page (upload, drop),
+# changes what the page loads or stores (route, cookie-set, localstorage-set),
+# installs something (install, install-browser), opens a page whose URL the
+# hook would have to check as well (tab-new), or ends other sessions
+# (kill-all, close-all, delete-data).
+# The commands that open a page of the app and act on it.
+PLAYWRIGHT_CLI_BROWSING = {
+    "open": (1, 1, (), "one URL", "open http://localhost:3000/profile"),
+    "goto": (1, 1, (), "one URL", "goto http://localhost:3000/profile"),
+    "snapshot": (0, 1, ("--depth", "--boxes"), "no argument, or one ref", "snapshot"),
+    "find": (0, 1, ("--regex",), "one text", 'find "Save profile"'),
+    "generate-locator": (1, 1, (), "one ref", "generate-locator e9"),
+    "click": (1, 2, ("--modifiers",), "one ref", "click e9"),
+    "dblclick": (1, 2, ("--modifiers",), "one ref", "dblclick e9"),
+    "fill": (2, 2, ("--submit",), "one ref and one text", 'fill e5 "Ada Lovelace"'),
+    "type": (1, 1, ("--submit",), "one text", 'type "Ada Lovelace"'),
+    "press": (1, 1, (), "one key", "press Enter"),
+    "select": (2, 2, (), "one ref and one value", 'select e7 "Canada"'),
+    "check": (1, 1, (), "one ref", "check e4"),
+    "uncheck": (1, 1, (), "one ref", "uncheck e4"),
+    "hover": (1, 1, (), "one ref", "hover e3"),
+    "close": (0, 0, (), "no argument", "close"),
+    "console": (0, 1, ("--clear",), "no argument, or one level", "console"),
+    "requests": (0, 0, ("--static", "--filter", "--clear"), "no argument", "requests"),
+    "request": (1, 1, (), "one number from the output of requests", "request 1"),
+    "list": (0, 0, ("--all",), "no argument", "list"),
 }
-# playwright-cli options whose value is a path the command writes to.
-PLAYWRIGHT_CLI_PATH_OPTIONS = {"--filename"}
-# playwright-cli options that attach to a browser other than the paused test's,
-# or load another configuration.
-PLAYWRIGHT_CLI_DENIED_OPTIONS = {"--cdp", "--endpoint", "--extension", "--config"}
-# playwright-cli options that name the session of the paused test.
+# The commands for a test paused by `playwright test --debug=cli`. `detach` is
+# not one of them: it leaves the test paused, with no command to end it.
+PLAYWRIGHT_CLI_PAUSED = {
+    "attach": (1, 1, (), "one session name", "attach " + SESSION_PLACEHOLDER),
+    "pause-at": (1, 1, (), "one place, written as file:line", "pause-at test/e2e/sign-in.spec.ts:70"),
+    "step-over": (0, 0, (), "no argument", "step-over"),
+    "resume": (0, 0, (), "no argument", "resume"),
+}
+PLAYWRIGHT_CLI_COMMANDS = dict(PLAYWRIGHT_CLI_BROWSING, **PLAYWRIGHT_CLI_PAUSED)
+# The commands whose one argument is the URL to load.
+PLAYWRIGHT_CLI_URL_COMMANDS = {"open", "goto"}
+# How the session of a paused test starts. Playwright names it `tw-` and six
+# hex digits, as in `tw-6eef1e` (playwright, lib/mcp/test/browserBackend.js).
+# On such a session `close` and `open` end the session and leave the test
+# paused, as `detach` does. Run on @playwright/cli 0.1.22.
+PAUSED_SESSION_PREFIX = "tw-"
+# Options that take no value. playwright-cli reads each of them as a flag, so
+# the word after it is not its value. --raw, --json, and --help go with every command.
+PLAYWRIGHT_CLI_GLOBAL_FLAGS = {"--raw", "--json", "--help"}
+PLAYWRIGHT_CLI_FLAGS = PLAYWRIGHT_CLI_GLOBAL_FLAGS | {"--boxes", "--submit", "--all", "--clear", "--static"}
+# Options that name the session. `attach` may not carry one, see playwright_cli_allowed().
 PLAYWRIGHT_CLI_SESSION_OPTIONS = {"-s", "--session"}
-# playwright-cli options that take no value. It gives any other option the next
-# word as its value, so in `--x snapshot run-code` the command is `run-code`.
-PLAYWRIGHT_CLI_FLAGS = {"--all", "-g", "--help", "--json", "--raw", "--version"}
+# Options that take a value, as `--option=value` or `--option value`, and what
+# the value may be. None means any text: the option carries text to search for.
+PLAYWRIGHT_CLI_VALUE_OPTIONS = {
+    "--depth": re.compile(r"[0-9]{1,3}"),
+    "--modifiers": re.compile(r"Alt|Control|ControlOrMeta|Meta|Shift"),
+    "--regex": None,
+    "--filter": None,
+}
+# The one option that may be given more than once: a click may hold several keys down.
+PLAYWRIGHT_CLI_REPEATABLE = {"--modifiers"}
+# A session name, and the name `attach` is given. playwright-cli puts the name
+# into the path of a file it opens for writing (<name>.err in its cache
+# folder), and by its source `attach` connects to a name it does not know as
+# an endpoint, so a name may hold no dot, slash, or colon.
+PLAYWRIGHT_CLI_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+# The URL `open` and `goto` may load: the app on this machine. After the host
+# comes a port, then a path, a query, or the end. So a host that only starts
+# with localhost (`localhost.example.com`), a user name in front of another
+# host (`localhost@example.com`, `localhost:3000@example.com`), another scheme,
+# upper case, and `[::1]` do not match. The rest may hold only characters a
+# URL is written with: the URL standard that browsers follow drops a tab or a
+# line break from a URL and reads a backslash as a slash, so none is allowed.
+PLAYWRIGHT_CLI_URL = re.compile(
+    r"http://(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?(?:[/?#][A-Za-z0-9._~:/?#@!$&'()*+,;=%\[\]-]*)?"
+)
+# How playwright-cli tells an option from an argument. `--x` is a long option
+# and `-x` a short one when a letter follows the dash. Any other word, such as
+# `-`, `-5`, or `e9`, is an argument.
+PLAYWRIGHT_CLI_LONG_OPTION = re.compile(r"--.+", re.S)
+PLAYWRIGHT_CLI_SHORT_OPTION = re.compile(r"-[A-Za-z]")
+# What follows a `$` when a shell replaces it: a name, a digit, `{`, `(`, `[`,
+# or one of the special parameters `$$ $? $# $! $@ $* $-`.
+SHELL_REPLACES_AFTER_DOLLAR = set("_{([@*#?!$-")
 # File operations allowed only when every operand is inside the write scope.
 # `install` is left out: its --strip-program option runs a program. `ln` is
 # left out: the hook checks a path before the command runs, so it cannot
@@ -573,8 +645,8 @@ DENY_UNKNOWN_PROGRAM = (
 )
 # What to do instead, added to DENY_UNKNOWN_PROGRAM for the programs a model reaches for most.
 HINT_NETWORK = (
-    "You do not need to check the app: the browser tool or the test run reports a connection error "
-    "when the app is not running."
+    "You do not need to check the app: `npx --no-install playwright-cli open http://localhost:3000` or the "
+    "test run reports a connection error when the app is not running."
 )
 HINT_PROCESS = (
     "A test run ends by itself. To end a paused debug run, use resume, as in " + RESUME_COMMAND
@@ -741,18 +813,128 @@ DENY_PLAYWRIGHT_REPORTER = (
 )
 DENY_RUNNER_PATH = (
     "Test runner options that name a file or folder, such as --outputFile, --output, --config, --root, "
-    "--dir, and --filename, must point inside " + WRITE_SCOPE + "."
+    "and --dir, must point inside " + WRITE_SCOPE + "."
 )
+# playwright-cli. A command to copy starts with this.
+PLAYWRIGHT_CLI = "npx --no-install playwright-cli "
+SNAPSHOT_COMMAND = "`" + PLAYWRIGHT_CLI + "snapshot`"
+# {lead} says what is wrong, {hint} what to use instead. The list is the same in every such deny.
 DENY_PLAYWRIGHT_CLI = (
-    "playwright-cli is limited to these commands, on the test paused by --debug=cli: "
-    + ", ".join(sorted(PLAYWRIGHT_CLI_COMMANDS))
-    + ". To end the run, use resume."
+    "{lead} playwright-cli is limited to these commands: "
+    + ", ".join(PLAYWRIGHT_CLI_BROWSING)
+    + ", and on a test paused by --debug=cli also "
+    + ", ".join(PLAYWRIGHT_CLI_PAUSED)
+    + ". {hint}"
 )
+LEAD_CLI_COMMAND = "`{command}` is not a playwright-cli command the shell may run."
+LEAD_CLI_NOTHING = "playwright-cli needs a command."
+HINT_CLI = "To see the page, use snapshot. To close the browser, use close. To end the run of a paused test, use resume."
+HINT_CLI_PICTURE = "To see the page, run " + SNAPSHOT_COMMAND + ". It prints the page as text."
+HINT_CLI_CODE = (
+    "It runs code, which the hook cannot check. To read the page, use snapshot or find. To act on it, use "
+    "click, fill, type, press, select, check, uncheck, or hover."
+)
+HINT_CLI_INSTALL = "Stop and tell the user what is missing. The user installs it."
+HINT_CLI_PAGE = (
+    "To load a page, use goto with its URL, as in `" + PLAYWRIGHT_CLI + "goto http://localhost:3000/profile`."
+)
+HINT_CLI_END = "To close the browser, use close. To end the run of a paused test, use resume."
+HINT_CLI_FILE = "It reads or writes a file, which playwright-cli may not do from the shell."
+# What to use instead of the commands a model reaches for most, added to DENY_PLAYWRIGHT_CLI.
+PLAYWRIGHT_CLI_HINTS = {
+    command: hint
+    for hint, commands in (
+        (HINT_CLI_PICTURE, "screenshot pdf highlight show video-start video-stop tracing-start tracing-stop"),
+        (HINT_CLI_CODE, "run-code eval"),
+        (HINT_CLI_INSTALL, "install install-browser"),
+        (HINT_CLI_PAGE, "tab-new tab-select tab-close tab-list reload go-back go-forward"),
+        (HINT_CLI_END, "kill-all close-all delete-data"),
+        (HINT_CLI_FILE, "upload drop state-save state-load"),
+    )
+    for command in commands.split()
+}
 DENY_PLAYWRIGHT_CLI_OPTION = (
     "Put the playwright-cli command right after the session name, and any other option after the command. "
     "`{option}` in front of the command can change which command runs."
 )
+DENY_PLAYWRIGHT_CLI_DENIED_OPTION = "`{option}` is not allowed with {program}. {reason}"
+REASON_CLI_FILE = (
+    "It saves the output to a file, which playwright-cli may not do from the shell. Leave it out and read "
+    "the output."
+)
+REASON_CLI_BROWSER = "It changes which browser runs or how it is set up. Leave it out."
+REASON_CLI_WINDOW = "It opens a browser window. Leave it out: the browser runs without a window."
+REASON_CLI_ATTACH = (
+    "It attaches to another browser. Attach to a paused test by the name its run printed, with no option."
+)
+REASON_CLI_FORM = (
+    "Run the command as in `" + PLAYWRIGHT_CLI + "{example}`. A text that starts with a dash goes after `--`, "
+    "as in `" + PLAYWRIGHT_CLI + 'type -- "-5 degrees"`.'
+)
+# Why an option playwright-cli knows is on no allow list.
+PLAYWRIGHT_CLI_DENIED_OPTIONS = {
+    option: reason
+    for reason, options in (
+        (REASON_CLI_FILE, "--filename"),
+        (REASON_CLI_BROWSER, "--config --profile --persistent --browser --device --mobile --idle-timeout"),
+        (REASON_CLI_WINDOW, "--headed"),
+        (REASON_CLI_ATTACH, "--cdp --endpoint --extension"),
+    )
+    for option in options.split()
+}
+DENY_PLAYWRIGHT_CLI_FLAG_VALUE = (
+    "`{option}` takes no value, and playwright-cli would read the word after it as one. Put `{option}` at "
+    "the end of the command."
+)
+DENY_PLAYWRIGHT_CLI_VALUE = "`{option}` needs a value such as `{example}`."
+DENY_PLAYWRIGHT_CLI_TWICE = "`{option}` is given twice, and playwright-cli takes one value for it. Give it once."
+EXAMPLE_CLI_VALUES = {
+    "--depth": "--depth=2",
+    "--modifiers": "--modifiers=Shift",
+    "--regex": "--regex='Save.*'",
+    "--filter": "--filter=/api/",
+}
+DENY_PLAYWRIGHT_CLI_SESSION = (
+    "`{shown}` does not name a session. A session name holds only letters, digits, `-`, and `_`. Write the "
+    "option once, in front of the command, such as `-s=tw-6eef1e`."
+)
+DENY_PLAYWRIGHT_CLI_ATTACH = (
+    "attach takes one word and no -s option: the session name of a paused test, which may hold only "
+    "letters, digits, `-`, and `_`. Read the output of the --debug=cli run, find the line with "
+    "`playwright-cli attach`, and use the name after `attach`."
+)
+DENY_PLAYWRIGHT_CLI_ARGUMENTS = (
+    "playwright-cli {command} takes {what}, as in `" + PLAYWRIGHT_CLI + "{example}`. This command gives it "
+    "{count}.{quotes}"
+)
+HINT_CLI_QUOTES = " Put a text of several words in quotes."
+DENY_PLAYWRIGHT_CLI_URL = (
+    "playwright-cli {command} may only load the app on this machine. The URL must start with "
+    "`http://localhost` or `http://127.0.0.1`, as in `" + PLAYWRIGHT_CLI + "{command} "
+    "http://localhost:3000/profile`. `{url}` is not such a URL."
+)
+DENY_PLAYWRIGHT_CLI_URL_QUOTES = (
+    "Put the URL in double quotes, as in `" + PLAYWRIGHT_CLI + 'open "http://localhost:3000/search?q=shoes&page=2"`. '
+    "Outside quotes the shell reads `?` and `*` as wildcards and ends the command at `&`."
+)
+DENY_PLAYWRIGHT_CLI_RETURN = (
+    "The command has a carriage return outside quotes. A shell reads it as part of a word, so "
+    "playwright-cli would get other words than the hook checked. Remove it and write the command on one line."
+)
+DENY_PLAYWRIGHT_CLI_DOLLAR = (
+    "The command has a `$` or a backtick outside single quotes, and the shell would replace it before "
+    "playwright-cli gets the text. Put the text in single quotes, as in `" + PLAYWRIGHT_CLI
+    + "fill e5 'Total: $5'`. If the text has a `'` in it, keep the double quotes and write `\\$`."
+)
 DENY_DETACH = "Use resume. It ends the run. detach leaves the test paused, with no command to end it."
+DENY_PAUSED_CLOSE = (
+    "Use resume. It ends the run. close on the session of a paused test leaves the test paused, with no "
+    "command to end it."
+)
+DENY_PAUSED_OPEN = (
+    "`{session}` is the session of a paused test. open would start another browser under that name and "
+    "leave the test paused. To load a page in the paused test, use goto. To end the run, use resume."
+)
 # Naming rules for files under test/. {path} is the path from the project root.
 DENY_TEST_FOLDER = (
     "Do not create a {folder}/ folder. Unit tests go in test/unit/, integration tests in "
@@ -846,6 +1028,14 @@ DENY_IGNORED_WILDCARD = (
 DENY_IGNORED_SEARCH = (
     "A search of `{directory}` also reads {path}, which is {source}. Name the folders to search, as in "
     '`grep -rn "text" src test`.'
+)
+# The folder playwright-cli saves page snapshots and console logs in. After
+# `open` or an action it prints a link to such a file in place of the page.
+PLAYWRIGHT_CLI_OUTPUT = ".playwright-cli"
+DENY_IGNORED_SNAPSHOT = (
+    "{path} is {source}. It is a file playwright-cli saved. Do not read it. To print the page, run `"
+    "npx --no-install playwright-cli snapshot`, with the same -s option as the command that saved the file "
+    "if it had one. To print the console messages, use `console` in place of `snapshot`."
 )
 # Maestro. Every deny ends with the forms that are allowed.
 MAESTRO_COMMAND = (
@@ -1008,6 +1198,17 @@ def is_ignored(path_text, cwd):
     return matches_ignore(relative.parts, resolved.is_dir)
 
 
+def is_cli_output(path_text, cwd):
+    """True when a path is the folder playwright-cli saves snapshots in, or inside one, anywhere in the project."""
+    resolved = resolve_path(path_text, cwd)
+    if resolved is None:
+        return False
+    try:
+        return PLAYWRIGHT_CLI_OUTPUT in resolved.relative_to(REPO).parts
+    except ValueError:
+        return False
+
+
 def exists(path_text, cwd):
     """True when a path names something on disk, a dangling link included."""
     resolved = resolve_path(path_text, cwd)
@@ -1105,10 +1306,13 @@ def ignored_operand(operand, cwd):
     the pattern matches on disk.
     """
     if is_ignored(operand, cwd):
-        return DENY_IGNORED.format(path=operand, source=IGNORE_SOURCE)
+        message = DENY_IGNORED_SNAPSHOT if is_cli_output(operand, cwd) else DENY_IGNORED
+        return message.format(path=operand, source=IGNORE_SOURCE)
     if has_wildcard(operand):
         for match in wildcard_matches(operand, cwd):
             if is_ignored(match, cwd):
+                if is_cli_output(match, cwd):
+                    return DENY_IGNORED_SNAPSHOT.format(path=match, source=IGNORE_SOURCE)
                 return DENY_IGNORED_WILDCARD.format(pattern=operand, path=match, source=IGNORE_SOURCE)
     return ""
 
@@ -2627,48 +2831,158 @@ def npm_run_allowed(args, cwd):
     return runner_paths_allowed(vitest_path_values(script_args), cwd)
 
 
-def playwright_cli_allowed(args, cwd):
-    """Allow the commands the healer uses on a paused test.
+def playwright_cli_command_message(command):
+    """The deny message for a command that is not on the allow list, or for no command at all."""
+    if command == "detach":
+        return DENY_DETACH
+    lead = LEAD_CLI_COMMAND.format(command=command) if command else LEAD_CLI_NOTHING
+    return DENY_PLAYWRIGHT_CLI.format(lead=lead, hint=PLAYWRIGHT_CLI_HINTS.get(command, HINT_CLI))
 
-    Deny commands that write files, run code, or open another browser, and a
-    `--filename` outside the write scope. `detach` is denied because it leaves
-    the test paused.
 
-    The command is the first word that is not an option or an option's value.
-    playwright-cli gives an option the next word as its value unless the
-    option is a known flag, so the hook reads `-s tw-1 snapshot` the same way.
-    An option it cannot place, in front of the command, is denied: in
-    `--x snapshot run-code` the command that runs is `run-code`.
+def playwright_cli_option_message(option, command):
+    """The deny message for an option that is not allowed. command is the one it follows, or "" for none yet.
+
+    An option playwright-cli knows gets the reason it is on no list. Any
+    other option after an allowed command gets the form of that command. In
+    front of the command, an option the hook cannot place gets the message
+    that says where options go.
+    """
+    reason = PLAYWRIGHT_CLI_DENIED_OPTIONS.get(option)
+    if reason is None and not command:
+        return DENY_PLAYWRIGHT_CLI_OPTION.format(option=option)
+    if reason is None:
+        reason = REASON_CLI_FORM.format(example=PLAYWRIGHT_CLI_COMMANDS[command][4])
+    program = "playwright-cli " + command if command else "playwright-cli"
+    return DENY_PLAYWRIGHT_CLI_DENIED_OPTION.format(option=option, program=program, reason=reason)
+
+
+def playwright_cli_words(args):
+    """Split playwright-cli arguments into (words, options), as its own parser reads them.
+
+    words are the command and its arguments: the first word is the command.
+    options maps each option to its value, or to None for a flag. Raises
+    Denied for a word the hook cannot place.
+
+    playwright-cli reads its command line with a small parser of its own
+    (playwright-core, lib/tools/cli-client/minimist.js). The command is the
+    first word that is not an option or the value of one. The hook has to
+    find the same word, so it follows the same rules:
+
+    - The first `--` ends the options. Every word after it is an argument.
+    - `--name=value` carries its value. `--name` takes the next word as its
+      value unless playwright-cli knows it as a flag. A flag takes a next
+      word of `true` or `false` as its value all the same.
+    - `-s=name` and `-s name` name the session. Any other word with a dash
+      and a letter is a group of short options, none of which is allowed.
+    - Any other word is an argument, `-` and `-5` included.
+
+    An option on no list is denied at once, because the hook cannot tell
+    whether the next word is its value: in `--x snapshot run-code` the command
+    that runs is `run-code`. An allowed option that takes a value must have
+    one that does not start with a dash, so no value is read as an option.
+    """
+    split = args.index("--") if "--" in args else len(args)
+    words = args[:split]
+    arguments = []
+    options = {}
+    index = 0
+    while index < len(words):
+        word = words[index]
+        following = words[index + 1] if index + 1 < len(words) else ""
+        index += 1
+        is_long = PLAYWRIGHT_CLI_LONG_OPTION.fullmatch(word) is not None
+        if not is_long and PLAYWRIGHT_CLI_SHORT_OPTION.match(word) is None:
+            arguments.append(word)
+            continue
+        name, has_value, value = word.partition("=")
+        if name in PLAYWRIGHT_CLI_FLAGS:
+            if has_value or following in ("true", "false"):
+                raise Denied(DENY_PLAYWRIGHT_CLI_FLAG_VALUE.format(option=name))
+            options[name] = None
+            continue
+        is_session = name in PLAYWRIGHT_CLI_SESSION_OPTIONS
+        if not is_session and name not in PLAYWRIGHT_CLI_VALUE_OPTIONS:
+            command = arguments[0] if arguments else ""
+            if command and command not in PLAYWRIGHT_CLI_COMMANDS:
+                raise Denied(playwright_cli_command_message(command))
+            raise Denied(playwright_cli_option_message(name, command))
+        shown = word
+        if not has_value:
+            # playwright-cli takes the next word unless it looks like an option. A value
+            # that starts with a dash is denied either way, so the two cannot differ.
+            value = "" if following.startswith("-") else following
+            shown = f"{word} {value}".strip()
+            index += 1
+        if is_session:
+            if PLAYWRIGHT_CLI_NAME.fullmatch(value) is None or options.keys() & PLAYWRIGHT_CLI_SESSION_OPTIONS:
+                raise Denied(DENY_PLAYWRIGHT_CLI_SESSION.format(shown=shown))
+        else:
+            pattern = PLAYWRIGHT_CLI_VALUE_OPTIONS[name]
+            if not value or (pattern is not None and pattern.fullmatch(value) is None):
+                raise Denied(DENY_PLAYWRIGHT_CLI_VALUE.format(option=name, example=EXAMPLE_CLI_VALUES[name]))
+            if name in options:
+                # playwright-cli makes a list of the values of an option that is given twice.
+                if name not in PLAYWRIGHT_CLI_REPEATABLE:
+                    raise Denied(DENY_PLAYWRIGHT_CLI_TWICE.format(option=name))
+                earlier = options[name]
+                value = (earlier if isinstance(earlier, list) else [earlier]) + [value]
+        options[name] = value
+    if split < len(args) and not arguments:
+        # `-- run-code x`: no word in front of `--` named the command.
+        raise Denied(DENY_PLAYWRIGHT_CLI_OPTION.format(option="--"))
+    arguments.extend(args[split + 1:])
+    return arguments, options
+
+
+def playwright_cli_allowed(args):
+    """Allow playwright-cli to browse the app on this machine and to drive a paused test, and nothing else.
+
+    The command, its arguments, and its options are checked against
+    PLAYWRIGHT_CLI_COMMANDS:
+
+    - `open` and `goto` take one URL that names this machine (see PLAYWRIGHT_CLI_URL);
+    - every other command takes the number of arguments its help states;
+    - an option must be on the command's list, or be --raw, --json, --help,
+      or a session name. No listed option names a file, a configuration, a
+      browser, a profile, an extension, or code;
+    - `attach` takes the name of a paused test and no session name of its own;
+    - `detach` is denied because it leaves the test paused, and so are
+      `close` and `open` on a session whose name starts with `tw-`.
+
+    With --help playwright-cli prints the help of the command and runs
+    nothing, so the arguments are not checked then.
     """
     if any(SESSION_PLACEHOLDER in arg for arg in args):
         raise Denied(DENY_SESSION_PLACEHOLDER)
-    command = ""
-    index = 0
-    while index < len(args):
-        arg = args[index]
-        following = args[index + 1] if index + 1 < len(args) else ""
-        index += 1
-        if not arg.startswith("-"):
-            command = command or arg
-            continue
-        name, has_value, value = arg.partition("=")
-        if name in PLAYWRIGHT_CLI_DENIED_OPTIONS:
-            raise Denied(DENY_PLAYWRIGHT_CLI)
-        takes_next = not has_value and bool(following) and not following.startswith("-")
-        if name in PLAYWRIGHT_CLI_PATH_OPTIONS:
-            if takes_next:
-                value = following
-                index += 1
-            runner_paths_allowed([value], cwd)
-        elif name in PLAYWRIGHT_CLI_SESSION_OPTIONS:
-            if takes_next:
-                index += 1
-        elif not command and not has_value and name not in PLAYWRIGHT_CLI_FLAGS:
-            raise Denied(DENY_PLAYWRIGHT_CLI_OPTION.format(option=name))
-    if command == "detach":
-        raise Denied(DENY_DETACH)
+    words, options = playwright_cli_words(args)
+    command, arguments = (words[0], words[1:]) if words else ("", [])
     if command not in PLAYWRIGHT_CLI_COMMANDS:
-        raise Denied(DENY_PLAYWRIGHT_CLI)
+        raise Denied(playwright_cli_command_message(command))
+    fewest, most, allowed, what, example = PLAYWRIGHT_CLI_COMMANDS[command]
+    for option in options:
+        on_every_command = option in PLAYWRIGHT_CLI_GLOBAL_FLAGS or option in PLAYWRIGHT_CLI_SESSION_OPTIONS
+        if not on_every_command and option not in allowed:
+            raise Denied(playwright_cli_option_message(option, command))
+    if "--help" in options:
+        return True
+    session = options.get("-s") or options.get("--session") or ""
+    if session.startswith(PAUSED_SESSION_PREFIX) and command == "close":
+        raise Denied(DENY_PAUSED_CLOSE)
+    if session.startswith(PAUSED_SESSION_PREFIX) and command == "open":
+        raise Denied(DENY_PAUSED_OPEN.format(session=session))
+    # With no -s option the session takes the name of the test, so the rule above sees it.
+    if command == "attach" and (
+        session or len(arguments) != 1 or PLAYWRIGHT_CLI_NAME.fullmatch(arguments[0]) is None
+    ):
+        raise Denied(DENY_PLAYWRIGHT_CLI_ATTACH)
+    if not fewest <= len(arguments) <= most:
+        count = str(len(arguments)) if arguments else "none"
+        quotes = HINT_CLI_QUOTES if len(arguments) > most else ""
+        raise Denied(DENY_PLAYWRIGHT_CLI_ARGUMENTS.format(
+            command=command, what=what, example=example, count=count, quotes=quotes,
+        ))
+    if command in PLAYWRIGHT_CLI_URL_COMMANDS and PLAYWRIGHT_CLI_URL.fullmatch(arguments[0]) is None:
+        raise Denied(DENY_PLAYWRIGHT_CLI_URL.format(command=command, url=arguments[0]))
     return True
 
 
@@ -2802,7 +3116,7 @@ def runner_allowed(program, args, cwd):
         return vitest_allowed(args, cwd)
     if program == "playwright":
         return playwright_allowed(args, cwd)
-    return playwright_cli_allowed(args, cwd)
+    return playwright_cli_allowed(args)
 
 
 def git_remote_allowed(subcommand, args):
@@ -3421,6 +3735,118 @@ def has_heredoc(command):
     return False
 
 
+def runs_playwright_cli(stage):
+    """True when a pipeline stage runs playwright-cli: by name, by its path in node_modules/.bin, or through npx."""
+    try:
+        tokens = unwrap_rtk(strip_env(command_words(stage)))
+    except ValueError:
+        return False
+    if not tokens:
+        return False
+    program = program_name(tokens[0])
+    if program == "npx":
+        command = npx_command(tokens[1:])
+        program = command[0] if command else ""
+    return program == "playwright-cli"
+
+
+def shell_replaces_text(stage):
+    """True when a shell would replace part of this stage before the program gets it.
+
+    Looks for a backtick, or a `$` that starts an expansion, outside single
+    quotes and not after a backslash. A `$` at the end of a word, or in front
+    of a space or a full stop, stays as it is in every shell.
+    """
+    quote = None
+    index = 0
+    while index < len(stage):
+        char = stage[index]
+        following = stage[index + 1:index + 2]
+        if char == "\\" and quote != "'":
+            index += 2
+            continue
+        if quote == "'":
+            if char == "'":
+                quote = None
+        elif char == "`":
+            return True
+        elif char == "$" and following and (following.isalnum() or following in SHELL_REPLACES_AFTER_DOLLAR):
+            return True
+        elif char == "$" and quote is None and following in ("'", '"'):
+            return True
+        elif char == '"':
+            quote = None if quote else '"'
+        elif char == "'" and quote is None:
+            quote = "'"
+        index += 1
+    return False
+
+
+def unquoted_url(stage):
+    """True when a word of this stage is a URL with `?` or `*` outside quotes.
+
+    A shell reads those as wildcards: bash passes the word on when no file
+    matches, and zsh is documented to stop with "no matches found". A URL
+    with `?` often has `&` too, where every shell ends the command.
+    """
+    word = []
+    quote = None
+    index = 0
+    while index <= len(stage):
+        char = stage[index:index + 1]
+        if char == "\\" and quote != "'":
+            word.append((stage[index + 1:index + 2], True))
+            index += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+            else:
+                word.append((char, True))
+        elif char in {"'", '"'}:
+            quote = char
+        elif not char or char in WORD_BREAKS:
+            text = "".join(letter for letter, _ in word)
+            if text.startswith(("http://", "https://")) and any(
+                letter in "?*" and not literal for letter, literal in word
+            ):
+                return True
+            word = []
+        else:
+            word.append((char, False))
+        index += 1
+    return False
+
+
+def playwright_cli_text_problem(command):
+    """Why the shell would change the text given to playwright-cli, as a deny message, or "".
+
+    The text of `fill`, `type`, and `find`, and the URL of `open` and `goto`,
+    are data. A `$` or a backtick in them is replaced by the shell, also
+    `$$` and `$?`, which the hook lets other commands use. The message says
+    to use single quotes, where the shell changes nothing.
+
+    A carriage return outside quotes is denied here too. The hook splits
+    words at one and bash does not, and the URL standard drops it from a URL:
+    in `open http://localhost` + carriage return + `--raw` the hook would
+    check the URL `http://localhost`, and the word bash passes names the host
+    `localhost--raw`.
+    """
+    stages = [stage for _, segment in split_compound(command) for stage in split_pipes(segment)]
+    stages = [stage for stage in stages if runs_playwright_cli(stage)]
+    if not stages:
+        return ""
+    # Looked for in the whole line: a stage has lost a carriage return at its start or end.
+    if any(command[index] == "\r" for index in unquoted(command)):
+        return DENY_PLAYWRIGHT_CLI_RETURN
+    for stage in stages:
+        if shell_replaces_text(stage):
+            return DENY_PLAYWRIGHT_CLI_DOLLAR
+        if unquoted_url(stage):
+            return DENY_PLAYWRIGHT_CLI_URL_QUOTES
+    return ""
+
+
 def placeholder_in_command(command):
     """The first placeholder such as <file> outside quotes in command, or "".
 
@@ -3467,7 +3893,8 @@ def guard_shell(command, cwd):
     placeholder = placeholder_in_command(command)
     if placeholder:
         emit("deny", DENY_PLACEHOLDER.format(placeholder=placeholder))
-    problem = expansion_problem(command)
+    # Before expansion_problem, so a `$` in the text for playwright-cli gets the message that names single quotes.
+    problem = playwright_cli_text_problem(command) or expansion_problem(command)
     if problem:
         emit("deny", problem)
     # After expansion_problem, so $( , <( , and >( keep their own message.

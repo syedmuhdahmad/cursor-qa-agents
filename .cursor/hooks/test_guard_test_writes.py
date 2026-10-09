@@ -122,6 +122,22 @@ def write_message(path, content="x\n", **where):
     return message(write_payload(path, content), **where)
 
 
+def load_hook(path=HOOK):
+    """Import the hook as a module. Its file name has a hyphen, so a plain import cannot load it."""
+    spec = importlib.util.spec_from_file_location("guard_test_writes", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def loaded_answer(hook, payload):
+    """The whole answer of a loaded hook for a payload. The hook prints its answer and exits, as it does for Cursor."""
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed), contextlib.suppress(SystemExit):
+        hook.decide(json.dumps(payload).encode())
+    return json.loads(printed.getvalue())
+
+
 class CommandCase(unittest.TestCase):
     """Checks a list of shell commands against one expected decision."""
 
@@ -445,7 +461,7 @@ class OutOfScopeWrites(CommandCase):
             "npm run test:e2e -- --output=src",
             "npm run test:unit --script-shell=./test/x.sh",
             "npx playwright install chromium",
-            # playwright-cli: only the healer's commands, and no files outside the write scope
+            # playwright-cli: only the commands on its allow list, and no option that names a file
             "npx playwright-cli screenshot --filename=src/app.png",
             "npx playwright-cli -s=tw-abc123 snapshot --filename=src/app.md",
             "npx playwright-cli -s=tw-abc123 find Save --filename src/x.txt",
@@ -488,6 +504,7 @@ class OutOfScopeWrites(CommandCase):
             "uniq --skip-fields 0 test/a src/a.ts",
             "rg --hostname-bin=./test/x.sh --hyperlink-format=default foo",
             "npx playwright-cli attach tw-1 --config=test/cli.json",
+            "npx --no-install playwright-cli -s=tw-abc123 snapshot --filename=test/e2e/snap.md",
         ], "deny")
 
     def test_allowed(self):
@@ -515,7 +532,6 @@ class OutOfScopeWrites(CommandCase):
             "node_modules/.bin/playwright test --list",
             "npm run test:unit -- test/unit/a.test.ts",
             "npm run test:e2e -- test/e2e/sign-in.spec.ts",
-            "npx --no-install playwright-cli -s=tw-abc123 snapshot --filename=test/e2e/snap.md",
             "npx --no-install playwright-cli list",
             "find test -name '*.ts' -print",
             "sort --output=test/unit/out.txt test/a",
@@ -822,6 +838,25 @@ class DocumentedCommands(CommandCase):
             "npx --no-install playwright-cli -s=tw-6eef1e step-over",
             "npx --no-install playwright-cli -s=tw-6eef1e resume",
             "npx --no-install playwright-cli -s tw-6eef1e snapshot",
+            # Browsing the app for a plan or a page class (amendment D10 of the design brief).
+            "npx --no-install playwright-cli open http://localhost:3000/profile",
+            "npx --no-install playwright-cli goto http://localhost:3000/profile",
+            "npx --no-install playwright-cli open http://127.0.0.1:3000/profile",
+            "npx --no-install playwright-cli snapshot",
+            'npx --no-install playwright-cli find "Save profile"',
+            "npx --no-install playwright-cli generate-locator e9",
+            "npx --no-install playwright-cli click e9",
+            'npx --no-install playwright-cli fill e5 "Ada Lovelace"',
+            'npx --no-install playwright-cli type "Ada Lovelace"',
+            "npx --no-install playwright-cli press Enter",
+            'npx --no-install playwright-cli select e7 "Canada"',
+            "npx --no-install playwright-cli check e4",
+            "npx --no-install playwright-cli uncheck e4",
+            "npx --no-install playwright-cli hover e3",
+            "npx --no-install playwright-cli close",
+            "npx --no-install playwright-cli -s=plan open http://localhost:3000/profile",
+            "npx --no-install playwright-cli -s plan snapshot",
+            "npx --no-install playwright-cli --session=plan close",
             # Maestro: a syntax check of one flow, and one run of a feature folder on either platform.
             "maestro --version",
             "maestro check-syntax test/mobile/sign-in/01-valid-account.flow.yaml",
@@ -1647,14 +1682,887 @@ class DebugSession(CommandCase):
         ], "in front of the command")
         self.assert_denied_with([
             "npx --no-install playwright-cli -s snapshot run-code x",
-            "npx --no-install playwright-cli --session find open https://example.com",
             "npx --no-install playwright-cli -s tw-6eef1e run-code x",
-            "npx --no-install playwright-cli -s tw-6eef1e",
-        ], "playwright-cli is limited to these commands", "To end the run, use resume.")
-        self.assert_all([
+        ], "`run-code` is not a playwright-cli command the shell may run", "playwright-cli is limited to these commands")
+        self.assert_denied_with(
+            ["npx --no-install playwright-cli -s tw-6eef1e"],
+            "playwright-cli needs a command", "playwright-cli is limited to these commands",
+            "To end the run of a paused test, use resume.",
+        )
+        # The session is named `find`, the command is `open`, and its URL is another site.
+        self.assert_denied_with(
+            ["npx --no-install playwright-cli --session find open https://example.com"],
+            "open may only load the app on this machine",
+        )
+        self.assert_denied_with([
             "npx --no-install playwright-cli --filename snapshot run-code x",
             "npx --no-install playwright-cli --filename test/e2e/snap.md run-code x",
-        ], "deny")
+        ], "`--filename` is not allowed with playwright-cli", "Leave it out and read the output")
+
+
+class LoadedHookCase(unittest.TestCase):
+    """Checks shell commands against a hook that is loaded once into this process.
+
+    For classes with several hundred cases. Every other class starts the hook
+    the way Cursor does, once for each case.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        """Load the hook once for the class."""
+        cls.loaded = load_hook()
+
+    def reply(self, command):
+        """The hook's whole answer for a shell command, checked for what every deny must hold."""
+        reply = loaded_answer(self.loaded, shell_payload(command))
+        if reply["permission"] == "deny":
+            text = reply.get("user_message")
+            self.assertTrue(text, f"a deny needs a message, got {reply!r}")
+            self.assertEqual(text, reply.get("agent_message"))
+            self.assertNotIn(UNCLASSIFIED, text)
+        return reply
+
+    def assert_all(self, commands, expected):
+        """Check that the hook gives the expected decision for every command."""
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(self.reply(command)["permission"], expected)
+
+    def assert_denied_with(self, commands, *fragments):
+        """Check that the hook denies every command with a message that holds every fragment."""
+        for command in commands:
+            with self.subTest(command=command):
+                reply = self.reply(command)
+                self.assertEqual(reply["permission"], "deny")
+                for fragment in fragments:
+                    self.assertIn(fragment, reply["user_message"])
+
+
+# The start of every playwright-cli command the skills print.
+CLI = "npx --no-install playwright-cli "
+# The spellings of the session option that playwright-cli accepts, and none.
+SESSION_FORMS = ("", "-s=plan ", "-s plan ", "--session=plan ", "--session plan ")
+# The list every deny of a command carries.
+CLI_COMMAND_LIST = (
+    "playwright-cli is limited to these commands: open, goto, snapshot, find, generate-locator, click, "
+    "dblclick, fill, type, press, select, check, uncheck, hover, close, console, requests, request, list, "
+    "and on a test paused by --debug=cli also attach, pause-at, step-over, resume."
+)
+
+
+class Browsing(LoadedHookCase):
+    """Amendment D10 of the design brief: the kit browses the app with playwright-cli.
+
+    The hook allows the commands that open a page of the app on this machine,
+    read it, and act on it, and nothing more. Checked against @playwright/cli 0.1.22.
+    """
+
+    def test_browsing_commands_in_every_session_form(self):
+        """Each command the skills use, with no session and with the session named in each spelling."""
+        commands = [
+            "open http://localhost:3000/profile",
+            "goto http://localhost:3000/profile",
+            "open http://127.0.0.1:3000/profile",
+            "goto http://127.0.0.1:3000/profile",
+            "snapshot",
+            'find "Save profile"',
+            "generate-locator e9",
+            "click e9",
+            "dblclick e9",
+            'fill e5 "Ada Lovelace"',
+            'type "Ada Lovelace"',
+            "press Enter",
+            'select e7 "Canada"',
+            "check e4",
+            "uncheck e4",
+            "hover e3",
+            "close",
+            "console",
+            "requests",
+            "request 1",
+            "list",
+        ]
+        self.assert_all([CLI + session + command for session in SESSION_FORMS for command in commands], "allow")
+        # The session option may also follow the command, and the program may be named in other ways.
+        self.assert_all([
+            CLI + "snapshot -s=plan",
+            CLI + "open http://localhost:3000/profile --session=plan",
+            "npx playwright-cli snapshot",
+            "playwright-cli snapshot",
+            "node_modules/.bin/playwright-cli snapshot",
+            "./node_modules/.bin/playwright-cli open http://localhost:3000",
+            "npx --package=@playwright/cli playwright-cli snapshot",
+            CLI + "open http://localhost:3000/profile 2>&1 | tail -40",
+            CLI + "snapshot | grep -n button",
+            CLI + "open http://localhost:3000 && " + CLI + "snapshot",
+        ], "allow")
+
+    def test_url_names_the_app_on_this_machine(self):
+        """`open` and `goto` take a URL on http://localhost or http://127.0.0.1, with any port, path, and query."""
+        urls = [
+            "http://localhost",
+            "http://localhost/",
+            "http://localhost:3000",
+            "http://localhost:3000/",
+            "http://127.0.0.1",
+            "http://127.0.0.1:5173/",
+            "http://localhost:65535/a/b/c.html",
+            "http://localhost:3000/profile/settings",
+            "http://localhost:3000/#/profile",
+            "http://localhost:3000/files/Report_2026-10.final~1.pdf",
+            "http://localhost:3000/users/ada@example.com",
+            "http://localhost:3000/a%20b",
+            '"http://localhost:3000/search?q=shoes"',
+            '"http://localhost:3000/search?q=shoes&page=2#results"',
+            '"http://localhost:3000?tab=a"',
+            "'http://localhost:3000/search?q=a+b&next=/home'",
+            '"http://localhost:3000/search?ids[]=1&ids[]=2"',
+            "http://localhost:3000/search\\?q=shoes",
+        ]
+        self.assert_all([CLI + command + " " + url for command in ("open", "goto") for url in urls], "allow")
+
+    def test_url_of_another_place_is_denied(self):
+        """Another host, a host that only starts with localhost, a user name, another scheme, upper case, and IPv6."""
+        urls = [
+            # another site
+            "https://example.com",
+            "http://example.com/",
+            "http://example.com/localhost",
+            '"http://evil.example/?http://localhost:3000/"',
+            "http://evil.example/#http://localhost:3000/",
+            # a user name in front of another host
+            "http://localhost@evil.example/",
+            "http://localhost:3000@evil.example/",
+            "http://localhost:@evil.example/",
+            "http://user:secret@localhost:3000/",
+            "http://127.0.0.1@evil.example/",
+            # a host that only starts with the name
+            "http://localhost.evil.example/",
+            "http://localhostevil.example/",
+            "http://localhost-evil.example/",
+            "http://localhost.",
+            "http://127.0.0.1.evil.example/",
+            "http://127.0.0.10/",
+            "http://127.0.0.1:3000.evil.example/",
+            # the URL standard reads %2e and the ideographic full stop in a host as a dot
+            "http://localhost%2eevil.example/",
+            "http://localhost\u3002evil.example/",
+            # other names for this machine: only the two spellings are accepted
+            "http://127.1/",
+            "http://2130706433/",
+            "http://0.0.0.0:3000/",
+            '"http://[::1]:3000/"',
+            '"http://[::ffff:127.0.0.1]/"',
+            # upper case
+            "HTTP://localhost:3000/",
+            "http://LOCALHOST:3000/",
+            "Http://Localhost:3000/",
+            # other schemes
+            "https://localhost:3000/",
+            "file:///etc/passwd",
+            "file://localhost/etc/passwd",
+            '"javascript:alert(1)"',
+            '"javascript://localhost/%0aalert(1)"',
+            '"data:text/html,hello"',
+            "about:blank",
+            "chrome://settings",
+            "view-source:http://localhost:3000/",
+            "ws://localhost:3000/",
+            "ftp://localhost/",
+            # no scheme
+            "localhost:3000",
+            "localhost:3000/profile",
+            "//localhost:3000/",
+            "/profile",
+            # a port that is not a number, or two of them
+            "http://localhost:/",
+            "http://localhost:abc/",
+            "http://localhost:3000:80/",
+            "http://localhost:123456/",
+            # characters the URL standard drops or reads as a slash
+            '"http://localhost:3000/a b"',
+            "'http://localhost\\@evil.example/'",
+            "'http://localhost\\.evil.example/'",
+            '"http://localhost\t.evil.example/"',
+            '"http://localhost\n.evil.example/"',
+            '"http://localhost\r.evil.example/"',
+            "http://localhost\x0b.evil.example/",
+            "http://localhost\x0c--raw",
+            '"http://localhost:3000/{a,b}"',
+            "'http://localhost:3000/?q=a|b'",
+            "'http://localhost:3000/?q=\"a\"'",
+            '"http://localhost:3000/\x7f"',
+            '" http://localhost:3000/"',
+        ]
+        for command in ("open", "goto"):
+            self.assert_denied_with(
+                [CLI + command + " " + url for url in urls],
+                command + " may only load the app on this machine",
+                "must start with `http://localhost` or `http://127.0.0.1`",
+                "`" + CLI + command + " http://localhost:3000/profile`",
+            )
+        # The message shows the URL it was given.
+        self.assertIn(
+            "`http://localhost@evil.example/` is not such a URL.",
+            self.reply(CLI + "open http://localhost@evil.example/")["user_message"],
+        )
+
+    def test_url_with_a_query_goes_in_quotes(self):
+        """Outside quotes the shell reads `?` and `*` as wildcards and ends the command at `&`."""
+        self.assert_denied_with([
+            CLI + "open http://localhost:3000/search?q=shoes",
+            CLI + "open http://localhost:3000/search?q=shoes&page=2",
+            CLI + "goto http://localhost:3000/search?q=shoes&page=2",
+            CLI + "-s=plan goto http://localhost:3000/a*b",
+            CLI + "open http://localhost:3000/search?q='shoes'",
+            "npx playwright-cli open http://localhost:3000/?a=1 && " + CLI + "snapshot",
+        ], "Put the URL in double quotes", '"http://localhost:3000/search?q=shoes&page=2"', "ends the command at `&`")
+        # Other programs keep their own rules: this check is for playwright-cli only.
+        self.assert_all(["gh api https://api.github.com/repos/o/r/pulls?state=open"], "allow")
+
+    def test_carriage_return_outside_quotes_is_denied(self):
+        """The hook splits words at a carriage return and bash does not, and the URL standard drops one from a URL.
+
+        Without this rule the hook would check the URL `http://localhost` and
+        the option `--raw`, and the word bash passes names the host `localhost--raw`.
+        """
+        self.assert_denied_with([
+            CLI + "open http://localhost\r--raw",
+            CLI + "open http://localhost\r--help",
+            CLI + "-s=plan goto http://localhost:3000\r--json",
+            CLI + "snapshot\r",
+            CLI + "fill e5\rAda",
+            "sleep 1 && " + CLI + "open http://localhost\r--raw",
+        ], "carriage return outside quotes", "Remove it and write the command on one line.")
+        # Inside quotes it is part of the text, and a URL may not hold one.
+        self.assert_all([CLI + 'fill e5 "line one\r\nline two"'], "allow")
+        self.assert_denied_with([CLI + 'open "http://localhost\r--raw"'], "open may only load the app on this machine")
+
+    def test_shell_syntax_around_a_url_is_checked_as_shell_syntax(self):
+        """A `;`, `|`, `>`, or `&&` after a URL starts another command or a redirect, which gets its own check."""
+        self.assert_denied_with(
+            [CLI + "open http://localhost:3000/;rm -rf src", CLI + "open http://localhost:3000/ && rm -rf src"],
+            "rm may only change paths inside",
+        )
+        self.assert_denied_with([CLI + "open http://localhost:3000/ > src/page.txt"], "The shell cannot write to `src/page.txt`")
+        self.assert_denied_with([CLI + "open http://localhost:3000/ | tee src/page.txt"], "tee may only change paths inside")
+        self.assert_denied_with([CLI + "open http://localhost:3000/ > test/e2e/page.md"], "The shell cannot write `test/e2e/page.md`")
+        self.assert_denied_with([CLI + "open http://localhost:3000/a&b"], "`b` is not available")
+        self.assert_denied_with(
+            [
+                CLI + 'open "http://localhost:3000/?q=$(cat .env)"',
+                CLI + 'open "http://localhost:3000/?q=`cat .env`"',
+                CLI + 'open "http://localhost:3000/?q=$HOME"',
+                CLI + "open http://localhost:3000/$HOME",
+                CLI + "goto http://localhost:3000/${HOME}",
+            ],
+            "Put the text in single quotes",
+        )
+        # Inside quotes the same characters are part of the URL.
+        self.assert_all([
+            CLI + 'open "http://localhost:3000/?q=a;b"',
+            CLI + "open 'http://localhost:3000/?q=$(id)'",
+            CLI + "open 'http://localhost:3000/?q=a&b=c'",
+        ], "allow")
+
+    def test_number_of_arguments(self):
+        """Each command takes the arguments its help states. The message shows the form to copy."""
+        for command, what, example, count in (
+            ("open", "one URL", "open http://localhost:3000/profile", "none"),
+            ("goto", "one URL", "goto http://localhost:3000/profile", "none"),
+            ("open http://localhost:3000 http://localhost:3000/b", "one URL", "open http://localhost:3000/profile", "2"),
+            ("snapshot e1 e2", "no argument, or one ref", "snapshot", "2"),
+            ("find Save profile", "one text", 'find "Save profile"', "2"),
+            ("generate-locator", "one ref", "generate-locator e9", "none"),
+            ("generate-locator e9 e10", "one ref", "generate-locator e9", "2"),
+            ("click", "one ref", "click e9", "none"),
+            ("click e9 left extra", "one ref", "click e9", "3"),
+            ("fill", "one ref and one text", 'fill e5 "Ada Lovelace"', "none"),
+            ("fill e5", "one ref and one text", 'fill e5 "Ada Lovelace"', "1"),
+            ("fill e5 Ada Lovelace", "one ref and one text", 'fill e5 "Ada Lovelace"', "3"),
+            ("type", "one text", 'type "Ada Lovelace"', "none"),
+            ("type Ada Lovelace", "one text", 'type "Ada Lovelace"', "2"),
+            ("press", "one key", "press Enter", "none"),
+            ("press Enter Enter", "one key", "press Enter", "2"),
+            ("select e7", "one ref and one value", 'select e7 "Canada"', "1"),
+            ("check", "one ref", "check e4", "none"),
+            ("uncheck e4 e5", "one ref", "uncheck e4", "2"),
+            ("hover", "one ref", "hover e3", "none"),
+            ("close now", "no argument", "close", "1"),
+            ("resume now", "no argument", "resume", "1"),
+            ("step-over 2", "no argument", "step-over", "1"),
+            ("list all", "no argument", "list", "1"),
+            ("requests 1", "no argument", "requests", "1"),
+            ("request", "one number from the output of requests", "request 1", "none"),
+            ("pause-at", "one place, written as file:line", "pause-at test/e2e/sign-in.spec.ts:70", "none"),
+            ("console error warning", "no argument, or one level", "console", "2"),
+        ):
+            name = command.split()[0]
+            with self.subTest(command=command):
+                text = self.reply(CLI + command)["user_message"]
+                self.assertIn(f"playwright-cli {name} takes {what}, as in `{CLI}{example}`.", text)
+                self.assertIn(f"This command gives it {count}.", text)
+        self.assert_denied_with(
+            [CLI + "fill e5 Ada Lovelace", CLI + "type Ada Lovelace", CLI + "find Save profile", CLI + "-s=plan select e7 New Zealand"],
+            "Put a text of several words in quotes.",
+        )
+        self.assertNotIn("in quotes", self.reply(CLI + "fill e5")["user_message"])
+        self.assert_all([
+            CLI + "snapshot e5",
+            CLI + "click e9 right",
+            CLI + "console error",
+            CLI + 'fill e5 ""',
+            CLI + "fill e5 -5",
+            CLI + "press -",
+            CLI + "find",
+            CLI + "pause-at pages/sign-in-page.ts:25",
+            CLI + "click \"getByRole('button', { name: 'Save profile' })\"",
+            CLI + "hover '#save'",
+        ], "allow")
+
+    def test_options_that_stay_allowed(self):
+        """Options that change what is printed or how a key is pressed. None names a file, a browser, or code."""
+        self.assert_all([
+            CLI + "--raw snapshot",
+            CLI + "snapshot --raw",
+            CLI + "--json snapshot",
+            CLI + "--raw -s=plan snapshot",
+            CLI + "-s plan --raw snapshot --depth=2",
+            CLI + "snapshot --depth 2",
+            CLI + "snapshot --depth=2 --boxes",
+            CLI + "--boxes snapshot",
+            CLI + "find --regex 'Save.*'",
+            CLI + "find --regex='^Save$'",
+            CLI + 'find --regex "^Save$"',
+            CLI + "click e9 --modifiers=Shift",
+            CLI + "click e9 --modifiers Control --modifiers Shift",
+            CLI + "dblclick e9 --modifiers=Alt",
+            CLI + 'fill e5 "Ada" --submit',
+            CLI + 'type "Ada" --submit',
+            CLI + "console --clear",
+            CLI + "requests --static --filter=/api/ --clear",
+            CLI + "list --all",
+            CLI + "--json list --all",
+            # --help prints the help of the command and runs nothing
+            CLI + "fill --help",
+            CLI + "open --help",
+            CLI + "--help snapshot",
+            # after `--` every word is an argument, so a text may start with dashes
+            CLI + 'fill e5 -- "--submit"',
+            CLI + "type -- -x",
+            CLI + 'type -- "-5 degrees"',
+            CLI + 'find -- "--regex"',
+        ], "allow")
+
+    def test_option_that_names_a_file_is_denied(self):
+        """--filename saves the output to a file. It is denied on every command, inside the write scope too."""
+        self.assert_denied_with([
+            CLI + "snapshot --filename=test/e2e/snap.md",
+            CLI + "snapshot --filename=src/app/page.tsx",
+            CLI + "snapshot --filename test/e2e/sign-in.spec.ts",
+            CLI + "-s=tw-6eef1e snapshot --filename=test/e2e/snap.md",
+            CLI + "--filename=test/a.md snapshot",
+            CLI + "find Save --filename=src/x.txt",
+            CLI + "find --filename test/x.txt Save",
+            CLI + "request 1 --filename=test/response.json",
+            # a text that starts with two dashes is read by playwright-cli as an option
+            CLI + 'find "--filename=src/app/page.tsx"',
+            CLI + 'type "--filename=x"',
+        ], "`--filename` is not allowed with playwright-cli", "It saves the output to a file", "Leave it out and read the output.")
+
+    def test_option_that_names_a_browser_a_profile_or_a_config_is_denied(self):
+        """`open` takes the URL and no option of its own. `attach` takes the name and no option of its own."""
+        self.assert_denied_with([
+            CLI + "open http://localhost:3000 --config=test/cli.json",
+            CLI + "open --config test/cli.json http://localhost:3000",
+            CLI + "--config=.playwright/cli.config.json open http://localhost:3000",
+            CLI + "open http://localhost:3000 --profile=test/profile",
+            CLI + "open http://localhost:3000 --profile /home/ada/.config/google-chrome",
+            CLI + "open http://localhost:3000 --persistent",
+            CLI + "open http://localhost:3000 --browser=firefox",
+            CLI + "open http://localhost:3000 --browser chrome",
+            CLI + 'open http://localhost:3000 --device="iPhone 15"',
+            CLI + "open http://localhost:3000 --mobile",
+            CLI + "open http://localhost:3000 --idle-timeout=0",
+            CLI + "attach tw-6eef1e --config=test/cli.json",
+            CLI + "attach tw-6eef1e --idle-timeout=1000",
+        ], "is not allowed with playwright-cli", "It changes which browser runs or how it is set up. Leave it out.")
+        self.assert_denied_with(
+            [CLI + "open http://localhost:3000 --headed", CLI + "open --headed http://localhost:3000", CLI + "--headed open http://localhost:3000"],
+            "`--headed` is not allowed with playwright-cli", "It opens a browser window.",
+        )
+        self.assert_denied_with([
+            CLI + "attach --cdp=http://localhost:9222",
+            CLI + "attach --cdp chrome",
+            CLI + "attach --endpoint=ws://example.com:9222/",
+            CLI + "attach tw-6eef1e --endpoint ws://localhost:9222/",
+            CLI + "attach --extension",
+            CLI + "attach --extension=chrome",
+            CLI + "open http://localhost:3000 --extension",
+        ], "is not allowed with playwright-cli", "It attaches to another browser.")
+
+    def test_option_of_another_command_or_of_none_is_denied(self):
+        """The list of options is closed for each command. The message shows the form to copy."""
+        for command, option, example in (
+            ("click e9 --submit", "--submit", "click e9"),
+            ("open http://localhost:3000 --boxes", "--boxes", "open http://localhost:3000/profile"),
+            ("goto http://localhost:3000 --depth=2", "--depth", "goto http://localhost:3000/profile"),
+            ("press Enter --modifiers=Shift", "--modifiers", "press Enter"),
+            ("close --all", "--all", "close"),
+            ("snapshot --zzz", "--zzz", "snapshot"),
+            ("snapshot --no-boxes", "--no-boxes", "snapshot"),
+            ("click e9 -x", "-x", "click e9"),
+            ('fill e5 "Ada" -f', "-f", 'fill e5 "Ada Lovelace"'),
+            ("snapshot --full-page", "--full-page", "snapshot"),
+            ("hover e3 --force", "--force", "hover e3"),
+            ("resume --step", "--step", "resume"),
+            # --help does not switch the list off
+            ("click e9 --submit --help", "--submit", "click e9"),
+        ):
+            name = command.split()[0]
+            with self.subTest(command=command):
+                text = self.reply(CLI + command)["user_message"]
+                self.assertIn(f"`{option}` is not allowed with playwright-cli {name}.", text)
+                self.assertIn(f"Run the command as in `{CLI}{example}`.", text)
+                self.assertIn('A text that starts with a dash goes after `--`, as in `' + CLI + 'type -- "-5 degrees"`.', text)
+
+    def test_option_in_front_of_the_command_that_the_hook_cannot_place(self):
+        """playwright-cli gives an unknown option the next word as its value, so the command would be another word."""
+        self.assert_denied_with([
+            CLI + "--zzz snapshot run-code x",
+            CLI + "-x snapshot run-code x",
+            CLI + "-g snapshot",
+            CLI + "-h",
+            CLI + "-v",
+            CLI + "--version",
+            CLI + "-s=plan --zzz find run-code x",
+            CLI + "-- run-code x",
+            CLI + "-- snapshot",
+            CLI + "-s=plan -- eval x",
+            CLI + "---x snapshot",
+            CLI + "--=x snapshot",
+            CLI + "--no-raw snapshot",
+            CLI + "-sx plan snapshot",
+        ], "in front of the command can change which command runs", "Put the playwright-cli command right after the session name")
+
+    def test_flag_takes_no_value(self):
+        """playwright-cli reads `true` or `false` after a flag as its value, so the text of `type` would be lost."""
+        self.assert_denied_with([
+            CLI + "type --submit true",
+            CLI + "fill e5 --submit false",
+            CLI + "--raw true snapshot",
+            CLI + "--raw false run-code x",
+            CLI + "snapshot --boxes=true",
+            CLI + "--json=1 snapshot",
+            CLI + "--help false run-code x",
+        ], "takes no value", "at the end of the command")
+        self.assert_all([CLI + "type true", CLI + "fill e5 false --submit", CLI + "--raw type true"], "allow")
+
+    def test_option_that_needs_a_value(self):
+        """--depth takes a number, --modifiers a key, and --regex and --filter a text."""
+        for command, option, example in (
+            ("snapshot --depth", "--depth", "--depth=2"),
+            ("snapshot --depth=two", "--depth", "--depth=2"),
+            ("snapshot --depth -1", "--depth", "--depth=2"),
+            ("snapshot --depth=", "--depth", "--depth=2"),
+            ("snapshot --depth --boxes", "--depth", "--depth=2"),
+            ("click e9 --modifiers=Hyper", "--modifiers", "--modifiers=Shift"),
+            ("click e9 --modifiers", "--modifiers", "--modifiers=Shift"),
+            ("find --regex", "--regex", "--regex='Save.*'"),
+            ("find --regex --raw", "--regex", "--regex='Save.*'"),
+            ("requests --filter", "--filter", "--filter=/api/"),
+        ):
+            with self.subTest(command=command):
+                self.assertIn(f"`{option}` needs a value such as `{example}`.", self.reply(CLI + command)["user_message"])
+
+    def test_every_other_command_is_denied_with_the_list(self):
+        """Commands that run code, write or send a file, change what the page loads or stores, install, or end other sessions."""
+        commands = [
+            # run code
+            "run-code 'async page => page.title()'",
+            "run-code",
+            "run-code --filename=test/e2e/script.js",
+            "eval '() => document.title'",
+            "eval 'el => el.id' e5",
+            "webmcp-call save",
+            # write a file
+            "screenshot",
+            "screenshot e5",
+            "screenshot --filename=test/e2e/page.png",
+            "screenshot --filename=src/app.png --full-page",
+            "pdf",
+            "pdf --filename=test/page.pdf",
+            "state-save",
+            "state-save test/e2e/state.json",
+            "tracing-start",
+            "tracing-stop",
+            "video-start",
+            "video-start test/e2e/run.webm",
+            "video-stop",
+            "video-chapter Intro",
+            "video-show-actions",
+            "video-hide-actions",
+            "recording-start",
+            "recording-stop",
+            "response-body 1",
+            "response-body 1 --filename=test/body.bin",
+            "request-body 1",
+            "request-headers 1",
+            "response-headers 1",
+            # send a local file to the page, or load one
+            "upload test/e2e/fixtures/avatar.png",
+            "upload /home/ada/.ssh/id_rsa",
+            "drop e4 --path=src/secret.env",
+            "drop e4 --data=text/plain=hello",
+            "state-load test/e2e/state.json",
+            # change what the page stores or loads
+            "cookie-set session abc",
+            "cookie-set session abc --domain=localhost --httpOnly",
+            "cookie-get session",
+            "cookie-list",
+            "cookie-delete session",
+            "cookie-clear",
+            "localstorage-set theme dark",
+            "localstorage-get theme",
+            "localstorage-list",
+            "localstorage-delete theme",
+            "localstorage-clear",
+            "sessionstorage-set theme dark",
+            "sessionstorage-get theme",
+            "sessionstorage-list",
+            "sessionstorage-clear",
+            "route '**/api/session' --status=500",
+            "route '**/*.js' --body='alert(1)'",
+            "route-list",
+            "unroute",
+            "network-state-set offline",
+            # install, configure, and show
+            "install",
+            "install --skills=cursor",
+            "install-browser",
+            "install-browser chromium --with-deps",
+            "config-print",
+            "config",
+            "show",
+            "show --port=9323",
+            "tray",
+            "highlight e5",
+            # tabs and history: a tab may load any URL
+            "tab-new",
+            "tab-new http://localhost:3000/profile",
+            "tab-new https://example.com",
+            "tab-list",
+            "tab-select 1",
+            "tab-close 1",
+            "go-back",
+            "go-forward",
+            "reload",
+            # end or delete other sessions
+            "delete-data",
+            "kill-all",
+            "close-all",
+            # the rest of what playwright-cli lists
+            "drag e1 e2",
+            "dialog-accept",
+            "dialog-accept yes",
+            "dialog-dismiss",
+            "resize 1280 720",
+            "keydown Shift",
+            "keyup Shift",
+            "mousemove 10 10",
+            "mousedown",
+            "mouseup",
+            "mousewheel 0 100",
+            "set-color-scheme dark",
+            "clear-color-scheme",
+            "set-media print",
+            "webmcp-list",
+            # not a command at all
+            "help",
+            "Snapshot",
+            "OPEN http://localhost:3000",
+            "navigate http://localhost:3000",
+            "browser_navigate",
+            "test test/e2e/sign-in.spec.ts",
+            "-5 snapshot",
+            "- snapshot",
+        ]
+        for session in ("", "-s=plan ", "--session plan ", "--raw "):
+            for command in commands:
+                with self.subTest(command=session + command):
+                    text = self.reply(CLI + session + command)["user_message"]
+                    self.assertTrue(text.startswith(f"`{command.split()[0]}` is not a playwright-cli command the shell may run."), text)
+                    self.assertIn(CLI_COMMAND_LIST, text)
+        # However the program is named.
+        self.assert_denied_with([
+            "playwright-cli run-code x",
+            "node_modules/.bin/playwright-cli run-code x",
+            "./node_modules/.bin/playwright-cli run-code x",
+            "npx playwright-cli run-code x",
+            "npx --yes playwright-cli run-code x",
+            "npx --package=@playwright/cli playwright-cli run-code x",
+            "RTK_DISABLED=1 npx --no-install playwright-cli run-code x",
+            "rtk npx --no-install playwright-cli run-code x",
+            CLI + "snapshot && " + CLI + "run-code x",
+            CLI + "snapshot; " + CLI + "run-code x",
+            "sleep 1 && npx playwright-cli run-code x",
+        ], "`run-code` is not a playwright-cli command the shell may run.", CLI_COMMAND_LIST)
+        # No command at all.
+        self.assert_denied_with(
+            [CLI.strip(), CLI + "--help", CLI + "-s=plan", CLI + "--raw", CLI + "--json --raw", CLI + "-s plan --help"],
+            "playwright-cli needs a command.", CLI_COMMAND_LIST,
+        )
+
+    def test_denied_command_names_what_to_use(self):
+        """The commands a model reaches for most get the command to use in their place."""
+        for command, fragment in (
+            ("screenshot", "To see the page, run `npx --no-install playwright-cli snapshot`. It prints the page as text."),
+            ("pdf", "To see the page, run `npx --no-install playwright-cli snapshot`."),
+            ("video-start", "To see the page, run `npx --no-install playwright-cli snapshot`."),
+            ("tracing-start", "To see the page, run `npx --no-install playwright-cli snapshot`."),
+            ("run-code x", "It runs code, which the hook cannot check. To read the page, use snapshot or find."),
+            ("eval x", "It runs code, which the hook cannot check."),
+            ("install", "Stop and tell the user what is missing. The user installs it."),
+            ("install-browser", "Stop and tell the user what is missing. The user installs it."),
+            ("tab-new http://localhost:3000", "To load a page, use goto with its URL, as in `npx --no-install playwright-cli goto http://localhost:3000/profile`."),
+            ("reload", "To load a page, use goto with its URL"),
+            ("kill-all", "To close the browser, use close. To end the run of a paused test, use resume."),
+            ("close-all", "To close the browser, use close."),
+            ("delete-data", "To close the browser, use close."),
+            ("upload test/a.png", "It reads or writes a file, which playwright-cli may not do from the shell."),
+            ("state-save", "It reads or writes a file"),
+            ("cookie-set a b", "To see the page, use snapshot. To close the browser, use close. To end the run of a paused test, use resume."),
+        ):
+            with self.subTest(command=command):
+                self.assertIn(fragment, self.reply(CLI + command)["user_message"])
+
+    def test_session_name(self):
+        """A session name goes into the path of a file playwright-cli writes, so it holds no dot or slash."""
+        self.assert_all([
+            CLI + "-s=tw-6eef1e snapshot",
+            CLI + "-s=plan_2 snapshot",
+            CLI + "-s=A snapshot",
+            CLI + "-s 7 snapshot",
+            CLI + "--session=default snapshot",
+            CLI + "attach tw-6eef1e",
+            CLI + "--raw attach tw-6eef1e",
+        ], "allow")
+        for command, shown in (
+            ("-s=../../x snapshot", "-s=../../x"),
+            ("-s=a/b snapshot", "-s=a/b"),
+            ("-s=a.b snapshot", "-s=a.b"),
+            ("--session=/tmp/x open http://localhost:3000", "--session=/tmp/x"),
+            ("--session ../x snapshot", "--session ../x"),
+            ("-s= snapshot", "-s="),
+            ("snapshot -s", "-s"),
+            ("snapshot --session", "--session"),
+            ("-s --raw snapshot", "-s"),
+            ('-s="a b" snapshot', "-s=a b"),
+            ("-s=a:b snapshot", "-s=a:b"),
+            ("-s=-x snapshot", "-s=-x"),
+            ("-s=" + "a" * 65 + " snapshot", "-s=" + "a" * 65),
+            # the option is given once
+            ("-s=a -s=b snapshot", "-s=b"),
+            ("-s=a --session=b snapshot", "--session=b"),
+            ("--session a -s b snapshot", "-s b"),
+        ):
+            with self.subTest(command=command):
+                text = self.reply(CLI + command)["user_message"]
+                self.assertIn(f"`{shown}` does not name a session.", text)
+                self.assertIn("holds only letters, digits, `-`, and `_`", text)
+                self.assertIn("such as `-s=tw-6eef1e`", text)
+
+    def test_attach_takes_the_name_of_a_paused_test(self):
+        """`attach` connects to the name it is given as an endpoint, and writes a file named after it.
+
+        It takes no session name of its own: the session is then named after
+        the test, and the hook knows a paused test by that name.
+        """
+        self.assert_denied_with([
+            CLI + "attach",
+            CLI + "attach tw-6eef1e --session=heal",
+            CLI + "-s=heal attach tw-6eef1e",
+            CLI + "-s tw-6eef1e attach tw-6eef1e",
+            CLI + "attach tw-1 tw-2",
+            CLI + "attach ../../../../tmp/zz",
+            CLI + "attach /tmp/zz",
+            CLI + "attach ws://localhost:9222/",
+            CLI + "attach http://localhost:9222",
+            CLI + "attach localhost:9222",
+            CLI + "attach chrome.exe",
+            CLI + "-s=heal attach ws://example.com/",
+        ], "attach takes one word and no -s option", "find the line with `playwright-cli attach`", "use the name after `attach`")
+
+    def test_session_name_copied_with_its_placeholder(self):
+        """The skills print `tw-XXXXXX` for the session name. Copied as it is, it gets its own message."""
+        self.assert_denied_with([
+            CLI + "attach tw-XXXXXX",
+            CLI + "-s=tw-XXXXXX snapshot",
+            CLI + "-s tw-XXXXXX resume",
+            CLI + "--session=tw-XXXXXX goto http://localhost:3000/profile",
+        ], "tw-XXXXXX is a placeholder for the session name", "use the name after `attach`")
+
+    def test_close_and_open_on_the_session_of_a_paused_test(self):
+        """On a session named tw-..., `close` and `open` leave the test paused, as `detach` does."""
+        self.assert_denied_with([
+            CLI + "-s=tw-6eef1e close",
+            CLI + "-s tw-6eef1e close",
+            CLI + "--session=tw-6eef1e close",
+            CLI + "close --session tw-6eef1e",
+        ], "Use resume. It ends the run.", "close on the session of a paused test leaves the test paused")
+        self.assert_denied_with([
+            CLI + "-s=tw-6eef1e open http://localhost:3000/profile",
+            CLI + "open http://localhost:3000/profile -s tw-6eef1e",
+        ], "`tw-6eef1e` is the session of a paused test", "use goto", "To end the run, use resume.")
+        self.assert_denied_with(
+            [CLI + "-s=tw-6eef1e detach", CLI + "detach", CLI + "-s=plan detach", CLI + "detach --zzz", CLI + "--raw detach now"],
+            "Use resume. It ends the run. detach leaves the test paused",
+        )
+        self.assert_all([
+            CLI + "-s=tw-6eef1e goto http://localhost:3000/profile",
+            CLI + "-s=tw-6eef1e resume",
+            CLI + "-s=plan close",
+            CLI + "close",
+            CLI + "-s=two close",
+        ], "allow")
+
+    def test_text_is_data(self):
+        """Quotes keep `;`, `|`, `&`, `>`, `#`, and brackets as text. In single quotes `$` and a backtick are text too."""
+        self.assert_all([
+            CLI + 'fill e5 "a;b && c | d > e"',
+            CLI + 'type "rm -rf src; echo done"',
+            CLI + 'find "50% off (today) #1 [new] {a,b} *"',
+            CLI + "type \"it's\"",
+            CLI + "fill e5 'say \"hi\"'",
+            CLI + 'fill e5 "say \\"hi\\""',
+            CLI + "fill e5 'Total: $5'",
+            CLI + "fill e5 'pa$$word'",
+            CLI + "fill e5 '$HOME ${USER} $(id) `id`'",
+            CLI + 'fill e5 "Total: \\$5"',
+            CLI + 'fill e5 "Total: $"',
+            CLI + 'fill e5 "5 $ each"',
+            CLI + 'fill e5 "a$.b"',
+            CLI + "type 'it'\\''s $5'",
+        ], "allow")
+        self.assert_denied_with([
+            CLI + 'fill e5 "$HOME"',
+            CLI + 'fill e5 "Total: $5"',
+            CLI + 'fill e5 "pa$$word"',
+            CLI + 'fill e5 "exit $?"',
+            CLI + 'fill e5 "$#"',
+            CLI + 'fill e5 "$!"',
+            CLI + 'fill e5 "${USER}"',
+            CLI + 'fill e5 "a$[1+1]"',
+            CLI + 'type "$(cat .env)"',
+            CLI + 'type "`cat .env`"',
+            CLI + "type `cat .env`",
+            CLI + "fill e5 $HOME",
+            CLI + "fill e5 $$",
+            CLI + "find $'a\\nb'",
+            CLI + 'find $"Save"',
+            CLI + '-s=plan find "$USER"',
+            "npx playwright-cli fill e5 \"$1\"",
+            "node_modules/.bin/playwright-cli type \"$PWD\"",
+            "sleep 1 && " + CLI + 'fill e5 "$HOME"',
+            CLI + 'fill e5 "$HOME" 2>&1 | tail -5',
+            # an apostrophe inside double quotes does not start a quote
+            CLI + 'fill e5 "it\'s $5"',
+            CLI + 'type "Ada\'s $HOME and Bob\'s"',
+        ], "has a `$` or a backtick outside single quotes", "Put the text in single quotes", "`" + CLI + "fill e5 'Total: $5'`",
+            "If the text has a `'` in it, keep the double quotes and write `\\$`.")
+        self.assert_all([CLI + 'fill e5 "it\'s \\$5"'], "allow")
+        # Other programs keep the general message, and `$$` stays allowed there.
+        self.assert_denied_with(['echo "$HOME"', CLI + 'snapshot && echo "$HOME"'], "Shell commands cannot use $VARIABLE expansions")
+        self.assert_denied_with(['echo "$(id)"'], "Shell commands cannot use $(...)")
+        self.assert_all(['echo "$$"', 'echo "exit $?"'], "allow")
+        # A quote that is not closed, and a text outside quotes with shell syntax in it.
+        self.assert_denied_with([CLI + 'type "abc', CLI + "fill e5 'it's fine'"], "quote that is not closed")
+        self.assert_denied_with([CLI + "type a; rm -rf src"], "rm may only change paths inside")
+        self.assert_denied_with([CLI + "type hello > src/a.txt"], "The shell cannot write to `src/a.txt`")
+        self.assert_denied_with([CLI + "type a #b"], "`#` outside quotes")
+
+    def test_reading_a_saved_snapshot_names_the_snapshot_command(self):
+        """After `open`, playwright-cli prints a link to a file in .playwright-cli/. Reading it stays denied."""
+        self.assert_denied_with([
+            "cat .playwright-cli/page-2026-10-09T12-07-31-808Z.yml",
+            "head -40 .playwright-cli/page-2026-10-09T12-07-31-808Z.yml",
+            "tail -5 .playwright-cli/console-2026-10-09T12-07-31-713Z.log",
+            "grep -n button .playwright-cli/page-2026-10-09T12-07-31-808Z.yml",
+            "sed -n 1,40p .playwright-cli/page-2026-10-09T12-07-31-808Z.yml",
+            "wc -l .playwright-cli/page-2026-10-09T12-07-31-808Z.yml",
+            "cat < .playwright-cli/page-2026-10-09T12-07-31-808Z.yml",
+            "cat ./.playwright-cli/page-2026-10-09T12-07-31-808Z.yml",
+            "rtk read .playwright-cli/page-2026-10-09T12-07-31-808Z.yml",
+            "cat examples/next-app/.playwright-cli/page-2026-10-09T12-07-31-808Z.yml",
+        ], "is in .cursorignore", "It is a file playwright-cli saved. Do not read it.",
+            "To print the page, run `npx --no-install playwright-cli snapshot`", "with the same -s option")
+        # Other paths on the ignore list keep their message.
+        text = self.reply("cat package-lock.json")["user_message"]
+        self.assertIn("Read package.json or the source instead.", text)
+        self.assertNotIn("playwright-cli", text)
+
+    def test_checking_the_app_names_the_open_command(self):
+        """curl and the like are not available. The message names the command that reports a connection error."""
+        self.assert_denied_with(
+            ["curl http://localhost:3000", "curl -sI http://localhost:3000/profile", "wget -q http://localhost:3000"],
+            "You do not need to check the app", "`npx --no-install playwright-cli open http://localhost:3000`", "connection error",
+        )
+
+
+class BrowsingAsCursorSendsIt(CommandCase):
+    """One case of each kind from Browsing, through a hook started the way Cursor starts it."""
+
+    def test_allowed(self):
+        """A page of the app, a text with shell characters in quotes, and a session."""
+        self.assert_all([
+            'npx --no-install playwright-cli open "http://localhost:3000/search?q=shoes&page=2"',
+            "npx --no-install playwright-cli fill e5 'Total: $5; done'",
+            "npx --no-install playwright-cli -s=plan snapshot --depth=2",
+        ], "allow")
+
+    def test_denied(self):
+        """Another site, code, a file, a `$` in the text, and a session name that is a path."""
+        self.assert_denied_with(["npx --no-install playwright-cli open http://localhost@evil.example/"], "may only load the app on this machine")
+        self.assert_denied_with(["npx --no-install playwright-cli run-code 'page => 1'"], "is not a playwright-cli command the shell may run")
+        self.assert_denied_with(["npx --no-install playwright-cli snapshot --filename=test/e2e/snap.md"], "Leave it out and read the output.")
+        self.assert_denied_with(['npx --no-install playwright-cli fill e5 "Total: $5"'], "Put the text in single quotes")
+        self.assert_denied_with(["npx --no-install playwright-cli -s=../x snapshot"], "does not name a session")
+
+
+class SavedSnapshotsOnDisk(ProjectCase):
+    """Reads of .playwright-cli/ that depend on what is on disk: the folder itself, a wildcard, and a search."""
+
+    def setUp(self):
+        """Put two saved files and a source file on disk, with the kit's ignore line."""
+        super().setUp()
+        (self.project / ".cursorignore").write_text("package-lock.json\n.playwright-cli/\n")
+        for path in [".playwright-cli/page-1.yml", ".playwright-cli/console-1.log", "src/a.ts", "package-lock.json"]:
+            target = self.project / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("x\n")
+
+    def test_denied_with_the_snapshot_command(self):
+        """The message is the same whether the file is named, matched by a wildcard, or found by a search."""
+        self.assert_denied_with([
+            "cat .playwright-cli/page-1.yml",
+            "cat .playwright-cli/*.yml",
+            "cat ./.playwright-cli/page-*.yml",
+            "head -3 ./.playwright-cl?/page-1.yml",
+            "grep -rn button .playwright-cli",
+            "rg button .playwright-cli",
+        ], "It is a file playwright-cli saved. Do not read it.", "run `npx --no-install playwright-cli snapshot`", hook=self.hook)
+
+    def test_other_reads_are_unchanged(self):
+        """Listing the folder is allowed, and a lockfile keeps its own message."""
+        self.assert_all(["ls .playwright-cli", "ls -la .playwright-cli", "cat src/a.ts"], "allow", hook=self.hook)
+        text = shell_message("cat ./package-lock.*", hook=self.hook)
+        self.assertIn("Name the files to read, without the wildcard.", text)
+        self.assertNotIn("playwright-cli", text)
+
+    def test_without_the_ignore_line_the_read_is_allowed(self):
+        """The rule is the ignore list. A project that removes the line may read the files."""
+        (self.project / ".cursorignore").write_text("package-lock.json\n")
+        self.assert_all(["cat .playwright-cli/page-1.yml"], "allow", hook=self.hook)
 
 
 class ShellWrites(CommandCase):
@@ -3153,12 +4061,13 @@ class Maestro(ProjectCase):
         self.assertEqual(call("Delete", {"file_path": str(path)}, hook=self.hook), "allow")
 
 
-# The lines that start the two MCP servers in .cursor/mcp.json, as Cursor joins them for beforeMCPExecution.
+# The lines that start two MCP servers, as Cursor joins them for beforeMCPExecution. The kit's .cursor/mcp.json
+# starts the Maestro server. The Playwright server is one a user may add: the kit browses with playwright-cli.
 MCP_SERVER_COMMANDS = {
     "playwright": "npx --no-install @playwright/mcp --headless --isolated",
     "maestro": "maestro mcp --no-viewer",
 }
-# The 25 tools the Playwright MCP server lists when it starts as .cursor/mcp.json starts it
+# The 25 tools the Playwright MCP server lists when it is started with the line above
 # (@playwright/mcp 0.0.83, tools/list), each with arguments a call would carry.
 PLAYWRIGHT_MCP_TOOLS = {
     "browser_close": {},
@@ -3471,19 +4380,13 @@ class RulesDocument(CommandCase):
 
     @staticmethod
     def load_hook():
-        """Import the hook. Its file name has a hyphen, so a plain import cannot load it."""
-        spec = importlib.util.spec_from_file_location("guard_test_writes", HOOK)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
+        """Import the hook."""
+        return load_hook()
 
     @staticmethod
     def ask(hook, payload):
-        """The decision of the loaded hook for a payload. The hook prints its answer and exits, as it does for Cursor."""
-        printed = io.StringIO()
-        with contextlib.redirect_stdout(printed), contextlib.suppress(SystemExit):
-            hook.decide(json.dumps(payload).encode())
-        return json.loads(printed.getvalue())["permission"]
+        """The decision of the loaded hook for a payload."""
+        return loaded_answer(hook, payload)["permission"]
 
     def rows(self):
         """Every checked row as (text of the code span, expected decision)."""
