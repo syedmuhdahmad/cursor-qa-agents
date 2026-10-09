@@ -103,6 +103,7 @@ Look the name of the line up in the element file of its screen.
 | `"..." is visible` | No name | The quoted text alone, as for "Profile saved" |
 | No row matches | | The commands of the closest form. Name the line under `Not checked:`. |
 
+- A line with `a text that starts with`: Maestro reads the text of a check as a pattern. In the start that you keep, put `\\` in front of each of these characters: `. * + ? ( ) [ ] { } | ^ $`. `"Total (USD)"` gives `"Total \\(USD\\).*"`.
 - A `tap` line straight after a `type` line gets `- hideKeyboard` first, as in line 4. Write `- hideKeyboard` nowhere else.
   Why: with the keyboard open, a tap can close the keyboard and miss the button. With no keyboard open, `- hideKeyboard` presses back on Android, which can close the app.
 - Write a name such as `${output.profile.saveProfile}` with no quotes around it. Put every text and value in double quotes, letter for letter from the plan.

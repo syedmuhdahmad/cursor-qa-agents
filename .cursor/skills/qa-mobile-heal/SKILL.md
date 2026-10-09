@@ -129,6 +129,8 @@ Why: `maestro test` removes Maestro's helper app from the device when it ends. T
    | The right screen without the element, and the source should show it there | **Product bug** | The product bug mark |
    | No row matches | Pick the closest class and name it under `Not checked:`. | The edit of that class's row |
 
+   A `text:` line that ends in `.*`: Maestro reads the text of a check as a pattern. In the start that you keep, put `\\` in front of each of these characters: `. * + ? ( ) [ ] { } | ^ $`. `"Total (USD)"` gives `"Total \\(USD\\).*"`.
+
 7. **Write the cause before you edit.** One sentence that quotes two things: the error, and the `txt` or `rid` from the screen, the plan line, or the source line that proves it. A guess is not a cause. You cannot quote both: go to step 10 with `Verdict: FAIL` and `Cause: not found`.
 
 8. **Make the smallest fix.** Make the one edit of your row in step 6, then go to step 9.

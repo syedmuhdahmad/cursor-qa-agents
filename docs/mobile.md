@@ -128,7 +128,7 @@ A `[Failed]` line with no error after the time means that an element file did no
 - A line in `test/mobile/elements/load.yaml` that names a file that does not exist stops every flow with `Parsing Failed`. Seen on Android for a line in either platform's block.
 - `/qa-mobile-generate` writes no flow for a scenario that it could not walk to the end on the device. It names the scenario under `Not checked:`, and the verdict is `FAIL`.
 - `/qa-mobile-generate` keeps a flow file that exists. To have a flow written again, delete it first.
-- A text that changes from run to run, such as an order number, is checked by id only. Its plan line has the form `a text that starts with "Saved at"`.
+- A text that changes from run to run, such as an order number, is checked by its id and by the start that stays the same: `text: "Saved at.*"`. Its plan line has the form `a text that starts with "Saved at"`. Maestro reads that text as a pattern, so the skills put `\\` in front of a character such as `(` or `.` in the start.
 - An element with no id is found by its text. The agent does not add a `testID` to your source.
 - On a fresh Google Play emulator, a Google sign-in screen can cover the app a few minutes after boot. A flow that runs at that moment fails with `Element not found`. Run it again.
 - Once, in the walk of a generate job, the app was gone from the screen after a step that replied `"success":true`, about four minutes after the emulator started. The cause was not found. The walk stopped that scenario, and a second walk finished it.
@@ -164,7 +164,7 @@ Jobs run on that emulator:
 
 Not run:
 
-- A check with `id:` and a `text:` that ends in `.*`, which the skills write for a text that changes from run to run. A `.*` text alone was run, and `id:` with a whole text was run. The two together were not.
+- A check with `id:` and a `text:` that ends in `.*`, which the skills write for a text that changes from run to run. A `.*` text alone was run, and `id:` with a whole text was run. The two together were not. Neither was a start with `\\` in front of a character.
 - Anything on iOS: an iOS element file, the iOS block of the loader on an iOS device, the ids there, and every iOS line of the three skills. Those lines are from Maestro's documentation and source.
 - The skills on a model, in Cursor or outside it. The evaluation has no mobile case. The two scripts show that the tables of the generate skill can be applied to one feature. They do not show that a model can apply them.
 - The skills as they are now. After the run with element files, a review added and changed rows and rules in the three skills, for example how a name is made from a text that starts with a digit, and what the walk does at a system dialog. One more rule came after the review: a scenario with no flow makes the verdict `FAIL`. Checked without a device, on the text as it is now: every `yaml` block and template passes `maestro check-syntax`, the element template parses in Node, and the hook allows every command and file of the skills. The new text was not followed on a device.
@@ -186,7 +186,7 @@ A sample app with a sign-in screen and a CI job are tracked in [issue 23](https:
 
 ## Open points
 
-- **The skills are long, and no small model has tried them.** `wc -w` counts 2,485 words in `/qa-mobile-plan`, 4,039 in `/qa-mobile-generate`, and 3,249 in `/qa-mobile-heal`. The four web skills have 1,648 to 2,403. The generate skill had 1,914 words before the element files: it now finds the device and walks the plan, which it did not do before. The kit is written for small models, and the mobile skills have not been tried on a low-tier model, or on any model.
+- **The skills are long, and no small model has tried them.** `wc -w` counts 2,485 words in `/qa-mobile-plan`, 4,112 in `/qa-mobile-generate`, and 3,324 in `/qa-mobile-heal`. The four web skills have 1,648 to 2,507. The generate skill had 1,914 words before the element files: it now finds the device and walks the plan, which it did not do before. The kit is written for small models, and the mobile skills have not been tried on a low-tier model, or on any model.
 - **System dialog texts are still in flows.** The block for a system dialog holds the dialog's question and its button as texts, and the heal skill's block for the iOS keyboard taps a text. The skills take these texts to differ by platform, so they belong in element files. That change waits for a device run with a real dialog.
 - **An element with an id on one platform only has no rule.** The shared flow fixes whether a name stands under `id:` or alone. No rule says what to do when that differs between Android and iOS. A text that differs by platform would be marked as a product bug. This waits for the first iOS run.
 - **The hook does not check the code in an element file.** It allows any JavaScript in an element file, a `.js` file anywhere under `test/mobile/`, `runScript` and `evalScript` in a flow, and `runScript` in the inline text of the MCP `run` tool. Maestro's script engine can make network calls. Only the skill text forbids these.
