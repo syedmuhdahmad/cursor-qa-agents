@@ -1,0 +1,46 @@
+# Labels a pull request by the files it changes. Read by
+# .github/workflows/labeler.yml. Each key is a label that exists in this
+# repository.
+
+hook:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .cursor/hooks/**
+          - .cursor/hooks.json
+          - docs/hook-rules.md
+
+skills:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .cursor/skills/**
+          - .cursor/agents/**
+          - .cursor/rules/**
+          - .cursor/qa/**
+          - AGENTS.md
+          - docs/jobs.md
+
+mobile:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .cursor/skills/qa-mobile-*/**
+          - .cursor/rules/mobile-test-conventions.mdc
+          - docs/mobile.md
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/workflows/**
+          - .github/labeler.yml
+          - scripts/ci/**
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - package.json
+          - package-lock.json
+          - examples/next-app/package.json

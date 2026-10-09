@@ -191,6 +191,23 @@ This applies to documents, skills, comments, and commit messages.
 - Branch from `main` and open a pull request. The template has the checklist.
 - A commit message is one full sentence that says what changed and why, with a period at the end. Add the issue number when there is one. An example from this repository: `Give the healer a smallest-fix ladder, an evidence-before-edit rule, and a fixed report so a small model changes only the failing line (#28).`
 
+## Triage and the GitHub MCP server
+
+None of this is copied into an app.
+
+Two workflows keep the issue list tidy:
+
+- [`.github/workflows/labeler.yml`](.github/workflows/labeler.yml) labels a pull request by the files it changes: `hook`, `skills`, `mobile`, `ci`, `documentation`, and `dependencies`. The rules are in [`.github/labeler.yml`](.github/labeler.yml). A new issue gets its first label from the issue form.
+- [`.github/workflows/stale.yml`](.github/workflows/stale.yml) runs every Monday. It gives the label `stale` to an issue or a pull request that nobody has touched for 60 days, and closes it 14 days later. It never marks anything with the label `roadmap`, `priority: high`, or `security`, and never a pull request with `dependencies`. A comment removes the label.
+
+[`.mcp.json`](.mcp.json) names [GitHub's MCP server](https://github.com/github/github-mcp-server) for Claude Code, so that an agent in this repository can list, read, comment on, and label issues and pull requests. It asks for three toolsets only: `issues`, `labels`, and `pull_requests`. To use it:
+
+1. Create a personal access token on GitHub that can read and write issues and pull requests of this repository. Never put it in a file of the repository.
+2. Set it in the shell that starts Claude Code: `export GITHUB_PERSONAL_ACCESS_TOKEN=<your token>`.
+3. Start Claude Code in the repository and approve the `github` server when it asks.
+
+Without the variable the server does not connect, and nothing else changes. Cursor does not read this file: its servers are in `.cursor/mcp.json`, which users copy, so the GitHub server is not there.
+
 ## Release
 
 The version of the kit is the one line in `.cursor/qa/VERSION`. Users copy that file with `.cursor/`, so it tells them which version they have.
