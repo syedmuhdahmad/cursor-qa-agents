@@ -1,0 +1,51 @@
+# Marks an issue or a pull request that nobody has touched for 60 days with the
+# label "stale", and closes it 14 days later when it is still untouched. A
+# comment or a new commit removes the label.
+#
+# Planned work is left alone: anything with the label "roadmap",
+# "priority: high", or "security" is never marked.
+
+name: Stale issues and pull requests
+
+on:
+  schedule:
+    # Mondays at 06:00 UTC.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale:
+    name: Mark and close stale items
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # The action keeps the list of items it has processed in the Actions
+      # cache, and replaces that cache entry on every run.
+      actions: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11.0.0
+        with:
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-label: stale
+          stale-pr-label: stale
+          exempt-issue-labels: 'roadmap,priority: high,security'
+          exempt-pr-labels: 'roadmap,priority: high,security,dependencies'
+          stale-issue-message: >-
+            Nobody has written here for 60 days, so this issue has the label
+            "stale". It closes in 14 days. A comment keeps it open.
+          stale-pr-message: >-
+            Nobody has written here for 60 days, so this pull request has the
+            label "stale". It closes in 14 days. A comment or a commit keeps it
+            open.
+          close-issue-message: >-
+            Closed after 14 more days with no reply. Open it again or write a
+            comment if it still matters.
+          close-pr-message: >-
+            Closed after 14 more days with no reply. Open it again if you want
+            to go on with it.

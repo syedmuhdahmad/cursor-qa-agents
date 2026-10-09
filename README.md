@@ -332,7 +332,7 @@ npx playwright test --list
 node scripts/test-example.mjs
 ```
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same commands on every pull request and on every push to `main`: the hook tests on Ubuntu and macOS with Python 3.9 and 3.14, the reporter, script, config, and example checks on Ubuntu with the lowest and the highest Node version that `engines` allows, and the Markdown lint, the type check, and the check of the copied `playwright-cli` skill on Ubuntu with one Node version. The workflow ran on the pull request that added it, and every job passed, the example check included. On macOS it runs the hook tests only.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same commands on every pull request and on every push to `main`: the hook tests on Ubuntu and macOS with Python 3.9 and 3.14, the reporter, script, config, and example checks on Ubuntu with the lowest and the highest Node version that `engines` allows, and the Markdown lint, the type check, and the check of the copied `playwright-cli` skill on Ubuntu with one Node version. The workflow ran on the pull request that added it, and every job passed, the example check included. On macOS it runs the hook tests only. Two more workflows label pull requests and mark stale issues, see [CONTRIBUTING.md](CONTRIBUTING.md#triage-and-the-github-mcp-server).
 
 ## Upgrading
 
