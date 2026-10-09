@@ -1,0 +1,49 @@
+{
+  "id": "e2e-plan",
+  "title": "Plan end-to-end coverage for sign-in",
+  "skill": "qa-plan",
+  "kind": "plan",
+  "server": "normal",
+  "user": "/qa-plan Plan end-to-end coverage for sign-in. This is UI. The app runs at {{BASE_URL}}.",
+  "userOld": "/qa Plan end-to-end coverage for sign-in. This is UI.",
+  "setup": {
+    "remove": [
+      "test/e2e/plan/sign-in.plan.md",
+      "test/e2e/sign-in.spec.ts",
+      "test/e2e/pages/sign-in-page.ts",
+      "test/e2e/pages/dashboard-page.ts"
+    ],
+    "edits": []
+  },
+  "expect": {
+    "outcome": "plan",
+    "file": "test/e2e/plan/sign-in.plan.md",
+    "mayWrite": ["test/e2e/plan/sign-in.plan.md"],
+    "plan": {
+      "minScenarios": 3,
+      "maxScenarios": 8,
+      "header": ["**Seed:**", "**Side:**", "**Route:**"],
+      "requiredTexts": [
+        "Enter your email",
+        "Enter a valid email address",
+        "Password must be at least 8 characters",
+        "Email or password is incorrect",
+        "Something went wrong. Try again.",
+        "Dashboard"
+      ],
+      "sourceDirs": ["app", "src", "lib"],
+      "alsoValid": ["Signed in as ada@example.com"]
+    }
+  },
+  "reference": {
+    "restore": ["test/e2e/plan/sign-in.plan.md"],
+    "edits": [],
+    "reply": {
+      "Plan file": "test/e2e/plan/sign-in.plan.md",
+      "Side": "UI",
+      "Scenarios": "6",
+      "Verdict": "DONE",
+      "Not checked": "none"
+    }
+  }
+}

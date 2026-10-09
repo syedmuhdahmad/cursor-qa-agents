@@ -1,0 +1,58 @@
+{
+  "id": "unit-product-bug",
+  "title": "A unit test fails because the app is wrong",
+  "skill": "qa-unit",
+  "kind": "unit",
+  "server": null,
+  "user": "/qa-unit Fix the failing unit test test/unit/lib/validation.test.ts.",
+  "userOld": "/qa Fix the failing unit test test/unit/lib/validation.test.ts.",
+  "setup": {
+    "remove": [],
+    "edits": [
+      {
+        "file": "lib/validation.ts",
+        "find": "return 'Password must be at least 8 characters'",
+        "replace": "return 'Password must be at least 6 characters'",
+        "line": 25,
+        "note": "The app is wrong. MIN_PASSWORD_LENGTH is still 8, and the component test, the route test, and the plan all expect '8 characters'."
+      }
+    ]
+  },
+  "start": { "passed": 11, "failed": 3 },
+  "expect": {
+    "outcome": "fail-kept",
+    "file": "test/unit/lib/validation.test.ts",
+    "mayWrite": ["test/unit/lib/validation.test.ts"],
+    "minTests": 14,
+    "stillFailing": [
+      "rejects a password of 7 characters",
+      "rejects an empty password",
+      "rejects a value that is not a string"
+    ],
+    "keeps": [
+      { "file": "test/unit/lib/validation.test.ts", "text": "toBe('Password must be at least 8 characters')" }
+    ],
+    "bug": {
+      "file": "lib/validation.ts",
+      "line": 25,
+      "expected": "Password must be at least 8 characters",
+      "got": "Password must be at least 6 characters"
+    }
+  },
+  "reference": {
+    "restore": [],
+    "edits": [],
+    "reply": {
+      "Job": "fix",
+      "Source": "lib/validation.ts",
+      "Test file": "test/unit/lib/validation.test.ts",
+      "Command": "RTK_DISABLED=1 npx vitest run test/unit/lib/validation.test.ts",
+      "Cause": "lib/validation.ts:25 returns \"Password must be at least 6 characters\" while MIN_PASSWORD_LENGTH at lib/validation.ts:5 is 8",
+      "Fix": "none",
+      "Before": "AssertionError: expected 'Password must be at least 6 characters' to be 'Password must be at least 8 characters'",
+      "After": "QA-VERDICT: FAIL (passed 11, failed 3, skipped 0, files 1)",
+      "Verdict": "FAIL",
+      "Bug": "lib/validation.ts:25 expected \"Password must be at least 8 characters\", received \"Password must be at least 6 characters\""
+    }
+  }
+}

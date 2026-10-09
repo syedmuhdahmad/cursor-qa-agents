@@ -1,0 +1,82 @@
+{
+  "id": "unit-ui",
+  "title": "Write a unit test for a client component",
+  "skill": "qa-unit",
+  "kind": "unit",
+  "server": null,
+  "user": "/qa-unit Write a unit test for src/components/SignIn.tsx. This is UI.",
+  "userOld": "/qa Write a unit test for src/components/SignIn.tsx. This is UI.",
+  "setup": {
+    "remove": ["test/unit/components/SignIn.test.ts"],
+    "edits": []
+  },
+  "expect": {
+    "outcome": "pass",
+    "file": "test/unit/components/SignIn.test.ts",
+    "mayWrite": ["test/unit/components/SignIn.test.ts"],
+    "mayWriteOld": ["vitest.config.ts"],
+    "minTests": 2,
+    "content": [
+      {
+        "glob": "test/unit/components/SignIn.test.ts",
+        "firstLine": "// @vitest-environment jsdom",
+        "why": "a component test runs in jsdom, and the directive must be line 1"
+      }
+    ],
+    "minKilled": 1,
+    "mutants": [
+      {
+        "file": "src/components/SignIn.tsx",
+        "find": "const problem = validateEmail(email) ?? validatePassword(password)",
+        "replace": "const problem = null",
+        "note": "the form no longer validates"
+      },
+      {
+        "file": "src/components/SignIn.tsx",
+        "find": "router.push('/dashboard')",
+        "replace": "router.push('/home')",
+        "note": "a good sign-in goes to another page"
+      },
+      {
+        "file": "src/components/SignIn.tsx",
+        "find": "response.status === 401",
+        "replace": "response.status === 400",
+        "note": "a 401 shows the server error message"
+      },
+      {
+        "file": "src/components/SignIn.tsx",
+        "find": "const WRONG_CREDENTIALS = 'Email or password is incorrect'",
+        "replace": "const WRONG_CREDENTIALS = 'Invalid credentials'",
+        "note": "the wrong-credentials message changed"
+      },
+      {
+        "file": "src/components/SignIn.tsx",
+        "find": "const SERVER_ERROR = 'Something went wrong. Try again.'",
+        "replace": "const SERVER_ERROR = 'Server error'",
+        "note": "the server error message changed"
+      },
+      {
+        "file": "src/components/SignIn.tsx",
+        "find": "<button type=\"submit\" disabled={pending}>",
+        "replace": "<button type=\"submit\">",
+        "note": "the button stays enabled during the request"
+      }
+    ]
+  },
+  "reference": {
+    "restore": ["test/unit/components/SignIn.test.ts"],
+    "edits": [],
+    "reply": {
+      "Job": "write",
+      "Source": "src/components/SignIn.tsx",
+      "Test file": "test/unit/components/SignIn.test.ts",
+      "Command": "RTK_DISABLED=1 npx vitest run test/unit/components/SignIn.test.ts",
+      "Cause": "none",
+      "Fix": "none",
+      "Before": "none",
+      "After": "QA-VERDICT: PASS (passed 9, failed 0, skipped 0, files 1)",
+      "Verdict": "PASS",
+      "Bug": "none"
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "id": "e2e-heal-product-bug",
+  "title": "A spec fails because the app is wrong",
+  "skill": "qa-heal",
+  "kind": "e2e",
+  "server": "bug",
+  "user": "/qa-heal Fix the failing spec test/e2e/sign-in.spec.ts.",
+  "userOld": "/qa Fix the failing spec test/e2e/sign-in.spec.ts.",
+  "setup": {
+    "remove": [],
+    "edits": [
+      {
+        "file": "src/components/SignIn.tsx",
+        "find": "const WRONG_CREDENTIALS = 'Email or password is incorrect'",
+        "replace": "const WRONG_CREDENTIALS = 'Invalid credentials'",
+        "line": 7,
+        "note": "The app is wrong. The plan (scenario 3.1) and app/api/session/route.ts:29 both say 'Email or password is incorrect'."
+      }
+    ]
+  },
+  "start": { "passed": 5, "failed": 1 },
+  "expect": {
+    "outcome": "fixme",
+    "file": "test/e2e/sign-in.spec.ts",
+    "mayWrite": ["test/e2e/sign-in.spec.ts"],
+    "minTests": 5,
+    "fixmeTest": "Wrong password shows an error",
+    "keeps": [
+      { "file": "test/e2e/sign-in.spec.ts", "text": "await expect(" },
+      { "file": "test/e2e/sign-in.spec.ts", "text": "toHaveText('Email or password is incorrect')" }
+    ],
+    "bug": {
+      "file": "src/components/SignIn.tsx",
+      "line": 7,
+      "expected": "Email or password is incorrect",
+      "got": "Invalid credentials"
+    }
+  },
+  "reference": {
+    "restore": [],
+    "edits": [
+      {
+        "file": "test/e2e/sign-in.spec.ts",
+        "find": "  test('Wrong password shows an error', async ({ page }) => {",
+        "replace": "  // product bug: src/components/SignIn.tsx:7 expected \"Email or password is incorrect\", got \"Invalid credentials\"\n  test.fixme('Wrong password shows an error', async ({ page }) => {"
+      }
+    ],
+    "reply": {
+      "Test": "Wrong password shows an error, test/e2e/sign-in.spec.ts:77",
+      "Class": "Product bug",
+      "Cause": "the alert shows \"Invalid credentials\" and plan line 3.1 expects \"Email or password is incorrect\"",
+      "Fix": "test.fixme at test/e2e/sign-in.spec.ts:77, product bug at src/components/SignIn.tsx:7",
+      "Before": "Received: \"Invalid credentials\"",
+      "After": "QA-VERDICT: PASS-WITH-FIXME (passed 5, failed 0, skipped 0, fixme 1, files 1)",
+      "Verdict": "PASS",
+      "Not checked": "other browsers"
+    }
+  }
+}

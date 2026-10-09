@@ -1,0 +1,65 @@
+{
+  "id": "e2e-heal-locator",
+  "title": "Fix a spec whose page class has a wrong locator name",
+  "skill": "qa-heal",
+  "kind": "e2e",
+  "server": "normal",
+  "user": "/qa-heal Fix the failing spec test/e2e/sign-in.spec.ts.",
+  "userOld": "/qa Fix the failing spec test/e2e/sign-in.spec.ts.",
+  "setup": {
+    "remove": [],
+    "edits": [
+      {
+        "file": "test/e2e/pages/dashboard-page.ts",
+        "find": "page.getByRole('heading', { name: 'Dashboard' })",
+        "replace": "page.getByRole('heading', { name: 'Overview' })",
+        "line": 8,
+        "note": "The test is wrong. The page shows the heading 'Dashboard', and the plan and app/dashboard/page.tsx both say 'Dashboard'."
+      }
+    ]
+  },
+  "start": { "passed": 5, "failed": 1 },
+  "expect": {
+    "outcome": "pass",
+    "file": "test/e2e/sign-in.spec.ts",
+    "mayWrite": ["test/e2e/sign-in.spec.ts", "test/e2e/pages/*-page.ts"],
+    "minTests": 6,
+    "tests": [
+      "Valid account reaches the dashboard",
+      "Empty email is rejected",
+      "Badly formatted email is rejected",
+      "Password shorter than 8 characters is rejected",
+      "Wrong password shows an error",
+      "Server error shows a retry message"
+    ],
+    "keeps": [
+      { "file": "test/e2e/sign-in.spec.ts", "text": "await expect(" }
+    ],
+    "content": [
+      {
+        "glob": "test/e2e/sign-in.spec.ts",
+        "absent": ["page.getBy", "page.locator("],
+        "why": "locators belong in page classes"
+      },
+      {
+        "glob": "test/e2e/pages/*-page.ts",
+        "absent": ["expect("],
+        "why": "assertions belong in the spec"
+      }
+    ]
+  },
+  "reference": {
+    "restore": ["test/e2e/pages/dashboard-page.ts"],
+    "edits": [],
+    "reply": {
+      "Test": "Valid account reaches the dashboard, test/e2e/sign-in.spec.ts:8",
+      "Class": "Locator",
+      "Cause": "the error says element(s) not found for getByRole('heading', { name: 'Overview' }) and the page in error-context.md shows heading \"Dashboard\"",
+      "Fix": "test/e2e/pages/dashboard-page.ts:8",
+      "Before": "Error: expect(locator).toBeVisible() failed",
+      "After": "QA-VERDICT: PASS (passed 6, failed 0, skipped 0, files 1)",
+      "Verdict": "PASS",
+      "Not checked": "other browsers"
+    }
+  }
+}
