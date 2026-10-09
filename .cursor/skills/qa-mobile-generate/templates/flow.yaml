@@ -1,0 +1,21 @@
+# plan: test/mobile/plan/FEATURE.plan.md
+# scenario: NUMBER SCENARIO
+appId: ${APP_ID}
+name: "SCENARIO"
+tags:
+  - FEATURE
+---
+# STEP
+- launchApp:
+    clearState: true
+    clearKeychain: true
+# STEP
+- tapOn:
+    id: "ID"
+- inputText: "VALUE"
+# STEP
+- hideKeyboard
+- tapOn:
+    id: "ID"
+# Expect: EXPECT
+- assertVisible: "TEXT"

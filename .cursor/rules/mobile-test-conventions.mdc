@@ -1,0 +1,31 @@
+---
+description: Where Maestro flows go and the rules every flow follows
+globs: test/mobile/**
+alwaysApply: false
+---
+
+# Mobile test layout
+
+| Kind | Path | Example |
+| --- | --- | --- |
+| Flow, one for each scenario | `test/mobile/<feature>/<nn>-<scenario>.flow.yaml` | `test/mobile/sign-in/01-valid-account.flow.yaml` |
+| Plan | `test/mobile/plan/<feature>.plan.md` | `test/mobile/plan/sign-in.plan.md` |
+| Subflow, the start steps of a plan | `test/mobile/subflows/<name>.yaml` | `test/mobile/subflows/open-sign-in.yaml` |
+| Suite file, optional | `test/mobile/config.yaml` | `test/mobile/config.yaml` |
+
+## Flow rules
+
+- One flow file serves Android and iOS. Never write one file for each platform. A step that must differ goes in a `runFlow` block with `when:` and `platform: Android` or `platform: iOS`.
+- Line 3 of a flow is `appId: ${APP_ID}`. The run command gives the app id.
+- The first command of a flow is `launchApp` with `clearState: true` and `clearKeychain: true`. No flow needs another flow to run first.
+- Select an element by `id:` first. Use its whole visible text only when it has no id. Never use `point:` or other screen coordinates.
+- There is no command that waits a fixed time. `tapOn` and `assertVisible` wait by themselves. For a slow screen use `extendedWaitUntil` with `timeout: 20000`.
+- A product bug is marked with the tag `fixme`, and the line above `- fixme` is a comment that names the source line: `# product bug: src/screens/SignIn.tsx:41 expected "Wrong email or password", got "Invalid credentials"`. Never tag a flow `fixme` for another reason.
+
+## Run a feature's folder
+
+`RTK_DISABLED=1 maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/sign-in`
+
+Change only the platform word (`android` or `ios`), the app id, and the folder. The generate job uses this command. The heal job does not: it runs one flow through the maestro MCP server.
+
+The user starts the device and installs the app. Never start a device, and never switch to the other platform.
