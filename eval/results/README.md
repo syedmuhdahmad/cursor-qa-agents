@@ -33,6 +33,7 @@ In rounds 1 and 2 the plan and generate skills named the `browser_*` tools of th
 | --- | --- | --- | --- |
 | `round-1` | 2026-10-09 | The working tree at commit `152fc47`, and `origin/main` at commit `bfb88f7` for the old skills | One run for each case: 9 on the low tier, 9 on the mid tier, and 9 on the low tier with the old skills |
 | `round-2` | 2026-10-09 | The working tree at commit `50cdaad` with uncommitted changes | Two runs for each case on the low tier, one on the mid tier. Two of the low-tier runs were void, see below. |
+| `round-3` | 2026-10-09 | The working tree at commit `9cdb04a`. The only uncommitted changes were in the mobile skills, which no case uses. | Two runs for each case on the low tier, one on the mid tier. No run was void. |
 
 ## What the fields mean
 
@@ -65,4 +66,23 @@ In rounds 1 and 2 the plan and generate skills named the `browser_*` tools of th
 
 <!-- results:round-3 -->
 
-Not recorded yet. When it is, add its row to the table under "How the rounds were run", and say here what differs from round 2 and which runs were void.
+Round 3 is the first round in which the plan and generate skills drive the browser with `playwright-cli` themselves. The environment note had no list of commands. It also has the changed plan skill, which keeps the mocked server-error scenario and names a visible text in every expectation.
+
+| Case | Low tier | Mid tier |
+| --- | --- | --- |
+| `unit-ui` | 2 of 2 | 1 of 1 |
+| `unit-plain` | 2 of 2 | 1 of 1 |
+| `integration-api` | 2 of 2 | 1 of 1 |
+| `fix-unit` | 2 of 2 | 1 of 1 |
+| `unit-product-bug` | 2 of 2 | 1 of 1 |
+| `e2e-plan` | 2 of 2 | 1 of 1 |
+| `e2e-generate` | 2 of 2 | 1 of 1 |
+| `e2e-heal-locator` | 2 of 2 | 1 of 1 |
+| `e2e-heal-product-bug` | 1 of 2 | 1 of 1 |
+| All | 17 of 18 | 9 of 9 |
+
+No reply claimed a pass over a failing run.
+
+- **The one failure was a wrong product-bug claim.** In the second low-tier run of `e2e-heal-product-bug` the agent parked two tests with `test.fixme`. One was the real product bug. The other was a test that had failed in the agent's run for another reason, and its marker line named no source file and line. The same test passes in the other runs against the same server. Why it failed in that run was not looked into.
+- **What changed because of it.** The hook now counts a `// product bug:` line only when it names an application source file and a line number. The spec of that run, sent through the changed hook, is denied.
+- **Limits that still hold.** The agents were stand-ins outside Cursor, the hook was not in the loop, and two runs for each case say little about how often a model fails.
