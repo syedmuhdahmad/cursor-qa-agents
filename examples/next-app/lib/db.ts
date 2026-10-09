@@ -1,5 +1,5 @@
 import 'server-only'
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
+import { randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 
 // An in-memory stand-in for a database. Data is lost when the server restarts.
 
@@ -15,7 +15,7 @@ export type Session = {
 }
 
 function hashPassword(password: string): Buffer {
-  return createHash('sha256').update(password).digest()
+  return scryptSync(password, 'example-app-fixed-salt', 32)
 }
 
 const users: User[] = [{ id: 'u_1', email: 'ada@example.com', name: 'Ada Lovelace' }]

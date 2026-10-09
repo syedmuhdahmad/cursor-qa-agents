@@ -1154,9 +1154,12 @@ class HookInput(unittest.TestCase):
         """
         reply, errors = run_hook(b"[" * 100000)
         self.assertEqual(reply["permission"], "deny")
-        self.assertIn("bug in .cursor/hooks/guard-test-writes.py", reply["user_message"])
         self.assertEqual(reply["user_message"], reply["agent_message"])
-        self.assertIn("RecursionError", errors)
+        # Python 3.14.7 and later refuse the nesting in the parser, so the hook answers "not valid JSON".
+        if "RecursionError" in errors:
+            self.assertIn("bug in .cursor/hooks/guard-test-writes.py", reply["user_message"])
+        else:
+            self.assertIn("not valid JSON", reply["user_message"])
 
 
 class Symlinks(ProjectCase):

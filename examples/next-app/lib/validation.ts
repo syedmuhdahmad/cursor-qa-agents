@@ -4,7 +4,7 @@
 
 export const MIN_PASSWORD_LENGTH = 8
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const isEmail = (v: string) => { const [name, domain, ...rest] = v.split('@'); return !/\s/.test(v) && rest.length === 0 && !!name && !!domain && domain.slice(1, -1).includes('.') }
 
 export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase()
@@ -14,7 +14,7 @@ export function validateEmail(value: unknown): string | null {
   if (typeof value !== 'string' || value.trim() === '') {
     return 'Enter your email'
   }
-  if (!EMAIL_PATTERN.test(value.trim())) {
+  if (!isEmail(value.trim())) {
     return 'Enter a valid email address'
   }
   return null
