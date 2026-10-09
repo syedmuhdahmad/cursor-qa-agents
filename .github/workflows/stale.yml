@@ -22,6 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      # The action keeps the list of items it has processed in the Actions
+      # cache, and replaces that cache entry on every run.
+      actions: write
       issues: write
       pull-requests: write
     steps:
