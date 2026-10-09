@@ -342,13 +342,14 @@ cd "$KIT"
 
 Take `MODEL_ID` from the list that `agent models` prints. No case needs an MCP server.
 
-The reply is the text of the last `assistant` event in the stream:
+The reply is the agent's last message: the text of the `assistant` events that come after the last `tool_call` event. In round 4 that was one event in every run. An earlier `assistant` event holds what the agent said between two tool calls, and is not part of the reply. This was not run with `--stream-partial-output`.
 
 ```bash
 node -e '
 const events = require("fs").readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line))
-const last = events.filter((event) => event.type === "assistant").at(-1)
-process.stdout.write(last.message.content.filter((part) => part.type === "text").map((part) => part.text).join(""))
+const afterLastTool = events.slice(events.findLastIndex((event) => event.type === "tool_call") + 1)
+const texts = afterLastTool.filter((event) => event.type === "assistant").flatMap((event) => event.message.content.filter((part) => part.type === "text").map((part) => part.text))
+process.stdout.write(texts.join(""))
 ' "$RUNS/run-01/stream.jsonl" > "$RUNS/run-01/reply.txt"
 ```
 

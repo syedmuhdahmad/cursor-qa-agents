@@ -260,7 +260,7 @@ The flows follow Maestro's [page object model recipe](https://docs.maestro.dev/e
 
 - **Run:** on one Android emulator (Android 17, Maestro 2.10.0) with a React Native sample app: the `maestro test` command and its output, the three MCP tools the skills call, the `fixme` mark, flows that take their ids from element files, and one generate job and one heal job with element files. No model ran: scripts applied the tables of the generate skill.
 - **Not run:** anything on iOS, the skills on a model, the plan skill since its sentence forms changed, a sample app with a sign-in screen, and CI. The skills were edited after the device run, and that text was not followed on a device.
-- **Open:** the mobile skills have 2,485 to 4,112 words, and the web skills 1,648 to 2,507. They have not been tried on a low-tier model. The hook does not check the JavaScript in an element file.
+- **Open:** the mobile skills have 2,485 to 4,120 words, and the web skills 1,648 to 2,507. They have not been tried on a low-tier model. The hook does not check the JavaScript in an element file.
 
 You start the device and install the app, and every flow clears the app's data there. [docs/mobile.md](docs/mobile.md) has the layout, each job, what was run, and the [open points](docs/mobile.md#open-points).
 
