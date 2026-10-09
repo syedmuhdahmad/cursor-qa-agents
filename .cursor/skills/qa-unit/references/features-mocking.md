@@ -137,9 +137,9 @@ test('spy on module', () => {
 })
 ```
 
-### Manual Mocks (`__mocks__`)
+### Manual Mocks (__mocks__)
 
-```text
+```
 src/
   __mocks__/
     axios.ts      # Mocks 'axios'
