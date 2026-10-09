@@ -1,12 +1,52 @@
 # Cursor QA agent
 
-A Cursor setup for writing tests. The `qa` agent reads your application source and writes tests. It does not change the product to make a test pass.
+This kit is a set of Cursor files that you copy into a React or Next.js app, so that the Cursor agent writes and fixes the app's tests: Vitest unit and integration tests, Playwright end-to-end tests, and Maestro flows for a mobile app (a preview). The agent reads your application source and does not edit it, and when a test fails because the product is wrong, it reports the bug instead of weakening the test. It is written to work on low-cost and mid-tier models: each job is one skill of numbered steps, every test run ends with one verdict line, and a hook enforces the rules that a small model drops.
 
 Application code lives in places such as `app/` or `src/`. Tests live under `test/`.
 
+The hook applies to every Cursor agent in the folder, not only to these skills. It denies an edit to application source and a command such as `npm install`. Run such commands yourself. See [Limits](#limits).
+
+## Requirements
+
+- **Node** `^22.22.2 || ^24.15.0 || >=26.0.0`: 22.22.2 or later in the 22 line, 24.15.0 or later in the 24 line, or 26 and up. This is `engines.node` in [`package.json`](package.json). `jsdom` sets the lower bounds. Only Node 24 was run.
+- **npm.** The hook lets the agent run `npm run` and `npx`. It denies `pnpm`, `yarn`, and `bunx`.
+- **Python 3.9 or later**, started as `python3`, with no packages. The hook is a Python script. Its tests pass on Python 3.9, 3.12, and 3.14.
+- **Cursor 2.4 or later.** Cursor's changelog names 2.4 as the first version with skills, subagents, and the `preToolUse` hook event. Checked: an earlier version of the hook ran in Cursor 3.22, and the hook's tests send payloads in the shapes that Cursor 3.22 logged and that the code of Cursor 3.23 builds. Not checked: an older Cursor, and this version of the skills and the hook in a live Cursor session.
+- **Operating system.** Everything here was run on Linux only. macOS was not run. Windows was not run, and the kit is not expected to work there as shipped: `.cursor/hooks.json` starts the hook by its `.py` path, and Windows cannot start a file that way. The hook is registered with `failClosed: true`, and Cursor's documentation says a hook that fails then blocks the action. So on Windows every action would be blocked.
+- **Google Chrome**, for the plan and generate jobs. The Playwright MCP server drives the installed Chrome. `npx playwright install chromium` installs the browser for test runs only.
+- **The executable bit on the hook.** Cursor starts `.cursor/hooks/guard-test-writes.py` by its path. Git and the installer keep the bit. If a copy lost it, run `chmod +x .cursor/hooks/guard-test-writes.py`.
+
+The mobile skills need more. See [Mobile](#mobile).
+
+### If every action is denied
+
+The hook did not start. In the shell that Cursor uses, from the root of your app, run:
+
+```bash
+python3 --version
+printf '%s' '{"hook_event_name":"beforeShellExecution","command":"npm run test:unit","cwd":""}' | .cursor/hooks/guard-test-writes.py
+```
+
+The second command should print `{"permission": "allow"}`.
+
+| It prints | Do |
+| --- | --- |
+| `Permission denied` | Run the `chmod` command above. |
+| `env: 'python3': No such file or directory` | Install Python 3.9 or later, or put `python3` on the `PATH` of that shell. |
+
+What Cursor itself shows in these two cases was not seen. The code of Cursor 3.23 has a message for a hook that fails, which starts with `Tool blocked because this hook is configured to fail closed`.
+
+If nothing is ever denied, check that the workspace is trusted. Cursor's documentation says project hooks load only in a trusted workspace.
+
 ## Add it to your app
 
-Copy these into the root of your React or Next.js app, next to `app/` or `src/`:
+Clone this repository next to your app:
+
+```bash
+git clone https://github.com/syedmuhdahmad/cursor-qa-agents.git
+```
+
+Copy these from the clone into the root of your React or Next.js app, next to `app/` or `src/`:
 
 <!-- install:copy -->
 
@@ -14,11 +54,21 @@ Copy these into the root of your React or Next.js app, next to `app/` or `src/`:
 .cursor/  .cursorignore  test/  AGENTS.md  vitest.config.ts  playwright.config.ts
 ```
 
+Copy `.cursor/` whole. The two config files load a reporter from `.cursor/qa/` and do not start without it.
+
 Do not copy `package.json` over yours. Merge it instead:
 
-- Add the `devDependencies` listed below, with the version ranges from this repo's `package.json`. React and React DOM come from your app.
-- Add the four `test:*` scripts.
-- Add the `.gitignore` lines you don't already have.
+- Add the `devDependencies` listed below, with the version ranges from this repo's [`package.json`](package.json). React and React DOM come from your app. Leave out `typescript` and `markdownlint-cli2`: they are tools for this repository.
+- Add these four scripts:
+
+  ```json
+  "test:unit": "vitest run --project unit --passWithNoTests",
+  "test:integration": "vitest run --project integration --passWithNoTests",
+  "test:e2e": "playwright test",
+  "test:e2e:list": "playwright test --list"
+  ```
+
+- Add the lines of this repo's [`.gitignore`](.gitignore) that yours does not have.
 
 <!-- install:dev-dependencies -->
 
@@ -41,16 +91,126 @@ npm install
 npx playwright install chromium
 ```
 
-Open the app folder in Cursor with **File → Open Folder**, and use **Agent** mode in chat. Ask mode can explain code but cannot write files.
+Open the app folder in Cursor with **File → Open Folder** as a trusted workspace, and use **Agent** mode in chat.
+
+### Or use the installer
+
+`scripts/install-into.mjs` does the copy and merge steps above. From the clone:
+
+```bash
+node scripts/install-into.mjs ../my-app --dry-run
+node scripts/install-into.mjs ../my-app
+```
+
+The first command prints what would change and writes nothing. The second copies the paths in the list above, adds the dev dependencies and the four scripts to your `package.json`, and adds the `.gitignore` lines you lack. It does not run `npm install`.
+
+It never deletes a file and never replaces one. A file, a dependency range, or a script that your app already has with other content is left alone and listed as skipped. Merge those by hand, or pass `--force` to take the kit's version of every one of them.
+
+### If your app already has these files
+
+| File | What to do |
+| --- | --- |
+| `.cursor/hooks.json` | Keep yours. Add the kit's three entries, `preToolUse`, `beforeShellExecution`, and `beforeMCPExecution`, each with the command `.cursor/hooks/guard-test-writes.py` and `failClosed: true`. |
+| `.cursor/mcp.json` | Keep yours. Add the `playwright` entry from the kit's file, and the `maestro` entry if you test a mobile app. |
+| `.cursor/rules/` | Your rules stay. The kit adds `test-file-conventions.mdc` and `mobile-test-conventions.mdc`. |
+| `AGENTS.md` | Keep yours and put the kit's text at the top. |
+| `.cursorignore` | Keep yours and add the kit's lines. The hook reads this file too. Without the file, the hook holds back lockfiles only. |
+| `test/` | Your tests stay. The kit adds `test/setup.ts`, `test/e2e/seed.spec.ts`, and empty folders. The agent can move or delete a file whose name breaks the hook's rules, such as a `.tsx` test or a file in `__tests__/`, but it cannot edit one. |
+| `vitest.config.ts`, `playwright.config.ts` | Take the kit's files and move your own settings into them. The skills need the verdict reporter, the `unit` and `integration` projects, and `testDir: './test/e2e'`. |
+
+### Things that go wrong on install
+
+- **`@types/node` must be 22, or 24 and up.** A new Next.js app has `"@types/node": "^20"`. `npm install` then stops with `ERESOLVE`, because Vitest 5 accepts `^22.0.0 || >=24.0.0`. Use the range in this repo's `package.json`. The installer leaves your range alone and says so.
+- **`next build` type-checks your tests.** A new Next.js app includes every `.ts` file in `tsconfig.json`. A type error in a test then fails the app build while Vitest still passes. To keep tests out of the build, add `test` to `exclude` in `tsconfig.json`. The example app does.
+- **`next dev` adds to `AGENTS.md`.** Under a coding agent, Next.js 16.4 adds its own block to `AGENTS.md` when `next dev` starts. The block tells the agent to read files under `node_modules/`, which the hook denies. Set `agentRules: false` in `next.config.ts` to stop it. The example app does.
+- **`vitest.config.ts` needs Vite 8.** Vitest 5 installs Vite 8 unless your app already depends on Vite 6 or 7. With Vite 7 an import alias such as `@/lib/db` does not resolve, and `tsc` reports `'tsconfigPaths' does not exist in type 'AllResolveOptions'`. Vite 6 was not tried.
+- **A Vite warning starts every Vitest run** in an app whose `package.json` has no `"type": "module"`. It begins with `(!) Your Vite config uses features`. The run is not affected.
+
+## Start a job
+
+In Agent chat, type `/` and pick a skill from the menu. Then add the file or the feature. Ask for one job in one prompt.
+
+| Job | Prompt | What the agent does |
+| --- | --- | --- |
+| Unit or integration test | `/qa-unit src/components/SignIn.tsx` | Writes `test/unit/components/SignIn.test.ts` with 2 to 6 tests and runs it. Give it a test file instead, and it runs that file and fixes it. |
+| Plan | `/qa-plan sign-in` | Opens the feature in the browser and saves `test/e2e/plan/sign-in.plan.md` with 3 to 8 scenarios. |
+| Generate | `/qa-generate test/e2e/plan/sign-in.plan.md` | Turns the plan into page classes in `test/e2e/pages/` and the spec `test/e2e/sign-in.spec.ts`, then runs the spec. |
+| Heal | `/qa-heal test/e2e/sign-in.spec.ts` | Runs one failing spec and fixes the test, one line at a time, in at most three rounds. |
+
+- `/qa-unit` mirrors the source path and drops a leading `src/` or `app/`. A `.tsx` or `.jsx` file gets a jsdom test. A file named `route.ts`, or under an `api/` folder, goes to `test/integration/`. Say `unit test` or `integration` in the prompt to choose the folder yourself.
+- Before plan and generate, start the app and turn on the `playwright` MCP server. See [The app under test](#the-app-under-test) and [Tools](#tools).
+- `/qa-plan sign-in` opens `http://localhost:3000/sign-in`. If the app or the page is somewhere else, say so, and give a test account if the feature needs one: `/qa-plan checkout. Base URL http://localhost:4000. Route /cart/checkout. Test account ada@example.com / correct-horse-battery.`
+- When the app is wrong, no skill changes what the test expects. `/qa-unit` and `/qa-generate` leave the test failing and name the source line under `Bug:`. `/qa-heal` marks that one test and reports it:
+
+  ```ts
+  // product bug: src/components/SignIn.tsx:7 expected "Email or password is incorrect", got "Invalid credentials"
+  test.fixme('Wrong password shows an error', async ({ page }) => {
+  ```
+
+`/qa` and a plain request, such as "Write a unit test for src/components/SignIn.tsx", also work. [`AGENTS.md`](AGENTS.md) is always in the model's context, and it has a table from the kind of request to the one skill file to read. `/qa` asks the model to hand the request to the subagent in [`.cursor/agents/qa.md`](.cursor/agents/qa.md), which has the same table. On both routes the model must pick the skill file and read it. With a slash skill, Cursor attaches the skill's text to your message. Whether a skill name that is typed or pasted, and not picked from the menu, attaches the skill was not checked.
+
+### The reply and the verdict line
+
+Every skill ends with a form that the agent fills in. This is the form of `/qa-unit`:
+
+```text
+Job: write
+Source: src/components/SignIn.tsx
+Test file: test/unit/components/SignIn.test.ts
+Command: RTK_DISABLED=1 npx vitest run test/unit/components/SignIn.test.ts
+Cause: none
+Fix: none
+Before: none
+After: QA-VERDICT: PASS (passed 4, failed 0, skipped 0, files 1)
+Verdict: PASS
+Bug: none
+Not checked: the other test files
+```
+
+`Verdict:` is `PASS`, `FAIL`, or `BLOCKED:` with what you need to do, such as start the app. A plan ends with `DONE`. The last line, `Not checked:`, says what the agent did not run or verify.
+
+The agent does not judge the runner's output. Every Vitest run and every Playwright run ends with one line that starts with `QA-VERDICT:`, and the agent copies it:
+
+```text
+QA-VERDICT: PASS (passed 3, failed 0, skipped 0, files 1)
+QA-VERDICT: FAIL (passed 2, failed 1, skipped 0, files 1)
+QA-VERDICT: FAIL (passed 0, failed 0, skipped 2, files 1) reason: skipped or todo tests count as a failure
+QA-VERDICT: FAIL (passed 0, failed 0, skipped 0, files 0) reason: no tests ran
+QA-VERDICT: PASS-WITH-FIXME (passed 5, failed 0, skipped 0, fixme 1, files 1)
+```
+
+| Word | Means |
+| --- | --- |
+| `PASS` | At least one test ran, and every test passed on its first attempt. |
+| `PASS-WITH-FIXME` | Playwright only. Every test passed except the ones marked `test.fixme()`. |
+| `FAIL` | Every other result: a failed test, a skipped or todo test, a test that passed only on a retry, a stray `.only`, an error outside a test, or no tests. |
+
+- The line is stricter than the exit code and does not change it. Vitest exits 0 when every test is skipped, and the line says `FAIL`.
+- Some runs print no line: `npm run test:e2e:list`, a run with a `--reporter` flag, and a Vitest run that is killed. No line is never a pass.
+- On a new install with no tests, `npm run test:unit` exits 0 and prints `QA-VERDICT: FAIL (passed 0, failed 0, skipped 0, files 0) reason: no tests ran`.
+
+### With a small model
+
+- Pick the skill from the `/` menu. `/qa` and a plain request leave the model one more choice to make.
+- Keep each prompt to one file, one feature, or one plan.
+- Ask for generate in two prompts. The first uses the browser, and the second does not:
+
+  ```text
+  /qa-generate test/e2e/plan/sign-in.plan.md page classes only
+  /qa-generate test/e2e/plan/sign-in.plan.md spec only
+  ```
+
+- When the reply says `BLOCKED`, do what the line says and ask again.
 
 ## Tools
 
-The Playwright MCP server is listed in [`.cursor/mcp.json`](.cursor/mcp.json). Turn it on in Cursor settings, and restart it if Cursor does not show it. Every enabled MCP server adds its tool list to each request, so turn it off while you only write unit or integration tests.
+[`.cursor/mcp.json`](.cursor/mcp.json) lists two MCP servers. Turn a server on in Cursor settings for the jobs that need it, and restart it if Cursor does not show it. Every enabled MCP server adds its tool list to each request, so keep both off while you only write unit or integration tests.
 
 | Tool | Used for |
 | --- | --- |
-| `playwright` MCP | Exploring a live page while planning or generating a spec |
-| `playwright-cli` | Debugging a failing spec (`npx playwright test --debug=cli`, then `attach`) |
+| `playwright` MCP | Exploring a live page in `/qa-plan` and `/qa-generate` |
+| `maestro` MCP | Reading the device screen in `/qa-mobile-plan` and `/qa-mobile-heal` |
+| `playwright-cli` | Looking at the page of a paused spec in `/qa-heal` (a spec run with `--debug=cli`, then `playwright-cli attach`) |
 | `npx vitest` | Running unit and integration tests from the shell |
 
 The agent runs every test command with `RTK_DISABLED=1` in front. See [Using RTK](#using-rtk) for why.
@@ -59,11 +219,15 @@ The agent runs every test command with `RTK_DISABLED=1` in front. See [Using RTK
 
 End-to-end tests open the app at `http://localhost:3000`. Playwright starts it with `npm run dev` when nothing is listening there.
 
+The plan and generate jobs use the browser tool, which starts nothing, and the hook denies `npm run dev` to the agent. Start the app yourself before you ask for a plan or a spec. Without it the reply is `BLOCKED: start the app with npm run dev, then ask again.`
+
 If your app runs somewhere else, start it yourself and set `BASE_URL`:
 
 ```bash
-BASE_URL=http://localhost:5173 npm run test:e2e
+BASE_URL=http://localhost:4000 npm run test:e2e
 ```
+
+In a prompt, name the address in words: `/qa-plan sign-in. Base URL http://localhost:4000.` On the agent's own command line, `BASE_URL` may only name `localhost` or `127.0.0.1`.
 
 ## Using RTK
 
@@ -112,58 +276,6 @@ exclude_commands = ["^npx vitest\\b", "^npx playwright test\\b"]
 
 This applies to every project on your machine and is not part of this repo, so keep the prefix in the skills for anyone else who uses them.
 
-## Start the qa agent
-
-The role is defined in [`.cursor/agents/qa.md`](.cursor/agents/qa.md). In the agent chat, type `/qa`. Ask for one job per prompt, name the source file or screen, and say **UI** or **API**:
-
-- **UI** means client screens, forms, and flows. The network may be mocked.
-- **API** means route handlers, server actions, services, auth, or saved data. These tests use the real backend.
-
-### Unit and integration
-
-```text
-/qa Write a unit test for src/components/SignIn.tsx. This is UI.
-```
-
-```text
-/qa Write an integration test for app/api/session/route.ts. This is API.
-```
-
-Files are `.test.ts` and contain no JSX. They mirror the source path, so `src/components/SignIn.tsx` gets `test/unit/components/SignIn.test.ts`.
-
-### End-to-end
-
-End-to-end work has three steps. Ask for one at a time.
-
-**Plan.** The agent explores one feature in the browser and saves `test/e2e/plan/<name>.plan.md`.
-
-```text
-/qa Plan end-to-end coverage for sign-in. This is UI.
-```
-
-**Generate.** The agent turns one plan into `test/e2e/<name>.spec.ts` and page classes in `test/e2e/pages/`, then runs the spec.
-
-```text
-/qa Generate the Playwright spec from test/e2e/plan/sign-in.plan.md. This is UI.
-```
-
-**Heal.** The agent reruns one failing spec, debugs it with `playwright-cli`, and fixes the test. A real product bug is marked `test.fixme()` and reported.
-
-```text
-/qa Fix the failing spec test/e2e/sign-in.spec.ts.
-```
-
-## What qa reads
-
-`qa` reads only the files for the job you asked for. This keeps it fast and stops it from mixing instructions.
-
-| Job | Files |
-| --- | --- |
-| Unit or integration | [`vitest-unit-integration`](.cursor/skills/vitest-unit-integration/SKILL.md), plus at most one reference |
-| Plan | [`playwright-planner`](.cursor/skills/playwright-planner/SKILL.md) |
-| Generate | [`playwright-generator`](.cursor/skills/playwright-generator/SKILL.md) and [`playwright-page-objects`](.cursor/skills/playwright-page-objects/SKILL.md) |
-| Heal | [`playwright-healer`](.cursor/skills/playwright-healer/SKILL.md) and [`playwright-page-objects`](.cursor/skills/playwright-page-objects/SKILL.md) |
-
 ## Layout
 
 ```text
@@ -173,9 +285,22 @@ test/e2e/<name>.spec.ts    Playwright specs
 test/e2e/plan/             End-to-end plans
 test/e2e/pages/            Page classes
 test/e2e/seed.spec.ts      Checks that the app responds at /
+test/setup.ts              Runs before every Vitest test file
+test/mobile/               Maestro plans and flows, see Mobile
+
+AGENTS.md                  Write scope, the table from request to skill, and the test commands
+.cursor/skills/qa-*/       One skill for each job, with its templates
+.cursor/agents/qa.md       The /qa router
+.cursor/rules/             Where each kind of test file goes
+.cursor/hooks/             The hook and its tests
+.cursor/hooks.json         Registers the hook with Cursor
+.cursor/mcp.json           The playwright and maestro MCP servers
+.cursor/qa/                The verdict reporters and the VERSION file
 ```
 
-## Run the tests yourself
+Unit and integration test files end in `.test.ts` and contain no JSX.
+
+To run the tests yourself:
 
 ```bash
 npm run test:unit
@@ -185,104 +310,121 @@ npm run test:e2e
 
 `npm run test:e2e:list` prints the Playwright tests without running them.
 
-## What qa will not change
+## What the hook does
 
-`qa` reads `app/`, `src/`, and similar source to learn the behavior. It does not edit that source. If a test fails because the product is wrong, it reports the bug instead of weakening the test.
+Cursor starts [`.cursor/hooks/guard-test-writes.py`](.cursor/hooks/guard-test-writes.py) before a tool call or a shell command of any agent in the folder. The hook answers allow or deny. Every deny carries a message that names the cause and says what to do instead.
 
-A project hook, [`.cursor/hooks/guard-test-writes.py`](.cursor/hooks/guard-test-writes.py), enforces this. Writes are allowed only in:
+- **File edits.** The agent's file tools may write in `test/**`, `vitest.config.ts`, `playwright.config.ts`, the root `README.md`, `.gitignore`, `AGENTS.md`, `.cursor/skills/**`, and `.cursor/agents/**`. The hook denies a file edit elsewhere in the project.
+- **Test files.** Under `test/` the hook holds the file names: `.ts` and never `.tsx`, no `__tests__/` folder, page classes as `test/e2e/pages/<name>-page.ts`, plans as `<name>.plan.md`. It denies a write that adds text which hides a failing test, such as `.only(`, `.skip(`, `.todo(`, or `waitForTimeout(`. `test.fixme(` needs a `// product bug:` line above it.
+- **Shell.** Allowed: a test run that names a path under `test/`, the four `npm run test:*` scripts, reads such as `ls`, `cat`, and `grep`, and `git` and `gh` within limits. Force push, a switch to an existing branch, and merge are denied. So is a command that is not on the list, such as `npm install`, `npm run dev`, `curl`, or `cd` into a folder.
+- **MCP tools.** A file that an MCP tool writes must be inside the paths above. A few tools are denied by name, such as the Playwright tool that runs code outside the page.
+- **Reads.** [`.cursorignore`](.cursorignore) keeps lockfiles, build output, and test reports out of the agent's context. Cursor does not apply it to shell commands, so the hook does. Add your app's large fixtures or generated code there.
 
-- `test/**`
-- `vitest.config.ts`
-- `playwright.config.ts`
-- root `README.md`
-- `.gitignore`
-- `AGENTS.md`
-- `.cursor/skills/**`
-- `.cursor/agents/**`
+[docs/hook-rules.md](docs/hook-rules.md) lists every rule, with examples that the hook's own tests run, and says how to find out why a command was denied.
 
-In the shell, the agent can run tests, read files, and use `git` and `gh` within the limits below. The hook denies every other command, and its message tells the agent what is allowed. Run a denied command yourself when you need it.
+### Limits
 
-The hook reads command lines. It does not sandbox the tests: a test file is code, and the runners execute it with your permissions.
+- **What the hook checks:** file-editing tool calls, the text of shell commands, and the name and file arguments of MCP tool calls.
+- **What it does not check:** what a program does after it starts. A test file, a config file, a setup file, and a Maestro flow are code, and Vitest, Playwright, and Maestro run them with your permissions. A test that writes to `src/` passes the hook, because the hook sees only an allowed test command. The hook also does not see what an MCP tool does once it runs, and its MCP rules have not been seen working in a live Cursor session.
+- **The hook is a guardrail and not a sandbox.** It keeps an agent that follows its instructions out of application source. It will not hold against an agent that follows instructions injected through a source file or a web page.
 
-### Tests
+Three more things to know:
 
-- `npm run test:unit`, `test:integration`, `test:e2e`, and `test:e2e:list`, with runner arguments after `--`.
-- `npx vitest` and `npx playwright test`. `vitest init`, `playwright install`, and other `playwright` subcommands are denied.
-- A runner option that names a file or folder must point inside the write scope: `--outputFile`, `--output`, `--config`, `--root`, `--dir`, `--coverage.reportsDirectory`, `--attachmentsDir`, and `--last-failed-file`.
-- `npx` cannot use `-c`, and `--package` must name one of the test runners.
-- `npx playwright-cli` is limited to the commands the healer uses on a test paused by `--debug=cli`: `attach`, `detach`, `list`, `pause-at`, `resume`, `step-over`, `snapshot`, `find`, `generate-locator`, `console`, `requests`, `request`, `click`, `dblclick`, `fill`, `type`, `press`, `hover`, `select`, `check`, and `uncheck`. `--filename` must point inside the write scope.
+- The hook reads a command line before the shell does, and it can read one wrongly. Gaps of that kind were closed in [issue 8](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/8), in [issue 9](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/9), and in this version. More may exist. The rules document lists the [known limits](docs/hook-rules.md#known-limits-and-unverified-behaviour).
+- The agent may read any file that `.cursorignore` does not name. That list saves context. It does not keep secrets.
+- In a workspace that is not trusted, Cursor does not load project hooks, by its documentation. Nothing is checked there.
 
-### git
+If you need a real boundary, add a stronger layer. Run the agent in a container with application source mounted read-only, or add a CI check that fails a pull request when `git diff --name-only` lists a path outside the write scope.
 
-Allowed:
+The full list is under [What it does not check](docs/hook-rules.md#what-it-does-not-check) in the rules document.
 
-- Inspecting: `status`, `log`, `diff`, `show`, `blame`, `grep`, `ls-files`, `ls-tree`, `rev-parse`, `rev-list`, `describe`, `shortlog`, `cat-file`, `merge-base`, `name-rev`, `for-each-ref`, `show-ref`, `check-ignore`, `reflog`, `stash list`, `stash show`, `worktree list`, `version`, and `help`.
-- `add` and `commit`.
-- A new branch from the current commit (`git switch -c <name>`, `git checkout -b <name>`, `git branch <name>`), and a new tag.
-- `fetch`, `ls-remote`, and `push` with a configured remote such as `origin`.
-- Unstaging with `git reset`, and `git restore`, `git rm`, `git mv`, and `git checkout --` on files inside the write scope.
-- `git remote -v`, `git remote show`, `git remote get-url`, and `git config --get`.
+## Mobile
 
-Denied:
+Three more skills plan, write, and fix [Maestro](https://maestro.dev) flows for an Android or iOS app. Treat them as a preview.
 
-- `push` with `--force`, `--force-with-lease`, `--delete`, `--mirror`, `--all`, `--tags`, or `--prune`, and a refspec that starts with `+` or `:`.
-- A URL or path in place of a remote name, and `--upload-pack` or `--receive-pack`.
-- Deleting, renaming, or forcing a branch or tag, and `checkout -B` or `switch -C`.
-- `commit --amend`, a reset that moves `HEAD`, and `reflog expire` or `delete`.
-- Switching to an existing branch, `pull`, `merge`, `rebase`, `cherry-pick`, `stash`, `apply`, and `clean`.
-- `--output=<file>` on any command, and `git grep --open-files-in-pager`.
-- Adding or changing a remote, `git config` writes, aliases, `-c` overrides, and `--git-dir` or `--work-tree`.
-- Changing another repository. After `cd` or with `git -C` to a directory outside this repository, only the inspecting commands are allowed.
+- Checked: every flow template and every command in the skills, against Maestro 2.10.0 with no device attached.
+- Not checked: a flow run on a device, anything on iOS, and the skills on a model.
 
-Shortened options such as `--del` for `--delete` are treated like the full option.
+You need:
 
-### gh
+- The [Maestro CLI](https://docs.maestro.dev/maestro-cli/how-to-install-maestro-cli), 2.6.0 or later, and Java 17 or later.
+- Android: `adb` on your `PATH`, and a running emulator or a device with USB debugging.
+- iOS: a Mac with Xcode and a booted Simulator. Physical iOS devices are not supported.
 
-Allowed:
+You start the device and install the app. The agent never boots a device, never installs an app, and never switches to the other platform. Install a real build of the app, not Expo Go: the flows launch the app under its own id. For plan and heal, turn on the `maestro` MCP server in Cursor settings, and keep it off when you do no mobile work.
 
-- `pr create`, `view`, `list`, `diff`, `status`, `checks`, and `comment`.
-- `issue create`, `view`, `list`, `status`, and `comment`.
-- `create` and `comment` act on this repository only. A body file (`--body-file` or `-F`) is published, so it must be inside the write scope.
-- `run view`, `list`, and `watch`; `workflow view` and `list`; `release view` and `list`; `label list`; `repo view` and `list`; `search`; `status`; `auth status`.
-- `gh api` for GET requests.
+Every flow starts by clearing the app's data on the device, and Maestro installs two helper apps of its own there. Do not point the skills at a device whose app data you need.
 
-Denied: every other `gh` command. That includes `pr merge`, `pr close`, `pr checkout`, every delete, `workflow run`, `repo clone`, `run download`, `alias`, `comment --delete-last`, `--repo` or `-R` on `create` and `comment`, and `auth status --show-token`. `gh api` is denied with another method, with `--input`, with fields unless the method is given as GET, and for the `graphql` endpoint.
+Name the platform and the app id in the prompt:
 
-### Other shell rules
+| Job | Prompt | What the agent does |
+| --- | --- | --- |
+| Plan | `/qa-mobile-plan sign-in. This is Android. App id com.example.app` | Walks one feature on the device and saves `test/mobile/plan/sign-in.plan.md` with the texts and ids it saw. |
+| Generate | `/qa-mobile-generate test/mobile/plan/sign-in.plan.md. This is Android.` | Writes one flow file for each scenario in `test/mobile/sign-in/`, then runs that folder. |
+| Heal | `/qa-mobile-heal test/mobile/sign-in/02-wrong-password.flow.yaml. This is Android.` | Runs one failing flow, reads the screen where it stops, and makes the smallest fix. |
 
-The hook also denies:
+One flow file serves both platforms. A product bug is not hidden: the flow gets the tag `fixme` and a `# product bug:` comment that names the source line.
 
-- Redirects into files outside the write scope (`>`, `>>`, `&>`, `>|`, `<>`). `/dev/null` is allowed.
-- Text the shell rewrites before it runs the command: `$(...)`, backticks, `<(...)`, `$VARIABLE`, `$'...'`, and brace expansion such as `{a,b}`. `$?` is allowed. To pass a literal `$`, put it in single quotes.
-- A wildcard that could expand to an option, because a file can be named `-delete`: a word that starts with `*`, `?`, or `[…]`, and an option with a wildcard in its name. `test/*.ts`, `./*`, and `--include=*.ts` are allowed. To pass a pattern to the program as it is, quote it: `find . -name '*.ts'`.
-- Setting any variable other than `BASE_URL`, `CI`, `FORCE_COLOR`, `NO_COLOR`, `PLAYWRIGHT_HTML_OPEN`, and `RTK_DISABLED`.
-- A program named by path, such as `./test/bin/tool`. Only `node_modules/.bin/vitest`, `playwright`, and `playwright-cli` may be run by path.
-- Read commands when they would run a program or write outside the write scope: `sed` with `w`/`e` or `-f`, in-place `sed` on source, `sort -o` or a `uniq` output file outside the write scope, `sort --compress-program`, `rg --pre`, and `find` with `-delete`, `-exec`, `-execdir`, `-ok`, `-okdir`, `-fprint`, `-fprint0`, `-fprintf`, or `-fls`.
-- `rm`, `mv`, `cp`, `mkdir`, `touch`, `tee`, `truncate`, and `ln` on anything outside the write scope, including through `--target-directory`.
-- `rtk` commands other than the ones RTK's own rewriting produces for allowed programs, such as `rtk git`, `rtk read`, and `rtk ls`. `rtk test`, `rtk proxy`, and any name rtk does not know run whatever follows them.
-
-After `cd`, relative paths are checked against the new directory. The hook cannot follow `cd -` or `cd -P`, so relative paths after them are denied.
-
-## What qa does not read
-
-[`.cursorignore`](.cursorignore) keeps lockfiles, build output, and test reports out of the agent's context. Cursor does not apply it to terminal commands, so the hook also denies `cat`, `grep`, `sed`, and similar reads of those paths. Add your app's large fixtures or generated code there.
-
-Test the hook after changing it:
-
-```bash
-python3 -m unittest discover -s .cursor/hooks
+```text
+test/mobile/plan/<feature>.plan.md                Plans
+test/mobile/<feature>/<nn>-<scenario>.flow.yaml   Flows, one scenario per file
+test/mobile/subflows/<name>.yaml                  Start steps shared by the flows of one plan
+test/mobile/config.yaml                           Settings for a run of the whole folder
 ```
 
-## Roadmap
+To run the flows of one feature yourself:
 
-Mobile end-to-end testing with [Maestro](https://maestro.dev) is planned, for Android and iOS. The work is tracked in [issue 21](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/21), in this order:
+```bash
+maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/sign-in
+```
 
-1. [Shared groundwork](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/22): file layout, `qa` routing, the hook allowlist, and the Maestro MCP server.
-2. [Android](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/23): emulators and devices.
-3. [iOS](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/24): the Simulator.
+`--exclude-tags=fixme` leaves out the flows that record a product bug. It has no effect when you pass a single file.
 
-Known gaps in the current setup are tracked under the [Repo hardening milestone](https://github.com/syedmuhdahmad/cursor-qa-agents/milestone/1).
+Known limits:
 
-## License
+- With no device, each skill stops and tells you what to start. On Linux or Windows the skills stop when the prompt says iOS.
+- After `maestro test` has run, the `maestro` MCP server may lose the device. This comes from reading Maestro's source and was not run. Plan and heal then ask you to turn the server off and on.
+- An element with no id is found by its text. The agent does not add a `testID` to your source.
+- Maestro cannot mock the network, so the skills plan no scenario that needs the server to fail.
+- Maestro sends usage analytics unless `MAESTRO_CLI_NO_ANALYTICS` is set in your environment.
 
-[MIT](LICENSE). Skills copied from other projects keep their own licenses; see [issue 15](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/15).
+The device checks are tracked in [issue 23](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/23) for Android and [issue 24](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/24) for iOS.
+
+## Example app and evaluation
+
+Neither is part of the files you copy.
+
+[`examples/next-app/`](examples/next-app/) is a small Next.js app with a sign-in form, a session route, a dashboard page, and hand-written reference tests in the layout the skills produce. The kit is tested against it:
+
+```bash
+node scripts/test-example.mjs
+```
+
+This copies the example to a temporary folder, installs the kit there with `scripts/install-into.mjs`, and runs `npm install`, the build, and the three test commands. It stops at the first failure. The installer reads the copy list and the dependency list from this README, so a path or a package that is missing from them fails the run. Pass `--port 3100` when port 3000 is busy, and `--keep` to keep the folder.
+
+[`eval/`](eval/) holds nine fixed test jobs on the example app and a scorer that needs no model. It is for comparing two versions of the skills, or two models, on the same work. The scorer runs the tests itself and marks a reply that says `PASS` over a failing run as `FALSE PASS`. See [`eval/README.md`](eval/README.md).
+
+## Upgrading
+
+`.cursor/qa/VERSION` holds the version of the kit you copied:
+
+```bash
+cat .cursor/qa/VERSION
+```
+
+A copy without that file is older than 0.1.0. [CHANGELOG.md](CHANGELOG.md) lists what changed, and starts with the things you must do.
+
+To upgrade, copy the files again. A dry run of the installer lists every file of yours that differs from the new version as skipped.
+
+- **Safe to overwrite:** `.cursor/skills/qa-*/`, `.cursor/agents/qa.md`, `.cursor/hooks/`, `.cursor/qa/`, and the kit's two files in `.cursor/rules/`, unless you changed them yourself.
+- **Merge by hand:** `AGENTS.md`, `vitest.config.ts`, `playwright.config.ts`, `.cursorignore`, `.gitignore`, `.cursor/hooks.json`, `.cursor/mcp.json`, `test/setup.ts`, and the scripts and dev dependencies in `package.json`.
+- **Delete by hand:** a skill folder that the new version no longer has. A copy over the old `.cursor/` leaves it behind, and the installer never deletes.
+
+Version 0.1.0 renamed the skills. Delete `vitest-unit-integration`, `playwright-planner`, `playwright-generator`, `playwright-healer`, `playwright-page-objects`, and `playwright-cli` from `.cursor/skills/`. Type `/qa-unit`, `/qa-plan`, `/qa-generate`, or `/qa-heal` where you typed `/qa`.
+
+## Contributing, security, and license
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) says how a skill is laid out, which checks to run, which files must stay in step, and how to release. Everyone who takes part follows the [code of conduct](CODE_OF_CONDUCT.md).
+- [SECURITY.md](SECURITY.md) says how to report a security problem in private.
+- [MIT](LICENSE) is the license for the files written for this project.
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every other source with its license. Three Vitest reference files in `.cursor/skills/qa-unit/references/` are unchanged copies from other projects, under the MIT license. Their license files sit in the same folder, so keep them when you copy `.cursor/`. The plan, generate, and heal skills began from Playwright's agent definitions, under Apache-2.0.
