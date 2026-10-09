@@ -22,7 +22,7 @@ alwaysApply: false
 - A check of an element that has an id gives `id:` and `text:`, so the text is checked too. Leave `text:` out only for a text that changes from run to run, such as an order number.
 - Write `- hideKeyboard` between typing and the next tap, and nowhere else. With the keyboard open, a tap can close the keyboard and miss the button. With no keyboard open, `- hideKeyboard` presses back on Android.
 - There is no command that waits a fixed time. `tapOn` and `assertVisible` wait up to 17 seconds by themselves. For a slower screen use `extendedWaitUntil` with `timeout: 60000`.
-- A product bug is marked with the tag `fixme`, and the line above `- fixme` is a comment that names the source line: `# product bug: src/screens/SignIn.tsx:41 expected "Wrong email or password", got "Invalid credentials"`. Never tag a flow `fixme` for another reason.
+- A product bug is marked with the tag `fixme`, and the line above `- fixme` is a comment that names the source line: `# product bug: src/screens/SignIn.tsx:41 expected "Wrong email or password", got "Login failed"`. Never tag a flow `fixme` for another reason.
 
 ## Run a feature's folder
 

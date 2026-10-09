@@ -1,6 +1,6 @@
 {
   "name": "cursor-qa-agents",
-  "description": "Cursor agent setup for writing tests: a qa role, Vitest and Playwright skills, and a hook that stops the agent editing application source.",
+  "description": "Cursor agent setup for writing and fixing tests: skills for Vitest, Playwright, and Maestro, and a guardrail hook that denies the agent's direct edits to application source.",
   "license": "MIT",
   "private": true,
   "type": "module",

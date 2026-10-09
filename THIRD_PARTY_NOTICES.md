@@ -49,20 +49,22 @@ Do not edit the three files. Markdown lint skips the folder so that they stay un
 
 No license file sits next to these three skills, because their text was written for this project. The first two versions remain in the git history.
 
+`qa-mobile-plan`, `qa-mobile-generate`, and `qa-mobile-heal` were written for this project after these three, and none of their text comes from Playwright. They follow three of the conventions above: the three jobs, the `**Steps:**` label with the `1.` and `1.1` numbering in a plan, and a mark with a comment when the app is wrong. In a Maestro flow the mark is the tag `fixme`.
+
 ## Ideas and acknowledgements
 
 These projects are named to give credit for ideas. The skills state the ideas in this project's own words and hold none of these projects' files.
 
 - [ponytail](https://github.com/DietrichGebert/ponytail), MIT License, Copyright (c) 2026 DietrichGebert. Its "smallest complete change" rules are the source of four things here:
-  - the ordered list of fixes in `qa-heal` and `qa-unit`, where the model takes the first one that fixes the failure;
-  - the rule in both skills to add no helpers, retries, or options;
-  - the step in `qa-heal` that lists every spec that uses a page class before the class is edited, and then fixes the cause once in the class;
-  - the closing `Not checked:` line of the reply forms.
+  - the ordered list of fixes in `qa-heal` and `qa-unit`, where the model takes the first one that fixes the failure, and the table in `qa-mobile-heal` that gives one edit for each kind of failure;
+  - the rule in `qa-heal`, `qa-mobile-heal`, and `qa-unit` to add no helpers, retries, or options;
+  - the step in `qa-heal` that lists every spec that uses a page class before the class is edited, and then fixes the cause once in the class, and the same step for a subflow in `qa-mobile-heal`;
+  - the closing `Not checked:` line of the reply form of all seven skills.
 - [pstack](https://github.com/cursor/plugins/tree/main/pstack) in cursor/plugins, MIT License, Copyright (c) 2026 Lauren Tan. Its bug-fix playbook and principles are the source of four rules here:
-  - point to the cause in the error or the source before editing (`qa-heal` and `qa-unit`);
-  - put the old line back when a fix did not change the failure (`qa-heal` and `qa-unit`);
-  - report one line from before the fix and one from after, copied exactly (`qa-heal` and `qa-unit`);
-  - do not hide a failure behind a guard (`qa-heal`).
+  - point to the cause in the error or the source before editing (`qa-heal`, `qa-mobile-heal`, and `qa-unit`);
+  - put the old line back when a fix did not change the failure (`qa-heal`, `qa-mobile-heal`, and `qa-unit`);
+  - report one line from before the fix and one from after, copied exactly (`qa-heal`, `qa-mobile-heal`, and `qa-unit`);
+  - do not hide a failure behind a guard (`qa-heal`), or behind `optional: true` in a flow (`qa-mobile-heal` and `qa-mobile-generate`).
 - The page classes that `qa-generate` writes follow the page object model pattern in the [Playwright documentation](https://playwright.dev/docs/pom).
 
 ## Copies that earlier commits held

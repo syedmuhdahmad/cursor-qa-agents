@@ -35,12 +35,32 @@
         "why": "the spec names its plan on line 1, and locators belong in page classes"
       },
       {
+        "glob": "test/e2e/sign-in.spec.ts",
+        "assertsInEveryTest": true,
+        "why": "a test with no expect checks nothing"
+      },
+      {
+        "glob": ["test/e2e/sign-in.spec.ts", "test/e2e/pages/*-page.ts"],
+        "inCode": [
+          "Enter your email",
+          "Enter a valid email address",
+          "Password must be at least 8 characters",
+          "Email or password is incorrect",
+          "Something went wrong. Try again."
+        ],
+        "why": "each message the plan expects is used by the code, not only named in a comment"
+      },
+      {
         "glob": "test/e2e/pages/*-page.ts",
         "exists": true,
         "absent": ["expect("],
         "why": "there is at least one page class, and assertions belong in the spec"
       }
-    ]
+    ],
+    "bugServer": {
+      "mustFail": ["Wrong password shows an error"],
+      "note": "the alert says \"Invalid credentials\" and the plan says \"Email or password is incorrect\""
+    }
   },
   "reference": {
     "restore": [

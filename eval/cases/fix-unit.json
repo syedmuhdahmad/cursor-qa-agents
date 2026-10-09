@@ -29,6 +29,11 @@
         "glob": "test/unit/lib/validation.test.ts",
         "absent": ["Password must have at least 8 characters"],
         "why": "the wrong expected value must be gone"
+      },
+      {
+        "glob": "test/unit/lib/validation.test.ts",
+        "absent": ["readFileSync", "readFile("],
+        "why": "a test runs the source, it does not read the file as text"
       }
     ],
     "minKilled": 2,

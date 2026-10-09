@@ -17,7 +17,7 @@ How to read the tables: each row is one input and the hook's answer. A row that 
 | `beforeMCPExecution` | Before every MCP tool call | The same as `preToolUse` for that call |
 
 - The hook answers `allow` or `deny`. A deny carries one message, the same for you and for the agent. The message names the cause and says what to do instead.
-- The hook does not look at which agent or model makes the call. It applies to every Cursor agent in the folder, not only to `qa`. With the hook in place no agent in this folder can edit application source or run `npm install`.
+- The hook does not look at which agent or model makes the call. It applies to every Cursor agent in the folder, not only to `qa`. No agent's file edit or shell command can write application source or run `npm install`. The hook is a guardrail, not a sandbox: it cannot stop code that a test file, a config, or an MCP tool runs once a runner starts it. See "What it does not check".
 - All three entries have `failClosed: true`. Cursor's documentation says it then blocks the action when the hook cannot run.
 - Input that is not valid JSON is denied. An error inside the hook is a deny with a message, and the error text goes to Cursor's Hooks output.
 - Empty input is allowed. Cursor does not send it.
@@ -119,7 +119,7 @@ A write tool call under `test/` must also pass the naming rules and the content 
 - A page class is `test/e2e/pages/<name>-page.ts`, in lower case, directly in that folder.
 - A plan is `test/e2e/plan/<name>.plan.md` or `test/mobile/plan/<name>.plan.md`.
 - A path that still has a placeholder such as `<name>` is denied.
-- Deleting and moving are not held to the names, so a wrong name can be fixed. Creating and editing are: a file that already has a wrong name cannot be edited until it is moved.
+- The names are held for a new file only. Deleting, moving, and editing a file that already exists are not, so a wrong name a person made can be fixed or edited in place. The content rules below still apply to such a file.
 
 ### Content of test code
 
@@ -142,6 +142,9 @@ The hook compares the new text with the file on disk and denies only what the wr
 | `Write {"file_path": "test/e2e/a.spec.ts", "content": "await page.waitForTimeout(500)"}` | deny |
 | `Write {"file_path": "test/e2e/a.spec.ts", "content": "await page.waitForLoadState('networkidle')"}` | deny |
 | `Write {"file_path": "test/e2e/a.spec.ts", "content": "await button.click({ force: true })"}` | deny |
+| `Write {"file_path": "test/e2e/pages/a-page.ts", "content": "await this.save.click({ force: true })"}` | deny |
+| `Write {"file_path": "test/e2e/a.spec.ts", "content": "rmSync(dir, { recursive: true, force: true })"}` | allow |
+| `Write {"file_path": "test/e2e/fixtures.ts", "content": "rmSync(dir, { recursive: true, force: true })"}` | allow |
 | `Write {"file_path": "test/integration/a.test.ts", "content": "rmSync(dir, { recursive: true, force: true })"}` | allow |
 | `Write {"file_path": "test/e2e/a.spec.ts", "content": "test.fixme('adds', async () => {})"}` | deny |
 | `Write {"file_path": "test/e2e/a.spec.ts", "content": "// product bug: src/a.ts:7 expected \"1\", got \"2\"\ntest.fixme('adds', async () => {})"}` | allow |
@@ -154,7 +157,8 @@ The hook compares the new text with the file on disk and denies only what the wr
 
 - Test code is a file under `test/` that ends in `.ts`, `.js`, `.mts`, `.cts`, `.mjs`, or `.cjs`. Plans, flows, and files outside `test/` are not scanned.
 - A write may not add `.only(`, `.skip(`, `.todo(`, or `.fails(` on a test function (`it`, `test`, `describe`, `suite`, `bench`, and names built on them such as `test.describe`), or `test.fail(`, `skipIf(`, or `runIf(`.
-- Under `test/e2e/` it may not add `waitForTimeout(`, `networkidle`, or `force: true`.
+- Under `test/e2e/` it may not add `waitForTimeout(` or `networkidle`.
+- Under `test/e2e/` it may not add `force: true` as an option of a Playwright action (`click`, `dblclick`, `tap`, `check`, `uncheck`, `hover`, `fill`, `selectOption`, `setChecked`, `setInputFiles`, `dragTo`, `clear`, `selectText`, `scrollIntoViewIfNeeded`). A `force: true` passed to `fs.rm` or `rmSync`, as a globalSetup or fixture uses to clear a temp folder, is not an action and is allowed. The option object must open with `{` on the same line as the action call.
 - `test.fixme(` is allowed only in a spec directly in `test/e2e/`, and only when the line above it starts with `// product bug:`.
 - The check is on plain text. The same text in a comment or a string counts.
 - A write may not add `testOutputDir` to `config.yaml` or `config.yml` under `test/mobile/`. See "maestro".
@@ -248,8 +252,16 @@ One run, of files the command names under `test/`.
 | `npx vitest run --outputFile=test/out.json test/unit/a.test.ts` | allow |
 | `npx vitest run --config src/vitest.config.ts test/unit/a.test.ts` | deny |
 | `npx vitest run --root src test/unit/a.test.ts` | deny |
+| `npx vitest run --reporter=verbose test/unit/a.test.ts` | deny |
+| `npx vitest run --reporter dot test/unit/a.test.ts` | deny |
+| `npx vitest run --passWithNoTests test/unit/a.test.ts` | deny |
+| `npx vitest run --pass-with-no-tests test/unit/a.test.ts` | deny |
+| `npx vitest run --allowOnly test/unit/a.test.ts` | deny |
+| `npx vitest run --allow-only test/unit/a.test.ts` | deny |
 
 A runner option that names a file or folder must point inside the write scope: `--outputFile`, `--config`, `--root`, `--dir`, `--attachmentsDir`, `--fsModuleCachePath`, `--coverage.reportsDirectory`, `--coverage.htmlDir`, and the short forms `-c` and `-r`.
+
+`--reporter` replaces Vitest's reporters, which removes the `QA-VERDICT:` line the kit reads. `--passWithNoTests` lets an empty run pass, and `--allowOnly` lets a stray `.only` pass; the kit's config sets both to false so the verdict is right, so the agent may not turn them back on. The npm scripts pass `--passWithNoTests` inside the script, where the hook does not see it, so `npm run test:unit` still works.
 
 ### Playwright
 
@@ -263,6 +275,9 @@ A runner option that names a file or folder must point inside the write scope: `
 | `npx playwright test test/e2e/sign-in.spec.ts --repeat-each=3` | allow |
 | `npx playwright test test/e2e/sign-in.spec.ts --repeat-each=5` | allow |
 | `npx playwright test test/e2e/sign-in.spec.ts --repeat-each=6` | deny |
+| `npx playwright test test/e2e/sign-in.spec.ts --repeat-each 3 --repeat-each 100` | deny |
+| `npx playwright test test/e2e/sign-in.spec.ts --reporter=line` | deny |
+| `npx playwright test test/e2e/sign-in.spec.ts --add-reporter=line` | allow |
 | `npx playwright test --list` | allow |
 | `npx playwright test test/e2e/sign-in.spec.ts -g "Wrong password shows an error"` | allow |
 | `npx playwright test` | deny |
@@ -283,6 +298,8 @@ A runner option that names a file or folder must point inside the write scope: `
 | `npx playwright --version` | deny |
 
 `--output`, `--config`, `-c`, and `--last-failed-file` must point inside the write scope.
+
+`--reporter` replaces Playwright's reporters and removes the `QA-VERDICT:` line the kit reads, so it is denied; `--add-reporter` keeps the kit's reporter and is allowed. `--repeat-each` may be at most 5, and every occurrence is checked, because Playwright uses the last value.
 
 ### npm scripts and npx
 
@@ -425,6 +442,9 @@ The read programs are `ls`, `cat`, `head`, `tail`, `grep`, `rg`, `wc`, `cut`, `s
 | `diff src/a.ts src/b.ts` | deny |
 | `sed -i s/a/b/ src/a.ts` | deny |
 | `sed 'w src/a.ts' test/a.ts` | deny |
+| `sed -n 't x w src/a.ts' test/a.ts` | deny |
+| `sed -n ':x;t x e touch src/x' test/a.ts` | deny |
+| `sed -n ':a;ta;p' test/a.ts` | deny |
 | `sed -f test/x.sed src/a.ts` | deny |
 | `sed -i'src/*' -e p README.md` | deny |
 | `sed -i.bak -e p README.md` | allow |
@@ -437,7 +457,7 @@ The read programs are `ls`, `cat`, `head`, `tail`, `grep`, `rg`, `wc`, `cut`, `s
 | `printf -v x 1` | deny |
 
 - Reads are not limited to the project or to the write scope.
-- `sed` may print and filter. A script that writes a file or runs a command (`w`, `e`), `-f`, and an in-place edit of a file outside the write scope are denied. The backup suffix of `sed -i` may hold only letters, digits, dots, `~`, `_`, and dashes: GNU sed puts the file name in place of a `*` in the suffix, so `-i'src/*'` writes the backup into `src/`.
+- `sed` may print and filter. A script that writes a file (`w`, `W`), runs a command (`e`, or the `w` or `e` flag of `s`), or uses `-f`, and an in-place edit of a file outside the write scope, are denied. A label or branch command (`:`, `b`, `t`, `T`) is denied too: GNU sed ends a label at whitespace and BSD sed at the end of the line, so a label can hide a following `w FILE` or `e CMD`, as in `sed 't x w src/a.ts'`, from a parser that picks the wrong rule. The skills use no label. An `a`, `i`, or `c` appends literal text, and `r` or `R` reads a file, so they are allowed. The backup suffix of `sed -i` may hold only letters, digits, dots, `~`, `_`, and dashes: GNU sed puts the file name in place of a `*` in the suffix, so `-i'src/*'` writes the backup into `src/`.
 - `sort -o` and the second file of `uniq` must be inside the write scope. `sort --compress-program`, `rg --pre`, and `rg --hostname-bin` run a program and are denied.
 - `find` may not use `-delete`, `-exec`, `-execdir`, `-ok`, `-okdir`, `-fprint`, `-fprint0`, `-fprintf`, or `-fls`.
 - `file -C` writes a compiled magic file and is denied.
@@ -504,7 +524,13 @@ A pattern in `.cursorignore` with a slash at its start or in its middle, such as
 | `ln -s ../src test/link` | deny |
 | `ln test/unit/a.test.ts test/unit/b.test.ts` | deny |
 | `install -m 755 test/a test/b` | deny |
+| `rm -rf test/*/` | deny |
+| `rm -R test/lin?/a.ts -rf` | deny |
+| `mv test/lin?/a.ts -b test` | deny |
+| `cp test/a.ts test/*/b.ts` | deny |
+| `truncate -s 0 test/*.txt` | deny |
 
+- A wildcard (`*`, `?`, `[`) in a path of `rm`, `mv`, `cp`, `mkdir`, `touch`, `tee`, or `truncate` is denied. The hook reads a glob such as `test/*/` as text and sees it inside `test/`, but the shell expands it to whatever it matches, which can be a symlink under `test/` that leads outside the write scope. Name each file in full.
 - `ln` is not available. The hook checks a path before the command runs, so it cannot follow a link that the same command makes.
 - The value of `mkdir -m`, `touch -d`, `-t`, and `-r`, and `truncate -s` and `-r` is not read as a path.
 - A word after `--` is always read as a path, even when it starts with a dash.
@@ -694,6 +720,8 @@ The hook checks the words it is given. Text that the shell turns into other word
 | `echo $(ls)` | deny |
 | ``echo `ls` `` | deny |
 | `cat <(ls)` | deny |
+| `cat =(touch src/x)` | deny |
+| `ls test/unit/*(.)` | deny |
 | `echo $HOME` | deny |
 | `echo ${HOME}` | deny |
 | `echo $?` | allow |
@@ -718,6 +746,7 @@ The hook checks the words it is given. Text that the shell turns into other word
 | `echo "unclosed` | deny |
 
 - `$(...)`, backticks, `<(...)`, `$VARIABLE`, `${...}`, `$'...'`, and brace expansion such as `{a,b}` are denied. `$?`, `$$`, `$#`, and `$!` are allowed. To pass a literal `$`, put it in single quotes.
+- A `(` joined to the word before it is denied. In zsh, `=(...)` runs a command and feeds its output as a file, and a glob qualifier such as `test/unit/*(.)` or `*(e:'cmd':)` runs a command. bash does not treat either specially, and the hook cannot know the shell. A `(` that starts a word is a subshell, denied as a compound command.
 - A wildcard that could expand to an option is denied, because a file can be named `-delete`: a word that starts with `*`, `?`, or `[...]`, and an option with a wildcard in its name. A pattern with a fixed start is allowed.
 - A `#` that starts a word begins a comment. The shell skips the rest of the line and the hook does not, so a quote inside a comment would hide the next line from the hook. Run on bash 5.3: `echo a #'`, a line break, `touch x`, a line break, `'` created the file `x`. A `#` inside a word or inside quotes is allowed.
 - `~-`, `~+`, and `~1` at the start of a word stand for a directory only the shell knows. `~/` is the home directory, which the hook can follow.
@@ -859,7 +888,7 @@ Rules that deny more than they must:
 - `rg` skips what `.gitignore` names, but the hook denies `rg "text"` at the project root whenever the root holds an ignored path.
 - A long option that takes its value as the next word is read correctly only in the cases listed above. `mkdir --mo 755 test/x` is denied for `755`.
 - A message heredoc with an apostrophe or a bracket in it is denied, although current shells handle it.
-- A file under `test/` that already has a wrong name cannot be edited, only moved or deleted.
+- A wildcard in a path of `rm`, `mv`, `cp`, `mkdir`, `touch`, `tee`, or `truncate` is denied even when every file it would match is inside the write scope.
 - The agent cannot remove a symlink loop under `test/`. Remove it yourself.
 
 Rules that deny less than they could:

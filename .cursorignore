@@ -10,6 +10,11 @@
 #
 # test-results/ is deliberately absent: the qa-heal skill reads
 # error-context.md from it.
+#
+# A line that starts with a slash matches in the project root only. dist/,
+# build/, out/, and coverage/ start with one, because a folder of that name
+# deeper down, such as app/build/ or src/dist/, is application source that the
+# agent must be able to read. Change a line if your build writes elsewhere.
 
 # Lockfiles: large, generated, and never needed to write a test.
 package-lock.json
@@ -21,14 +26,14 @@ bun.lockb
 # Build output and framework caches.
 node_modules/
 .next/
-dist/
-build/
-out/
+/dist/
+/build/
+/out/
 .turbo/
 .vercel/
 
 # Test reports and tool state. Read the test source instead.
-coverage/
+/coverage/
 playwright-report/
 blob-report/
 .vitest/

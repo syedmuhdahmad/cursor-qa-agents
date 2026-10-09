@@ -7,6 +7,8 @@
 //   node eval/make-sandbox.mjs --case unit-ui --out ../runs/unit-ui-before --kit-ref origin/main
 //   node eval/make-sandbox.mjs --server normal --out ../runs/server-normal
 //   node eval/make-sandbox.mjs --server bug --out ../runs/server-bug
+//   node eval/make-sandbox.mjs --clean ../runs/unit-ui
+//   node eval/make-sandbox.mjs --relink ../runs/unit-ui
 //   node eval/make-sandbox.mjs --list
 //
 // --out must be outside this repository. For a case it becomes:
@@ -18,11 +20,15 @@
 // a git ref with --kit-ref. node_modules is installed once per set of
 // dependencies in a base folder and hard-linked into every sandbox.
 //
+// --clean <run-folder> is for a run that has been scored. It writes the
+// agent's changes to <run-folder>/changes.diff and removes node_modules and
+// .next from the sandbox. meta.json, the reply, and score.json stay.
+// --relink <run-folder> puts node_modules back, to score the run again.
+//
 // Node built-ins only. The only git commands that write run inside the sandbox.
 
 import { createHash } from 'node:crypto'
 import {
-  copyFileSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -51,11 +57,15 @@ import {
   KIT_ROOT,
   META_NAME,
   SANDBOX_NAME,
+  answersInSkill,
   askHook,
+  cleanReport,
+  cleanRun,
   git,
-  linkTree,
+  linkNodeModules,
   listCaseIds,
   loadCase,
+  relinkRun,
   responds,
   routeOf,
   run,
@@ -64,6 +74,8 @@ import {
 const USAGE = `Usage:
   node eval/make-sandbox.mjs --case <id> --out <folder> [options]
   node eval/make-sandbox.mjs --server normal|bug --out <folder> [options]
+  node eval/make-sandbox.mjs --clean <run-folder>
+  node eval/make-sandbox.mjs --relink <run-folder>
   node eval/make-sandbox.mjs --list
 
   --case <id>       The case to build a sandbox for. --list prints the ids.
@@ -76,7 +88,10 @@ const USAGE = `Usage:
   --bug-port <n>    Port of the server for the product-bug app. Default ${DEFAULT_BUG_PORT}.
   --server <which>  Build an app copy to run a server from, not a sandbox.
   --skip-browser    Do not run \`npx playwright install chromium\` after a new base install.
-  --force           Replace --out if it exists.`
+  --force           Replace --out if it exists.
+  --clean <folder>  For a scored run: write its changes to changes.diff, then remove
+                    node_modules and .next from its sandbox. Frees about 16,000 inodes.
+  --relink <folder> Put node_modules back into a cleaned run, to score it again.`
 
 // Generated files a maintainer may have in examples/next-app, and two files
 // that would tell the agent about the reference tests.
@@ -262,17 +277,13 @@ function ensureBase(baseRoot, packagePath, { browser }) {
   return { dir, fresh: true }
 }
 
+// Stops before the first link when the file system of `appDir` has too few
+// free inodes, and warns when only a few more sandboxes fit.
 function shareNodeModules(appDir, baseRoot, browser) {
   const base = ensureBase(baseRoot, join(appDir, 'package.json'), { browser })
-  const started = Date.now()
-  const counts = linkTree(join(base.dir, 'node_modules'), join(appDir, 'node_modules'))
+  linkNodeModules(base.dir, appDir, log)
   const lockfile = join(base.dir, 'package-lock.json')
-  if (existsSync(lockfile)) copyFileSync(lockfile, join(appDir, 'package-lock.json'))
-  const how = counts.copied === 0 ? 'hard links' : `${counts.linked} hard links and ${counts.copied} copies`
-  log(`node_modules: ${how} from ${base.dir} in ${((Date.now() - started) / 1000).toFixed(1)}s`)
-  if (counts.copied > 0) {
-    log('Files were copied because --base is on another file system than --out. Put them on the same one to save time and space.')
-  }
+  if (existsSync(lockfile)) cpSync(lockfile, join(appDir, 'package-lock.json'))
   return base.dir
 }
 
@@ -417,7 +428,9 @@ function reportKit(sandbox, testCase) {
         : `the hook has no rule for "${probe.name}" (answered ${probe.got})`,
     )
   }
-  return { route, missing, hookProbes }
+  // A skill that prints the answer of this case makes the run say little.
+  const answerInSkill = route === 'skill' ? answersInSkill(read(`.cursor/skills/${testCase.skill}/SKILL.md`), testCase) : []
+  return { route, missing, hookProbes, answerInSkill }
 }
 
 // --- The two jobs -----------------------------------------------------------
@@ -459,14 +472,23 @@ async function buildSandbox(options) {
   log(`Kit: ${installReport.filesAdded} files, ${installReport.devDependenciesAdded} dev dependencies, ${installReport.scriptsAdded} scripts added`)
   if (installReport.skipped.length > 0) log(`Kit: skipped because the example has its own: ${installReport.skipped.join(', ')}`)
 
-  const base = shareNodeModules(sandbox, baseRoot, !options.skipBrowser)
+  let base
+  try {
+    base = shareNodeModules(sandbox, baseRoot, !options.skipBrowser)
+  } catch (error) {
+    // Leave no half-built sandbox behind, for example when it does not fit.
+    rmSync(out, { recursive: true, force: true })
+    throw error
+  }
 
   applySetup(sandbox, testCase)
 
+  // Both URLs are recorded: a spec that passes on the normal app is also run
+  // against the product-bug app by score.mjs.
+  const servers = { normal: `http://localhost:${options.appPort}`, bug: `http://localhost:${options.bugPort}` }
   let server = null
   if (testCase.server) {
-    const port = testCase.server === 'bug' ? options.bugPort : options.appPort
-    server = { variant: testCase.server, url: `http://localhost:${port}` }
+    server = { variant: testCase.server, url: servers[testCase.server] }
     pointPlaywrightAt(sandbox, server.url)
   }
 
@@ -480,9 +502,11 @@ async function buildSandbox(options) {
     route: kitReport.route,
     baseline,
     server,
+    servers,
     base,
     install: installReport,
     missing: kitReport.missing,
+    answerInSkill: kitReport.answerInSkill,
     hookProbes: kitReport.hookProbes,
     node: process.version,
   }
@@ -507,6 +531,10 @@ async function buildSandbox(options) {
     log(`Warning:  the agent sees the path of its folder, and this one contains "${testCase.id}".`)
     log('          That can give the case away. Use a name such as run-01 for --out.')
   }
+  if (kitReport.answerInSkill.length > 0) {
+    log(`Warning:  the skill /${testCase.skill} prints the answer of this case: ${kitReport.answerInSkill.join(' and ')}.`)
+    log('          A pass here does not show that the agent found the bug. Use an example from another screen in the skill.')
+  }
   if (kitReport.missing.length === 0) {
     log('Missing:  nothing')
   } else {
@@ -527,7 +555,12 @@ function buildServer(options) {
   // The kit is installed only so that package.json lists the same
   // dependencies as a sandbox, and the same base node_modules fit.
   installKit(out, describeWorkingTree())
-  shareNodeModules(out, baseRoot, !options.skipBrowser)
+  try {
+    shareNodeModules(out, baseRoot, !options.skipBrowser)
+  } catch (error) {
+    rmSync(out, { recursive: true, force: true })
+    throw error
+  }
 
   const edits = options.server === 'bug' ? bugServerEdits() : []
   for (const { edit, id } of edits) {
@@ -562,6 +595,8 @@ async function main(argv) {
         server: { type: 'string' },
         'skip-browser': { type: 'boolean', default: false },
         force: { type: 'boolean', default: false },
+        clean: { type: 'string' },
+        relink: { type: 'string' },
         list: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
@@ -580,6 +615,18 @@ async function main(argv) {
       for (const id of listCaseIds()) {
         const testCase = loadCase(id)
         log(`${id.padEnd(22)} /${testCase.skill.padEnd(12)} ${testCase.title}`)
+      }
+      return 0
+    }
+    if (values.clean || values.relink) {
+      if (values.out || values.case || values.server || (values.clean && values.relink)) {
+        console.error(`--clean and --relink take one run folder and no other action.\n\n${USAGE}`)
+        return 1
+      }
+      if (values.clean) log(cleanReport(cleanRun(values.clean)))
+      else {
+        const linked = relinkRun(values.relink, log)
+        log(`Relinked: ${linked.sandbox} has its node_modules again. Score it with: node eval/score.mjs ${linked.root} --reply <file>`)
       }
       return 0
     }

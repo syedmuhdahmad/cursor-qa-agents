@@ -1,0 +1,10 @@
+{
+  // Makes the "paths" of ../tsconfig.json apply to the files under test/, also
+  // when that file has "test" in "exclude". Vitest reads the paths of a
+  // tsconfig.json only for the files it includes. Without this file an import
+  // such as `@/lib/db` does not resolve in a test, and `vi.mock('@/lib/db')`
+  // replaces nothing.
+  "extends": "../tsconfig.json",
+  "include": ["**/*.ts"],
+  "exclude": []
+}

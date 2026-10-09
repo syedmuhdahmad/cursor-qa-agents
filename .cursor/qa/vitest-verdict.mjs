@@ -9,6 +9,11 @@
 // PASS means at least one test ran and every test passed on its first attempt.
 // Anything else is FAIL. The line reports the run. It does not change the exit code.
 //
+// With --coverage the line is printed after the coverage table. By then Vitest has
+// checked the coverage thresholds, and has set a failing exit code when coverage is
+// below one. A PASS then becomes FAIL with the reason "the runner reported a failure".
+// Vitest's own error line above it names the threshold.
+//
 // This file is plain JavaScript with no imports, so it needs no build step and no dependency.
 // Tests: node --test ".cursor/qa/*.test.mjs"
 
@@ -127,6 +132,19 @@ export function countVitestRun(testModules = [], unhandledErrors = [], reason = 
   return counts
 }
 
+function isFailingExitCode(value) {
+  if (value === undefined || value === null || value === '') return false
+  const code = Number(value)
+  return Number.isInteger(code) && code !== 0
+}
+
+// A line that was held back for the coverage table, and the exit code of the process
+// at the time the line is printed. Returns the line to print.
+export function heldVerdict(line, exitCode) {
+  if (!line.startsWith('QA-VERDICT: PASS ') || !isFailingExitCode(exitCode)) return line
+  return `${line.replace('QA-VERDICT: PASS ', 'QA-VERDICT: FAIL ')} reason: ${REASONS.runner}`
+}
+
 // The line is printed even when this file cannot read the run, for example after
 // a Vitest upgrade that changes what a reporter receives. No PASS without a count.
 function brokenLine(error) {
@@ -137,13 +155,17 @@ function brokenLine(error) {
 export default class VitestVerdictReporter {
   constructor(options = {}) {
     this.write = typeof options.write === 'function' ? options.write : (line) => process.stdout.write(`${line}\n`)
+    this.exitCode = typeof options.exitCode === 'function' ? options.exitCode : () => process.exitCode
     this.specifications = []
     this.held = undefined
+    // In watch mode the exit code of an earlier run stays set. A run that starts
+    // with a failing exit code is judged by its tests alone.
+    this.failingAtStart = false
     this.flush = () => {
       if (this.held === undefined) return
       const line = this.held
       this.held = undefined
-      this.write(line)
+      this.write(this.failingAtStart ? line : heldVerdict(line, this.exitCode()))
     }
   }
 
@@ -154,6 +176,7 @@ export default class VitestVerdictReporter {
   onTestRunStart(specifications) {
     this.flush()
     this.specifications = specifications ?? []
+    this.failingAtStart = isFailingExitCode(this.exitCode())
   }
 
   onTestRunEnd(testModules, unhandledErrors, reason) {
@@ -182,7 +205,7 @@ export default class VitestVerdictReporter {
     }
   }
 
-  // Vitest calls this after it has written the coverage report.
+  // Vitest calls this after it has written the coverage report and checked the thresholds.
   onFinishedReportCoverage() {
     this.flush()
   }

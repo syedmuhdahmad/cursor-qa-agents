@@ -52,7 +52,8 @@
       "Before": "AssertionError: expected 'Password must be at least 6 characters' to be 'Password must be at least 8 characters'",
       "After": "QA-VERDICT: FAIL (passed 11, failed 3, skipped 0, files 1)",
       "Verdict": "FAIL",
-      "Bug": "lib/validation.ts:25 expected \"Password must be at least 8 characters\", received \"Password must be at least 6 characters\""
+      "Bug": "lib/validation.ts:25 expected \"Password must be at least 8 characters\", received \"Password must be at least 6 characters\"",
+      "Not checked": "the other test files"
     }
   }
 }

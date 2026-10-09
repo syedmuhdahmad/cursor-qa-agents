@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import VitestVerdictReporter, { REASONS, countVitestRun, vitestVerdict } from './vitest-verdict.mjs'
+import VitestVerdictReporter, { REASONS, countVitestRun, heldVerdict, vitestVerdict } from './vitest-verdict.mjs'
 
 const LINE = /^QA-VERDICT: (PASS|FAIL) \(passed \d+, failed \d+, skipped \d+(, flaky \d+)?, files \d+\)( reason: \S.*)?$/
 const ONLY_MESSAGE = '[Vitest] Unexpected .only modifier. Remove it or pass --allowOnly argument to bypass this error'
@@ -163,6 +163,33 @@ describe('vitestVerdict: counts in, line out', () => {
       'the runner reported a failure',
       'the verdict reporter failed',
     ])
+  })
+})
+
+describe('heldVerdict: a held line and the exit code in, the line to print out', () => {
+  const PASS = 'QA-VERDICT: PASS (passed 3, failed 0, skipped 0, files 1)'
+
+  it('turns PASS into FAIL with a reason when the exit code is a failure', () => {
+    for (const exitCode of [1, 2, 130, '1']) {
+      const line = heldVerdict(PASS, exitCode)
+      assert.equal(line, 'QA-VERDICT: FAIL (passed 3, failed 0, skipped 0, files 1) reason: the runner reported a failure')
+      assert.match(line, LINE)
+    }
+  })
+
+  it('leaves PASS alone when the exit code is 0, not set, or not a number', () => {
+    for (const exitCode of [undefined, null, 0, '0', '', 'x', Number.NaN, 1.5]) {
+      assert.equal(heldVerdict(PASS, exitCode), PASS, String(exitCode))
+    }
+  })
+
+  it('leaves a FAIL line as it is', () => {
+    for (const line of [
+      'QA-VERDICT: FAIL (passed 2, failed 1, skipped 0, files 1)',
+      'QA-VERDICT: FAIL (passed 0, failed 0, skipped 2, files 1) reason: skipped or todo tests count as a failure',
+    ]) {
+      assert.equal(heldVerdict(line, 1), line)
+    }
   })
 })
 
@@ -347,9 +374,10 @@ describe('VitestVerdictReporter', () => {
   const passing = () => fakeModule({ children: [fakeTest('passes')] })
   const failing = () => fakeModule({ state: 'failed', children: [fakeTest('fails', 'failed')] })
 
-  function reporterWith(config = {}) {
+  // `exitCode` stands in for process.exitCode, which the reporter reads by default.
+  function reporterWith(config = {}, exitCode = () => undefined) {
     const lines = []
-    const reporter = new VitestVerdictReporter({ write: (line) => lines.push(line) })
+    const reporter = new VitestVerdictReporter({ write: (line) => lines.push(line), exitCode })
     reporter.onInit({ config })
     return { reporter, lines }
   }
@@ -405,6 +433,62 @@ describe('VitestVerdictReporter', () => {
     assert.deepEqual(lines, [])
     reporter.onFinishedReportCoverage()
     assert.deepEqual(lines, ['QA-VERDICT: FAIL (passed 0, failed 1, skipped 0, files 1)'])
+  })
+
+  it('with --coverage, says FAIL when Vitest set a failing exit code after the tests passed', () => {
+    // This is what a coverage threshold does: Vitest checks it after onTestRunEnd.
+    let exitCode
+    const { reporter, lines } = reporterWith({ coverage: { enabled: true } }, () => exitCode)
+    reporter.onTestRunStart([])
+    reporter.onTestRunEnd([passing()], [], 'passed')
+    exitCode = 1
+    reporter.onFinishedReportCoverage()
+    assert.deepEqual(lines, ['QA-VERDICT: FAIL (passed 1, failed 0, skipped 0, files 1) reason: the runner reported a failure'])
+    assert.match(lines[0], LINE)
+  })
+
+  it('with --coverage, keeps PASS when the exit code is 0 or not set', () => {
+    for (const exitCode of [undefined, null, 0, '0']) {
+      const { reporter, lines } = reporterWith({ coverage: { enabled: true } }, () => exitCode)
+      reporter.onTestRunStart([])
+      reporter.onTestRunEnd([passing()], [], 'passed')
+      reporter.onFinishedReportCoverage()
+      assert.deepEqual(lines, ['QA-VERDICT: PASS (passed 1, failed 0, skipped 0, files 1)'], String(exitCode))
+    }
+  })
+
+  it('with --coverage, says FAIL when the held line is printed as the process ends', () => {
+    let exitCode
+    const { reporter, lines } = reporterWith({ coverage: { enabled: true } }, () => exitCode)
+    reporter.onTestRunEnd([passing()], [], 'passed')
+    exitCode = 1
+    reporter.flush()
+    assert.deepEqual(lines, ['QA-VERDICT: FAIL (passed 1, failed 0, skipped 0, files 1) reason: the runner reported a failure'])
+  })
+
+  it('keeps PASS for a run that started after the exit code was already failing, as in watch mode', () => {
+    const { reporter, lines } = reporterWith({ coverage: { enabled: true } }, () => 1)
+    reporter.onTestRunStart([])
+    reporter.onTestRunEnd([passing()], [], 'passed')
+    reporter.onFinishedReportCoverage()
+    assert.deepEqual(lines, ['QA-VERDICT: PASS (passed 1, failed 0, skipped 0, files 1)'])
+  })
+
+  it('reads process.exitCode when it is given no other source', () => {
+    const lines = []
+    const reporter = new VitestVerdictReporter({ write: (line) => lines.push(line) })
+    reporter.onInit({ config: { coverage: { enabled: true } } })
+    const before = process.exitCode
+    try {
+      process.exitCode = undefined
+      reporter.onTestRunStart([])
+      reporter.onTestRunEnd([passing()], [], 'passed')
+      process.exitCode = 1
+      reporter.onFinishedReportCoverage()
+    } finally {
+      process.exitCode = before
+    }
+    assert.deepEqual(lines, ['QA-VERDICT: FAIL (passed 1, failed 0, skipped 0, files 1) reason: the runner reported a failure'])
   })
 
   it('prints a held line before the next run starts', () => {

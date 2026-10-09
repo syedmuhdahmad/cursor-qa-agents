@@ -1,20 +1,22 @@
 ---
 name: qa-mobile-generate
-description: "Turn one mobile plan into Maestro flows, one file for each scenario, then run them. Usage: /qa-mobile-generate test/mobile/plan/sign-in.plan.md. This is Android. App id com.example.app"
+description: "Turn one mobile plan into Maestro flows, one file for each scenario, then run them. Usage: /qa-mobile-generate test/mobile/plan/profile.plan.md. This is Android. App id com.example.app"
 disable-model-invocation: true
 ---
 
 # Turn one mobile plan into Maestro flows
 
-You write one flow file for each scenario of the plan, then run the feature's folder on a device. One flow file serves Android and iOS.
+You write one flow file for each scenario of the plan, then run the feature's folder on a device. One flow file serves Android and iOS. Never write a second file for the other platform.
 
 Read application source (`app/`, `src/`, and similar). Never edit it.
 
-- Plan, the input: `test/mobile/plan/sign-in.plan.md`
-- Flow, one for each scenario: `test/mobile/sign-in/01-valid-account.flow.yaml`. The scenario's `**Flow:**` line in the plan gives the path.
-- Subflow, only when the plan has `## Start steps`: `test/mobile/subflows/open-sign-in.yaml`. The plan's `**Subflow:**` line gives the path.
+- Plan, the input: `test/mobile/plan/profile.plan.md`
+- Flow, one for each scenario: `test/mobile/profile/01-new-name.flow.yaml`. The scenario's `**Flow:**` line in the plan gives the path.
+- Subflow, only when the plan has `## Start steps`: `test/mobile/subflows/open-profile.yaml`. The plan's `**Subflow:**` line gives the path.
 - Suite file: `test/mobile/config.yaml`
 - Templates: `.cursor/skills/qa-mobile-generate/templates/flow.yaml`, and `subflow.yaml` and `config.yaml` in the same folder
+
+The examples are from another app. Take your ids, texts, and paths from the prompt and the plan.
 
 Do the steps in order. In every table, use the first row that matches. When a step says BLOCKED, stop work, go to step 9, and put the sentence after `Verdict: BLOCKED:`.
 
@@ -28,87 +30,46 @@ Steps 3 and 4 use this list. Each comment is a plan line. The lines under it are
     clearState: true
     clearKeychain: true
 # 2. Do the start steps.
-- runFlow: ../subflows/open-sign-in.yaml
-# 3. Type `ada@example.com` into "Email" (id `sign-in-email`).
+- runFlow: ../subflows/open-profile.yaml
+# 3. Type `Grace Hopper` into "Display name" (id `profile-name`).
 - tapOn:
-    id: "sign-in-email"
-- inputText: "ada@example.com"
-# 4. Tap "Sign in" (id `sign-in-submit`).
+    id: "profile-name"
+- inputText: "Grace Hopper"
+# 4. Tap "Save profile" (id `profile-save`).
 - hideKeyboard
 - tapOn:
-    id: "sign-in-submit"
-# 5. Tap "Forgot password?" (no id).
-- tapOn: "Forgot password?"
-# 6. If "Allow Example to send you notifications?" shows, tap "Allow".
-- runFlow:
-    when:
-      visible: "Allow Example to send you notifications?"
-    commands:
-      - tapOn: "Allow"
-# 7. Press the system back button.
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - back
-# Expect: The text "Welcome back, Ada" is visible.
-- assertVisible: "Welcome back, Ada"
-# Expect: "Sign out" (id `home-sign-out`) is visible.
+    id: "profile-save"
+# 5. Tap "Change photo" (no id).
+- tapOn: "Change photo"
+# Expect: The text "Profile saved" is visible.
+- assertVisible: "Profile saved"
+# Expect: "Edit profile" (id `account-edit`) is visible.
 - assertVisible:
-    id: "home-sign-out"
-    text: "Sign out"
-# Expect: The element with id `order-number` is visible.
+    id: "account-edit"
+    text: "Edit profile"
+# Expect: The element with id `profile-updated` is visible.
 - assertVisible:
-    id: "order-number"
-# Expect: The text "Wrong email or password" is not visible.
-- assertNotVisible: "Wrong email or password"
+    id: "profile-updated"
+# Expect: The text "That name is taken" is not visible.
+- assertNotVisible: "That name is taken"
 ```
 
-| Rule | Write |
+| The plan line | Write |
 | --- | --- |
-| A `Type` or `Tap` line has an id | `id:` with that id. Not the text. |
-| An `Expect` line has an id and a quoted text | `id:` and `text:`, both, as in the `Sign out` lines |
-| An `Expect` line starts with `The element with id` | `id:` only, as in the `order-number` lines |
-| The plan line says `(no id)` | The whole text in quotes, as in line 5 |
-| A `Tap` line comes straight after a `Type` line | `- hideKeyboard` first, as in line 4. Write `- hideKeyboard` nowhere else. |
+| A `Type` or `Tap` line with an id | `id:` with that id. Not the text. |
+| An `Expect` line with an id and a quoted text | `id:` and `text:`, both, as in the `account-edit` lines |
+| An `Expect` line that starts with `The element with id` | `id:` only |
+| A line with `(no id)` | The whole text in quotes, as in line 5 |
 | `Do the start steps.` | `../subflows/` and the file name from the plan's `**Subflow:**` line |
-| No form fits the plan line | The commands of the closest form. Name the line under `Not checked:`. |
+| `If "..." shows, tap "...".` or `Press the system back button.` | The block from section A |
+| No row matches | The commands of the closest form. Name the line under `Not checked:`. |
 
-Why: with the keyboard open, a tap can close the keyboard and miss the button. With no keyboard open, `- hideKeyboard` presses back on Android, which can close the app.
-
+- A `Tap` line straight after a `Type` line gets `- hideKeyboard` first, as in line 4. Write `- hideKeyboard` nowhere else.
+  Why: with the keyboard open, a tap can close the keyboard and miss the button. With no keyboard open, `- hideKeyboard` presses back on Android, which can close the app.
 - Put every id, text, and value in double quotes, letter for letter from the plan.
 - Never use `point:` or any other screen coordinates.
 - There is no command that waits a fixed time. `tapOn` and `assertVisible` wait up to 17 seconds for the element by themselves.
 - Indent with two spaces. A tab breaks the file.
-
-## Android and iOS
-
-One flow file serves both platforms. Never write a second file for the other platform.
-
-| Topic | Android | iOS |
-| --- | --- | --- |
-| Stable id | `id:` takes the id from the plan. | `id:` takes the id from the plan. |
-| Back | `- back` presses the system back button. On the app's first screen that closes the app. | `- back` does nothing. The flow taps the app's own back control. |
-| Permission dialog | The dialog's texts differ from iOS. | The alert's texts differ from Android. |
-| Keyboard | `- hideKeyboard` closes it. With no keyboard open it presses back. | `- hideKeyboard` can fail. A tap on a text that is not a control closes it. |
-| Clean state | `clearState: true` clears the app's data. | `clearState: true` clears the app's data. `clearKeychain: true` clears the keychain. |
-| No row matches | Write the plan line as it is. Name it under `Not checked:`. | The same |
-
-A step that must differ goes into the one file, in a `runFlow` block for each platform. Write such blocks only for a plan line that names a platform, such as line 7 of "Plan line to commands".
-
-```yaml
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - back
-- runFlow:
-    when:
-      platform: iOS
-    commands:
-      - tapOn:
-          id: "nav-back"
-```
 
 ## Steps
 
@@ -121,7 +82,7 @@ A step that must differ goes into the one file, in a `runFlow` block for each pl
    | Platform | The prompt: `This is Android.` gives `android`. `This is iOS.` gives `ios`. | Reply `Which platform? Say "This is Android." or "This is iOS."` and stop. |
    | App id | The prompt: `App id com.example.app`. Otherwise the plan's `**App id (Android):**` or `**App id (iOS):**` line. | The line says `not given`: reply `Which app id?` and stop. Do not use the other platform's id. |
 
-   The platform is iOS and the computer you run on is Linux or Windows: BLOCKED: `iOS needs a Mac with Xcode. This computer is not a Mac.` Do not run on Android in its place.
+   The platform is iOS and the computer you run on is Linux or Windows: BLOCKED: `iOS needs a Mac with Xcode. This computer is not a Mac.`
 
 3. **Subflow.** The plan has no `## Start steps`: go to step 4. The subflow file exists: keep it and go to step 4. Otherwise read the subflow template and write the subflow file, the words in CAPITALS replaced: one comment and its commands for each start step, from "Plan line to commands". Line 2 stays `appId: ${APP_ID}`, letter for letter.
 
@@ -129,9 +90,9 @@ A step that must differ goes into the one file, in a `runFlow` block for each pl
 
    | Plan | Flow file |
    | --- | --- |
-   | The plan's path | Line 1: `# plan: test/mobile/plan/sign-in.plan.md` |
-   | `### 2.1 Wrong password shows an error` | Line 2: `# scenario: 2.1 Wrong password shows an error`, and `name: "Wrong password shows an error"` |
-   | The feature name | The one line under `tags:`: `- sign-in` |
+   | The plan's path | Line 1: `# plan: test/mobile/plan/profile.plan.md` |
+   | `### 2.1 A taken name shows an error` | Line 2: `# scenario: 2.1 A taken name shows an error`, and `name: "A taken name shows an error"` |
+   | The feature name | The one line under `tags:`: `- profile` |
    | A numbered step | A comment with the step, word for word, then its commands |
    | An Expect line | A comment `# Expect:` and the line, word for word, then its command |
    | No row matches | Leave that plan line out and name it under `Not checked:`. |
@@ -145,7 +106,7 @@ A step that must differ goes into the one file, in a `runFlow` block for each pl
 
 5. **Suite file.** `test/mobile/config.yaml` exists: go to step 6. Otherwise read the config template and write it there, unchanged.
 
-6. **Check each file you wrote.** `maestro check-syntax test/mobile/sign-in/01-valid-account.flow.yaml`. Change only the path. One command for each flow and for the subflow.
+6. **Check each file you wrote.** `maestro check-syntax test/mobile/profile/01-new-name.flow.yaml`. Change only the path. One command for each flow and for the subflow.
 
    | The output | Do |
    | --- | --- |
@@ -154,7 +115,7 @@ A step that must differ goes into the one file, in a `runFlow` block for each pl
    | One line such as `Invalid Command: tapOnn at /syntax-checker:13:9` | The line names the fault and, after the first `:`, about which line of your file. Correct the file and check it again. |
    | No row matches | Go to step 9 with `Verdict: FAIL` and the output under `Not checked:`. |
 
-7. **Run the feature's folder.** `RTK_DISABLED=1 maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/sign-in`. Change only the platform word, the app id, and the folder. A flow takes 15 to 60 seconds. The output has one line for each flow, `[Passed]` or `[Failed]` and the flow's name, not in the order of the files. Then comes the summary line: `2/2 Flows Passed in 48s` when all passed, `1/2 Flow Failed` when one did not. Ignore the box drawn with lines after it.
+7. **Run the feature's folder.** `RTK_DISABLED=1 maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/profile`. Change only the platform word, the app id, and the folder. Never start a device and never run on the other platform. A flow takes 15 to 60 seconds. The output has one line for each flow, `[Passed]` or `[Failed]` and the flow's name, not in the order of the files. Then comes the summary line: `2/2 Flows Passed in 48s` when all passed, `1/2 Flow Failed` when one did not. Ignore the box drawn with lines after it.
 
    | The output contains | Do |
    | --- | --- |
@@ -165,9 +126,7 @@ A step that must differ goes into the one file, in a `runFlow` block for each pl
    | `[Failed]` | Go to step 8. |
    | No row matches | BLOCKED: `the test command did not finish.` Put the last output line under `Not checked:`. |
 
-   Never start a device and never run on the other platform. The user starts the device and installs the app.
-
-8. **Not a pass.** Take the first `[Failed]` line, for example `[Failed] Wrong password shows an error (23s) (Element not found: Id matching regex: sign-in-submit)`. The error is the text in the last pair of brackets. Another error is `Assertion is false: "Sign out", id: home-sign-out is visible`. Do what its row says, then go back to step 7. After the third run that is not a pass, go to step 9 with `Verdict: FAIL`.
+8. **Not a pass.** Take the first `[Failed]` line, for example `[Failed] A taken name shows an error (23s) (Element not found: Id matching regex: profile-save)`. The error is the text in the last pair of brackets. Another error is `Assertion is false: "Edit profile", id: account-edit is visible`. Do what its row says, then go back to step 7. After the third run that is not a pass, go to step 9 with `Verdict: FAIL`.
 
    | The error contains | Do |
    | --- | --- |
@@ -180,23 +139,43 @@ A step that must differ goes into the one file, in a `runFlow` block for each pl
 9. **Reply** with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
 
    ```text
-   Plan: test/mobile/plan/sign-in.plan.md
+   Plan: test/mobile/plan/profile.plan.md
    Platform: Android
-   Flows: test/mobile/sign-in/01-valid-account.flow.yaml, test/mobile/sign-in/02-wrong-password.flow.yaml
+   Flows: test/mobile/profile/01-new-name.flow.yaml, test/mobile/profile/02-taken-name.flow.yaml
    Subflow: none
-   Command: RTK_DISABLED=1 maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/sign-in
+   Command: RTK_DISABLED=1 maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/profile
    Result: 2/2 Flows Passed in 48s
    Failed: none
    Verdict: PASS
    Not checked: iOS
    ```
 
-   `Result:` is the summary line of the run, copied: `2/2 Flows Passed in 48s` or `1/2 Flow Failed`. `Failed:` is each `[Failed]` line, copied, or `none`. `Verdict:` is `PASS`, `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you. `Not checked:` always names the platform you did not run on.
+   `Result:` is the summary line of the run, copied. `Failed:` is each `[Failed]` line, copied, or `none`. `Verdict:` is `PASS`, `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you. `Not checked:` always names the platform you did not run on.
 
 ## Never
 
-- Write one flow file for each platform. One file serves both.
 - Change an id, a text, or a check to get a pass, or add `optional: true` to a step.
-- Use `point:`, `retry`, `repeat`, `takeScreenshot`, `startRecording`, `runScript`, or `evalScript`.
-- Start, create, or change a device, or install the app.
+- Use `retry`, `repeat`, `takeScreenshot`, `startRecording`, `runScript`, or `evalScript`.
+- Create or change a device, or install the app.
 - Pass `maestro` any option that is not in the command of step 7. The hook denies the others.
+
+## A. Dialogs and steps that differ by platform
+
+Enter only from "Plan line to commands". A step that must differ goes into the one file, in a `runFlow` block with `when:`. Write such a block only for these two plan lines.
+
+```yaml
+# 6. If "Allow Example to send you notifications?" shows, tap "Allow".
+- runFlow:
+    when:
+      visible: "Allow Example to send you notifications?"
+    commands:
+      - tapOn: "Allow"
+# 7. Press the system back button.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+```
+
+`- back` presses the system back button on Android. On the app's first screen that closes the app. On iOS it does nothing, so the block is for Android only.

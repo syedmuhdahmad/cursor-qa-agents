@@ -6,12 +6,17 @@ import {
   existsSync,
   linkSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   readlinkSync,
+  rmSync,
   statSync,
+  statfsSync,
   symlinkSync,
+  writeFileSync,
 } from 'node:fs'
+import { devNull, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -54,8 +59,8 @@ export function run(command, args, { cwd, env, input, timeoutMs = 120_000, inher
 }
 
 // Runs git in `cwd` and returns stdout. Throws when git fails.
-export function git(cwd, args, { input } = {}) {
-  const result = run('git', args, { cwd, input })
+export function git(cwd, args, { input, env } = {}) {
+  const result = run('git', args, { cwd, input, env })
   if (result.status !== 0) {
     throw new EvalError(`git ${args.join(' ')} failed in ${cwd}: ${(result.stderr || result.error?.message || '').trim()}`)
   }
@@ -112,6 +117,22 @@ export function loadCase(id) {
     }
     if ((expect.outcome === 'fail-kept' || expect.outcome === 'fixme') && typeof expect.bug?.file !== 'string') {
       problems.push('a product-bug case needs "expect.bug" with "file" and "line"')
+    }
+    if (expect.bugServer !== undefined) {
+      const titles = expect.bugServer?.mustFail
+      if (!Array.isArray(titles) || titles.length === 0 || typeof expect.bugServer.note !== 'string') {
+        problems.push('"expect.bugServer" needs "mustFail", a list of test titles, and "note", a text')
+      }
+      if (found.kind !== 'e2e' || expect.outcome !== 'pass') problems.push('"expect.bugServer" is for an e2e case that wants a passing spec')
+    }
+    if (expect.mutants !== undefined && (found.kind === 'e2e' || found.kind === 'plan')) {
+      problems.push('"expect.mutants" is for a Vitest case. An e2e case uses "expect.bugServer"')
+    }
+    for (const rule of expect.content ?? []) {
+      const known = ['glob', 'exists', 'firstLine', 'absent', 'assertsInEveryTest', 'inCode', 'why']
+      const unknown = Object.keys(rule).filter((key) => !known.includes(key))
+      if (unknown.length > 0) problems.push(`a content rule has the unknown key ${unknown.join(', ')}. The keys are ${known.join(', ')}`)
+      if (typeof rule.glob !== 'string' && !Array.isArray(rule.glob)) problems.push('every content rule needs "glob"')
     }
   }
   for (const edit of found.setup?.edits ?? []) {
@@ -229,13 +250,15 @@ export function walkFiles(root, skip = new Set()) {
 
 // Recreates the folder tree of `from` in `to` with a hard link for every
 // file, like `cp -al`. A file that cannot be linked is copied.
-export function linkTree(from, to, counts = { linked: 0, copied: 0 }) {
+export function linkTree(from, to, counts = { linked: 0, copied: 0, folders: 0, symlinks: 0 }) {
   mkdirSync(to, { recursive: true })
+  counts.folders += 1
   for (const entry of readdirSync(from, { withFileTypes: true })) {
     const source = join(from, entry.name)
     const target = join(to, entry.name)
     if (entry.isSymbolicLink()) {
       symlinkSync(readlinkSync(source), target)
+      counts.symlinks += 1
     } else if (entry.isDirectory()) {
       linkTree(source, target, counts)
     } else if (entry.isFile()) {
@@ -320,4 +343,257 @@ export function routeOf(read, skill) {
   if (read(`.cursor/skills/${skill}/SKILL.md`) !== null) return 'skill'
   if (read('.cursor/agents/qa.md') !== null) return 'qa-agent'
   return 'none'
+}
+
+// A skill's example form with some lines replaced. `overrides` maps a field
+// name to the text for its line. A line that is not named stays as the skill
+// wrote it.
+export function fillForm(form, overrides, values = {}) {
+  return form.lines
+    .map((line) => {
+      const field = /^([A-Z][^:]*):/.exec(line)?.[1]
+      return field && field in overrides ? `${field}: ${fill(overrides[field], values)}` : line
+    })
+    .join('\n')
+}
+
+// What a skill text gives away of a product-bug case: the source line of the
+// bug, or the wrong text the app shows. A run with such a skill cannot show
+// that the agent found the bug.
+export function answersInSkill(skillText, testCase) {
+  const bug = testCase.expect?.bug
+  if (!bug || typeof skillText !== 'string') return []
+  const found = []
+  if (skillText.includes(`${bug.file}:${bug.line}`)) found.push(`${bug.file}:${bug.line}`)
+  if (typeof bug.got === 'string' && skillText.includes(bug.got)) found.push(`"${bug.got}"`)
+  return found
+}
+
+// --- Temporary folders ------------------------------------------------------
+
+const HOLDER_PREFIX = 'cursor-qa-eval-'
+const STALE_AFTER_MS = 6 * 60 * 60 * 1000
+const holders = new Set()
+let holdersHooked = false
+
+// Removes holders that an earlier run left in `folder` because it was killed.
+// Only ones that nothing has written to for six hours: no run takes that long.
+export function sweepHolders(folder = tmpdir(), now = Date.now()) {
+  const swept = []
+  let names = []
+  try {
+    names = readdirSync(folder)
+  } catch {
+    return swept
+  }
+  for (const name of names) {
+    if (!name.startsWith(HOLDER_PREFIX)) continue
+    const path = join(folder, name)
+    try {
+      const stats = statSync(path)
+      if (!stats.isDirectory() || now - stats.mtimeMs < STALE_AFTER_MS) continue
+      rmSync(path, { recursive: true, force: true })
+      swept.push(name)
+    } catch {
+      // Someone else's folder, or it went away in the meantime.
+    }
+  }
+  return swept
+}
+
+// A new folder in the system's temporary folder. `dropHolder` removes it. One
+// that is still there when the process ends is removed then. So is one that
+// is there when Ctrl+C or a TERM signal arrives: the signal is handled as soon
+// as the script waits, see `breath`.
+export function tempHolder(name) {
+  if (!holdersHooked) {
+    holdersHooked = true
+    sweepHolders()
+    const dropAll = () => {
+      for (const holder of [...holders]) dropHolder(holder)
+    }
+    process.once('exit', dropAll)
+    for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) {
+      process.once(signal, () => {
+        dropAll()
+        process.exit(code)
+      })
+    }
+  }
+  const holder = mkdtempSync(join(tmpdir(), `${HOLDER_PREFIX}${name}-`))
+  holders.add(holder)
+  return holder
+}
+
+export function dropHolder(holder) {
+  holders.delete(holder)
+  rmSync(holder, { recursive: true, force: true })
+}
+
+// Lets a signal that arrived during a command be handled. A script that runs
+// one command after another without a pause never sees Ctrl+C. Await this
+// between two commands.
+export const breath = () => new Promise((resolve) => setImmediate(resolve))
+
+// --- Inodes -----------------------------------------------------------------
+
+// A file system has a fixed number of inodes: one for each file, folder, and
+// link. A tmpfs, which is what /tmp is on many Linux systems, also counts one
+// for every hard link. So a hard-linked node_modules costs as many inodes
+// there as it has files, and a few dozen sandboxes use them all up. Then
+// every write fails with "no space left on device", with gigabytes free.
+
+const TMPFS_MAGIC = 0x01021994
+
+// The free inodes of the file system that holds `path`. Null when the system
+// does not say: Windows, or a file system without a fixed number.
+export function inodesAt(path) {
+  let current = resolve(path)
+  while (!existsSync(current) && dirname(current) !== current) current = dirname(current)
+  try {
+    const stats = statfsSync(current)
+    if (!(Number(stats.files) > 0)) return null
+    return { free: Number(stats.ffree), total: Number(stats.files), tmpfs: Number(stats.type) === TMPFS_MAGIC }
+  } catch {
+    return null
+  }
+}
+
+// The files and folders under `root`. A link counts as a file and is not followed.
+export function countTree(root, counts = { files: 0, folders: 0 }) {
+  counts.folders += 1
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.isDirectory()) countTree(join(root, entry.name), counts)
+    else counts.files += 1
+  }
+  return counts
+}
+
+// Room that must stay free after a new hard-linked tree: the sandbox's own
+// files, test output, and whatever else is using the file system.
+export const INODE_MARGIN = 5000
+
+// Says whether one more hard-linked copy of a tree fits.
+//   inodes  what inodesAt() returned
+//   tree    what countTree() returned for the tree to link
+//   copied  true when the tree is on another file system, so every file is
+//           copied and costs an inode on any kind of file system
+// Returns { level, needed, fits }. `fits` is how many copies fit, this one
+// included. `level` is `stop` when this copy does not fit, `warn` when fewer
+// than three more fit after it, and `ok` otherwise.
+export function inodeAdvice(inodes, tree, { copied = false } = {}) {
+  if (inodes === null) return { level: 'ok', needed: null, fits: null }
+  const needed = inodes.tmpfs || copied ? tree.files + tree.folders : tree.folders
+  const fits = Math.max(0, Math.floor((inodes.free - INODE_MARGIN) / needed))
+  return { level: fits < 1 ? 'stop' : fits < 4 ? 'warn' : 'ok', needed, fits }
+}
+
+// The lines to print for an advice that is not `ok`. A `stop` is printed in
+// place of the links. A `warn` is printed after them, and `inodes` is what
+// was free before.
+export function inodeLines(advice, inodes, where) {
+  if (advice.level === 'ok') return []
+  const kind = inodes.tmpfs ? 'a tmpfs, which counts one inode for every hard link and every file' : 'a file system with few free inodes'
+  const after = advice.fits - 1
+  const room = after === 0 ? 'no more fit' : after === 1 ? '1 more fits' : `${after} more fit`
+  return [
+    advice.level === 'stop'
+      ? `${where} is on ${kind}. It has ${inodes.free} free inodes of ${inodes.total}.`
+      : `${where} is on ${kind}. It had ${inodes.free} free inodes of ${inodes.total} before this sandbox.`,
+    `One sandbox uses about ${advice.needed} there, so ${advice.level === 'stop' ? 'this one does not fit' : `${room} after this one`}.`,
+    'Give --out a folder on a disk, or free the inodes of finished runs: node eval/make-sandbox.mjs --clean <run-folder>',
+  ]
+}
+
+// Hard-links the node_modules of `baseDir` into `appDir`. Stops before the
+// first link when the file system of `appDir` has too few free inodes for it.
+// `inodes` is what inodesAt() gives for `appDir`. A test passes its own.
+export function linkNodeModules(baseDir, appDir, log = () => {}, inodes = inodesAt(appDir)) {
+  const source = join(baseDir, 'node_modules')
+  const target = join(appDir, 'node_modules')
+  // A hard link cannot cross file systems. linkTree() then copies each file.
+  const copied = statSync(source).dev !== statSync(appDir).dev
+  const advice = inodeAdvice(inodes, inodes === null ? { files: 0, folders: 0 } : countTree(source), { copied })
+  const lines = inodeLines(advice, inodes, appDir)
+  if (advice.level === 'stop') throw new EvalError(lines.join('\n  '))
+  const started = Date.now()
+  const counts = linkTree(source, target)
+  const how = counts.copied === 0 ? `${counts.linked} hard links` : `${counts.linked} hard links and ${counts.copied} copies`
+  log(`node_modules: ${how} from ${baseDir} in ${((Date.now() - started) / 1000).toFixed(1)}s`)
+  if (counts.copied > 0) {
+    log('Files were copied because --base is on another file system than --out. Put them on the same one to save time and space.')
+  }
+  if (lines.length > 0) log(`Warning:  ${lines.join('\n          ')}`)
+  else if (inodes?.tmpfs) log(`Inodes:   about ${advice.needed} used on this tmpfs, which counts every hard link. ${advice.fits - 1} more sandboxes fit.`)
+  return { counts, advice, inodes }
+}
+
+// --- A finished run ---------------------------------------------------------
+
+// Everything the agent changed in a sandbox, as one patch against the
+// baseline commit: tracked and new files, without what tools generate. It is
+// worked out with an index and an object folder of its own, so the sandbox's
+// repository stays as it is.
+export function diffOfRun(sandbox, baseline) {
+  const holder = tempHolder('diff')
+  try {
+    const objects = join(holder, 'objects')
+    mkdirSync(objects)
+    const gitDir = git(sandbox, ['rev-parse', '--absolute-git-dir']).trim()
+    const env = {
+      ...process.env,
+      GIT_INDEX_FILE: join(holder, 'index'),
+      GIT_OBJECT_DIRECTORY: objects,
+      GIT_ALTERNATE_OBJECT_DIRECTORIES: join(gitDir, 'objects'),
+    }
+    const quiet = ['-c', `core.excludesFile=${devNull}`, '-c', 'core.quotePath=false', '-c', 'core.autocrlf=false']
+    const paths = ['--', '.', ...[...GENERATED].flatMap((name) => [`:(exclude,glob)**/${name}/**`, `:(exclude,glob)**/${name}`])]
+    git(sandbox, [...quiet, 'read-tree', baseline], { env })
+    git(sandbox, [...quiet, 'add', '-A', ...paths], { env })
+    return git(sandbox, [...quiet, 'diff', '--cached', '--binary', '--no-renames', '--no-color', '--no-ext-diff', baseline, ...paths], { env })
+  } finally {
+    dropHolder(holder)
+  }
+}
+
+// What --clean removes from a sandbox. Both can be built again.
+export const REBUILDABLE = ['node_modules', '.next']
+export const DIFF_NAME = 'changes.diff'
+
+// Frees the inodes and the space of a finished run. Writes the agent's
+// changes to <run>/changes.diff, then removes node_modules and .next from the
+// sandbox. The sandbox's own files, its git repository, meta.json, the reply,
+// and score.json stay.
+export function cleanRun(runDir) {
+  const { root, meta, sandbox } = readRun(runDir)
+  const diff = diffOfRun(sandbox, meta.baseline)
+  writeFileSync(join(root, DIFF_NAME), diff)
+  const removed = []
+  for (const name of REBUILDABLE) {
+    const path = join(sandbox, name)
+    const stats = statSync(path, { throwIfNoEntry: false })
+    if (!stats) continue
+    const tree = stats.isDirectory() ? countTree(path) : { files: 1, folders: 0 }
+    rmSync(path, { recursive: true, force: true })
+    removed.push({ name, entries: tree.files + tree.folders })
+  }
+  const kept = [META_NAME, DIFF_NAME, ...readdirSync(root).filter((name) => /^(reply.*\.txt|score\.json|prompt\.txt)$/.test(name))]
+  return { root, sandbox, removed, kept, diffBytes: Buffer.byteLength(diff) }
+}
+
+// One line for what cleanRun() did.
+export function cleanReport(cleaned) {
+  const gone = cleaned.removed.map((entry) => `${entry.name} (${entry.entries} files and folders)`).join(', ')
+  return `Cleaned:  ${cleaned.root}. Removed from the sandbox: ${gone || 'nothing, it was clean'}. Kept: ${cleaned.kept.join(', ')}, and the sandbox's own files.`
+}
+
+// Puts node_modules back into a sandbox that --clean emptied, from the shared
+// folder that meta.json names, so the run can be scored again.
+export function relinkRun(runDir, log = () => {}) {
+  const { root, meta, sandbox } = readRun(runDir)
+  if (existsSync(join(sandbox, 'node_modules'))) throw new EvalError(`${join(sandbox, 'node_modules')} is already there.`)
+  if (typeof meta.base !== 'string' || !existsSync(join(meta.base, 'node_modules'))) {
+    throw new EvalError(`The shared node_modules of this run are gone (${meta.base ?? 'meta.json names no base'}). Build a new sandbox.`)
+  }
+  return { root, sandbox, ...linkNodeModules(meta.base, sandbox, log) }
 }

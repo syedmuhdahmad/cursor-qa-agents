@@ -1,12 +1,14 @@
 ---
 name: qa-unit
-description: "Write or fix one Vitest unit or integration test. Usage: /qa-unit src/components/SignIn.tsx"
+description: "Write or fix one Vitest unit or integration test. Usage: /qa-unit src/components/ProfileForm.tsx"
 disable-model-invocation: true
 ---
 
 # Write or fix one Vitest test
 
 You write test files under `test/unit/` and `test/integration/`. Read application source (`app/`, `src/`, and similar). Never edit it. Do the steps in order. In every table, use the first row that matches.
+
+The examples are from another app. Take your file names and values from the prompt and the source file.
 
 When a step says BLOCKED, stop work, go to step 10, and put the sentence after `Verdict: BLOCKED:`.
 
@@ -16,7 +18,7 @@ When a step says BLOCKED, stop work, go to step 10, and put the sentence after `
 
    | The prompt names | Do |
    | --- | --- |
-   | No file, more than one, or a file that does not exist | Reply `Which file? For example: /qa-unit src/components/SignIn.tsx` and stop. |
+   | No file, more than one, or a file that does not exist | Reply `Which file? For example: /qa-unit src/components/ProfileForm.tsx` and stop. |
    | One file under `test/` | Fix job. Go to step 7 and run that file. |
    | Any other file | Write job. Go to step 2. |
 
@@ -35,9 +37,9 @@ When a step says BLOCKED, stop work, go to step 10, and put the sentence after `
 
    | Source file | Test file | Import |
    | --- | --- | --- |
-   | `src/components/SignIn.tsx` | `test/unit/components/SignIn.test.ts` | `../../../src/components/SignIn` |
-   | `lib/validation.ts` | `test/unit/lib/validation.test.ts` | `../../../lib/validation` |
-   | `app/api/session/route.ts` | `test/integration/api/session/route.test.ts` | `../../../../app/api/session/route` |
+   | `src/components/ProfileForm.tsx` | `test/unit/components/ProfileForm.test.ts` | `../../../src/components/ProfileForm` |
+   | `lib/format.ts` | `test/unit/lib/format.test.ts` | `../../../lib/format` |
+   | `app/api/profile/route.ts` | `test/integration/api/profile/route.test.ts` | `../../../../app/api/profile/route` |
    | No row has your folders | Apply the two rules above | |
 
 4. **Template.** Read one of the two test templates in `.cursor/skills/qa-unit/templates/`.
@@ -54,22 +56,22 @@ When a step says BLOCKED, stop work, go to step 10, and put the sentence after `
    | imports `next/navigation` | Add the `next/navigation` block. |
    | imports `next/headers` | Add the `next/headers` block. |
    | calls `fetch(` | Add the `fetch` block. |
-   | imports a module that reads a database or calls another server, such as `lib/db`, `prisma`, `axios`, or a local `api.ts` | `node.test.ts`: keep the two `DATA_IMPORT` lines. `ui.test.ts`: add the `data module` block. |
+   | imports a module that reads a database or calls another server, such as `prisma`, `axios`, a `repository.ts`, or a local `api.ts` | `node.test.ts`: keep the two `DATA_IMPORT` lines. `ui.test.ts`: add the `data module` block. |
    | imports no such module | `node.test.ts`: delete the two lines that contain `DATA_IMPORT`. `ui.test.ts`: nothing. |
    | has no `import` line | `node.test.ts`: also delete the `server-only` line. |
 
    Mock nothing else. Child components, helper modules, and the file under test stay real.
 
-6. **Write the test file.** New file: start from the template. Existing file: read it, keep everything in it, and add to it. Replace every token (a word in capitals with an underscore) with a value from the source. `SOURCE_IMPORT` is the import from step 3. Import each export you test, a default export without braces. `DATA_IMPORT` is the same `../` prefix, then the path of the data module. For `DATA_FUNCTION` write one `name: vi.fn()` for each function the source imports from that module. Replace the example `it` with one `it` per behavior from step 2.
+6. **Write the test file.** New file: start from the template. Existing file: read it, keep everything in it, and add to it. Replace every token (a word in capitals with an underscore) with a value from the source. `SOURCE_IMPORT` is the import from step 3. Import each export you test, a default export without braces. `DATA_IMPORT` is the same `../` prefix, then the path of the data module, never the `@/` path the source uses. For `DATA_FUNCTION` write one `name: vi.fn()` for each function the source imports from that module. Replace the example `it` with one `it` per behavior from step 2.
    - Set every mock return value inside the `it`, never in a `vi.mock` factory.
      Why: `resetAllMocks` in `afterEach` wipes factory values, so the next test gets `undefined`.
    - No JSX. Props go in the second argument: `createElement(Card, { title: 'Hello' })`.
    - An `async` component: `render(await Page())`, not `createElement`.
-   - A check on something that happens after a `fetch`: wrap it as the template does, `await waitFor(() => expect(push).toHaveBeenCalledWith('/dashboard'))`.
+   - A check on something that happens after a `fetch`: wrap it as the template does, `await waitFor(() => expect(push).toHaveBeenCalledWith('/account'))`.
    - A function that takes no `Request`: call it with its own arguments and check what it returns.
    - Before you save, check that no token is left.
 
-7. **Run.** `RTK_DISABLED=1 npx vitest run test/unit/components/SignIn.test.ts`. Change only the path. Give the full path of the test file.
+7. **Run.** `RTK_DISABLED=1 npx vitest run test/unit/components/ProfileForm.test.ts`. Change only the path. Give the full path of the test file.
 
 8. **Verdict.** Copy the line that starts with `QA-VERDICT:`. PASS means done. Anything else is not a pass.
 
@@ -98,6 +100,8 @@ When a step says BLOCKED, stop work, go to step 10, and put the sentence after `
 
 | The output contains | Do |
 | --- | --- |
+| `(!) Your Vite config uses features that are unsupported` | A warning, not an error. Do nothing about it, and take the next row that matches. |
+| Not the output, but the test file: it has `from '@/` or `vi.mock('@/` | In each such line, write the `../` path from step 3 in place of the `@/` path. Keep this edit even if the error stays. Why: `@/` may not resolve in a test file, and a `vi.mock` of an `@/` path may mock nothing, so the real module runs. |
 | `No test files found` or `no tests ran` | Wrong path, or the file has no `it`. The file must end in `.test.ts` under `test/unit/` or `test/integration/`. Run the full path. |
 | `skipped or todo` or `.only is not allowed` | Remove the `.skip`, `.todo`, or `.only` mark and run again. |
 | `@testing-library/user-event` | It is not installed. Use `fireEvent`. |
@@ -157,9 +161,9 @@ Reply with this form and nothing else. The values shown are examples. A line you
 
 ```text
 Job: write
-Source: src/components/SignIn.tsx
-Test file: test/unit/components/SignIn.test.ts
-Command: RTK_DISABLED=1 npx vitest run test/unit/components/SignIn.test.ts
+Source: src/components/ProfileForm.tsx
+Test file: test/unit/components/ProfileForm.test.ts
+Command: RTK_DISABLED=1 npx vitest run test/unit/components/ProfileForm.test.ts
 Cause: none
 Fix: none
 Before: none

@@ -19,11 +19,18 @@
 //    7. npm run test:unit
 //    8. npm run test:integration
 //    9. npx vitest run --coverage on one test file
-//   10. npm run test:e2e
+//   10. npx vitest run on two throwaway tests that use the `@/` import alias
+//   11. npx tsc --noEmit -p test
+//   12. npm run test:e2e
 //
 // Stages 2, 4, and 9 are there because the installer copies only what the
 // README lists. Without them a path or package dropped from the README would
 // go unnoticed, because no test command needs it.
+//
+// Stages 10 and 11 are there because the example's tsconfig.json has `test` in
+// "exclude". The reference tests import by relative path, so they pass with or
+// without test/tsconfig.json. Stage 10 fails without that file. Stage 11 is the
+// only type check of the tests, because `next build` no longer sees them.
 //
 // With the default port, Playwright starts the app itself, as playwright.config.ts
 // does for a user. With any other port this script starts `npm run dev` on that
@@ -32,13 +39,13 @@
 // Node built-ins only.
 
 import { spawn, spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { KIT_ROOT, listFiles, readInstallLists } from './install-into.mjs'
+import { KIT_ROOT, TEST_TSCONFIG, listFiles, readInstallLists } from './install-into.mjs'
 
 const EXAMPLE = join(KIT_ROOT, 'examples', 'next-app')
 const INSTALLER = fileURLToPath(new URL('./install-into.mjs', import.meta.url))
@@ -74,6 +81,30 @@ const INSTALLED_FILES = [
   'test/setup.ts',
   'vitest.config.ts',
 ]
+
+// Two throwaway tests for the alias stage. The first imports with the `@/` alias.
+// The second names a module with the alias in vi.mock and imports the same
+// module by its relative path. When the alias does not resolve in a test file,
+// the first cannot be loaded and the second gets the real module.
+const ALIAS_PROBES = {
+  'test/unit/alias-probe.test.ts': `import { expect, it } from 'vitest'
+import { validateEmail } from '@/lib/validation'
+
+it('resolves the @/ alias in a test file', () => {
+  expect(validateEmail('ada@example.com')).toBeNull()
+})
+`,
+  'test/integration/alias-probe.test.ts': `import { expect, it, vi } from 'vitest'
+import { findUserByEmail } from '../../lib/db'
+
+vi.mock('server-only', () => ({}))
+vi.mock('@/lib/db', () => ({ findUserByEmail: async () => 'from the mock' }))
+
+it('replaces the module that vi.mock names with the @/ alias', async () => {
+  expect(await findUserByEmail('ada@example.com')).toBe('from the mock')
+})
+`,
+}
 
 const USAGE = `Usage: node scripts/test-example.mjs [--port <n>] [--keep]
 
@@ -253,6 +284,23 @@ function checkInstalledKit() {
   if (problems.length > 0) throw new StageError(problems.join('\n'))
 }
 
+// Runs the two alias probes and removes them again.
+async function checkAlias() {
+  if (!existsSync(join(appDir, TEST_TSCONFIG))) {
+    throw new StageError(`${TEST_TSCONFIG} is missing. The example app must have it, because its tsconfig.json leaves out test/.`)
+  }
+  const probes = Object.keys(ALIAS_PROBES)
+  try {
+    for (const [file, text] of Object.entries(ALIAS_PROBES)) {
+      mkdirSync(dirname(join(appDir, file)), { recursive: true })
+      writeFileSync(join(appDir, file), text, { flag: 'wx' })
+    }
+    requirePassVerdict(await run('npx', ['vitest', 'run', ...probes]))
+  } finally {
+    for (const file of probes) rmSync(join(appDir, file), { force: true })
+  }
+}
+
 function canConnect(port, host) {
   return new Promise((done) => {
     const socket = connect({ port, host })
@@ -391,6 +439,14 @@ async function runStages(port) {
 
   at = startStage('coverage with the v8 provider')
   requirePassVerdict(await run('npx', ['vitest', 'run', '--coverage', 'test/unit/lib/validation.test.ts']))
+  endStage(at)
+
+  at = startStage('the @/ import alias in a test file, in an import and in vi.mock')
+  await checkAlias()
+  endStage(at)
+
+  at = startStage('type check of the tests: npx tsc --noEmit -p test')
+  await run('npx', ['tsc', '--noEmit', '-p', 'test'], { minutes: 5 })
   endStage(at)
 
   at = startStage('npm run test:e2e')

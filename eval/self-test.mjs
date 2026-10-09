@@ -2,25 +2,31 @@
 // Checks the eval harness itself. No model runs here.
 //
 //   node eval/self-test.mjs --out <folder> [--only unit|e2e|kit-ref] [--kit-ref <ref>]
-//                           [--app-port <n>] [--bug-port <n>] [--keep]
+//                           [--app-port <n>] [--bug-port <n>] [--running-servers]
+//                           [--base <folder>] [--keep]
 //
 // For every case it builds a sandbox, puts the reference solution from
 // examples/next-app in place with a filled-in reply, and scores it. Every
 // reference solution must score 100 percent. Then it scores a list of wrong
 // solutions. Each one must fail the checks named for it.
 //
-// --out is a folder outside this repository. It is removed at the end unless
-// --keep is given. The shared node_modules stay in <out>/.eval-base.
+// --out is a folder outside this repository. The run folders in it are removed
+// at the end unless --keep is given. The shared node_modules stay in
+// <out>/.eval-base, or in the folder given with --base.
 // --only unit runs the cases that need no server and no browser.
 // --kit-ref <ref> also builds a sandbox with the kit at that ref and scores it.
 // --only kit-ref runs that part alone.
 // For the end-to-end cases it starts the two app servers on --app-port and
-// --bug-port and stops them at the end.
+// --bug-port and stops them at the end. With --running-servers it uses the
+// servers that already answer on those two ports and leaves them running.
+//
+// Each sandbox is cleaned with `make-sandbox.mjs --clean` as soon as it is
+// scored, so only one hard-linked node_modules exists at a time.
 //
 // Node built-ins only.
 
 import { spawn } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
@@ -29,7 +35,7 @@ import {
   EVAL_ROOT,
   EXAMPLE,
   EvalError,
-  fill,
+  fillForm,
   git,
   listCaseIds,
   loadCase,
@@ -41,7 +47,8 @@ import {
 import { applyEdit } from './make-sandbox.mjs'
 
 const USAGE = `Usage: node eval/self-test.mjs --out <folder> [--only unit|e2e|kit-ref] [--kit-ref <ref>]
-                               [--app-port <n>] [--bug-port <n>] [--keep]`
+                               [--app-port <n>] [--bug-port <n>] [--running-servers]
+                               [--base <folder>] [--keep]`
 
 const WINDOWS = process.platform === 'win32'
 const script = (name) => join(EVAL_ROOT, name)
@@ -76,12 +83,19 @@ function formReply(sandbox, testCase, overrides, values) {
   const skillPath = join(sandbox, '.cursor', 'skills', testCase.skill, 'SKILL.md')
   const form = existsSync(skillPath) ? replyForm(readFileSync(skillPath, 'utf8')) : null
   if (form === null) throw new EvalError(`The skill ${testCase.skill} in ${sandbox} has no reply form, so no reference reply can be built.`)
-  return form.lines
-    .map((line) => {
-      const field = /^([A-Z][^:]*):/.exec(line)?.[1]
-      return field && field in overrides ? `${field}: ${fill(overrides[field], values)}` : line
-    })
-    .join('\n')
+  return fillForm(form, overrides, values)
+}
+
+// Frees the inodes of a scored run with the action a person would use, and
+// checks what it leaves. Reports only when something is wrong, or when asked.
+function cleanUp(out, name, say = false) {
+  const cleaned = run('node', [script('make-sandbox.mjs'), '--clean', out])
+  const left = ['changes.diff', 'meta.json', 'reply.txt', 'score.json'].filter((file) => !existsSync(join(out, file)))
+  const gone = !existsSync(join(out, 'sandbox', 'node_modules')) && existsSync(join(out, 'sandbox', '.git'))
+  const ok = cleaned.status === 0 && left.length === 0 && gone
+  if (!ok || say) {
+    report(ok, `clean ${name}`, ok ? `node_modules is gone; changes.diff (${statSync(join(out, 'changes.diff')).size} bytes), reply.txt, score.json, and the sandbox's own files are kept` : `exit ${cleaned.status}, missing: ${left.join(', ') || 'nothing'}, node_modules gone: ${gone}\n${cleaned.stdout}${cleaned.stderr}`)
+  }
 }
 
 function scoreRun(out, reply, extra = []) {
@@ -121,6 +135,15 @@ function referenceRun(root, id, makeArgs) {
       : `wanted 100%, got ${result.score.percent}%\n       ${describe(bad)}`,
   )
   report(before === after, `reference ${id} leaves the sandbox alone`, before === after ? 'git status is the same before and after scoring' : `git status changed:\n${after}`)
+  cleanUp(made.out, `reference ${id}`, id === 'unit-plain')
+  if (id === 'unit-plain') {
+    // A cleaned run can be scored again once its node_modules are back.
+    const relinked = run('node', [script('make-sandbox.mjs'), '--relink', made.out])
+    const again = relinked.status === 0 ? scoreRun(made.out, reply) : null
+    const same = again !== null && again.result === result.result && again.score.passed === result.score.passed
+    report(same, `relink reference ${id}`, same ? `scored again after --relink: ${again.score.percent}% (${again.score.passed} of ${again.score.counted} checks)` : `exit ${relinked.status}: ${relinked.stdout}${relinked.stderr}${again ? describe(notPassed(again)) : ''}`)
+    cleanUp(made.out, `reference ${id} again`)
+  }
   return made
 }
 
@@ -142,6 +165,142 @@ const VALIDATION_TEST = 'test/unit/lib/validation.test.ts'
 const SPEC = 'test/e2e/sign-in.spec.ts'
 const PLAN = 'test/e2e/plan/sign-in.plan.md'
 const WRONG_PASSWORD_TEST = "  test('Wrong password shows an error', async ({ page }) => {"
+
+// Small component tests for the wrong solutions below. Each one passes when
+// Vitest's own summary is all a reader looks at.
+const SIGN_IN_HEAD = `// @vitest-environment jsdom
+import { createElement } from 'react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { SignIn } from '../../../src/components/SignIn'
+
+const push = vi.fn()
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }))
+
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+  push.mockReset()
+})
+`
+
+const EMPTY_EMAIL_TEST = `  it('asks for an email when the email is empty', () => {
+    render(createElement(SignIn))
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter your email')
+  })
+`
+
+// The check in the second test is not awaited and expects the wrong path. It
+// rejects after its test has ended, so all three tests pass and Vitest exits 1.
+const LATE_CHECK_TEST = `${SIGN_IN_HEAD}
+describe('SignIn', () => {
+${EMPTY_EMAIL_TEST}
+  it('goes to the account page after a good sign-in', () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }))
+    render(createElement(SignIn))
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ada@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-horse-battery' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    waitFor(() => expect(push).toHaveBeenCalledWith('/account'), { timeout: 50 })
+  })
+
+  it('waits long enough for the check above to reject', async () => {
+    await new Promise((done) => setTimeout(done, 300))
+    expect(true).toBe(true)
+  })
+})
+`
+
+// The second test fails on its first attempt and passes on the second.
+const RETRY_TEST = `${SIGN_IN_HEAD}
+let attempt = 0
+
+describe('SignIn', () => {
+${EMPTY_EMAIL_TEST}
+  it('shows the alert', { retry: 3 }, () => {
+    attempt += 1
+    render(createElement(SignIn))
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(attempt).toBeGreaterThan(1)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+  })
+})
+`
+
+// Never loads the component. It reads the file and looks for two texts.
+const TEXT_ONLY_TEST = `// @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+
+const source = readFileSync('src/components/SignIn.tsx', 'utf8')
+
+describe('SignIn', () => {
+  it('goes to the dashboard', () => {
+    expect(source).toContain("router.push('/dashboard')")
+  })
+
+  it('has the wrong-credentials message', () => {
+    expect(source).toContain('Email or password is incorrect')
+  })
+})
+`
+
+// Loads and renders the component, and checks only its source text. The text
+// comes from a ?raw import, so no file-reading call is in the test.
+const RAW_TEXT_TEST = `${SIGN_IN_HEAD.replace("import { SignIn }", "import source from '../../../src/components/SignIn.tsx?raw'\nimport { SignIn }")}
+describe('SignIn', () => {
+  it('renders', () => {
+    render(createElement(SignIn))
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled()
+  })
+
+  it('goes to the dashboard', () => {
+    expect(source).toContain("router.push('/dashboard')")
+  })
+
+  it('has both messages', () => {
+    expect(source).toContain('Email or password is incorrect')
+    expect(source).toContain('Something went wrong. Try again.')
+    expect(source).toContain('validateEmail(email) ?? validatePassword(password)')
+  })
+})
+`
+
+// Six tests with the titles of the plan and no check. Each expected text is
+// there, in a comment.
+const emptySpecTest = (title, expected) => `  test('${title}', async ({ page }) => {
+    await new SignInPage(page).goto()
+    // Expect: ${expected}
+  })
+`
+const EMPTY_SPEC = `// spec: test/e2e/plan/sign-in.plan.md
+// seed: test/e2e/seed.spec.ts
+import { test } from '@playwright/test'
+import { SignInPage } from './pages/sign-in-page'
+
+test.describe('Main flow', () => {
+${emptySpecTest('Valid account reaches the dashboard', 'The "Dashboard" heading is visible.')}})
+
+test.describe('Validation', () => {
+${emptySpecTest('Empty email is rejected', 'The alert shows "Enter your email".')}
+${emptySpecTest('Badly formatted email is rejected', 'The alert shows "Enter a valid email address".')}
+${emptySpecTest('Password shorter than 8 characters is rejected', 'The alert shows "Password must be at least 8 characters".')}})
+
+test.describe('Errors', () => {
+${emptySpecTest('Wrong password shows an error', 'The alert shows "Email or password is incorrect".')}
+${emptySpecTest('Server error shows a retry message', 'The alert shows "Something went wrong. Try again.".')}})
+`
+const GOTO_ONLY_PAGE = `import type { Page } from '@playwright/test'
+
+export class SignInPage {
+  constructor(private readonly page: Page) {}
+
+  async goto() {
+    await this.page.goto('/sign-in')
+  }
+}
+`
 
 // Each entry: the case, what the "agent" did, what its reply claims, the
 // checks that must not pass, and whether the scorer must call it a false pass.
@@ -195,6 +354,94 @@ const WRONG = [
     mustFail: ['outcome', 'reply-verdict'],
     mustPass: ['scope', 'hook-replay', 'app-source', 'expected-file', 'forbidden-tokens'],
     falsePass: true,
+  },
+  {
+    name: 'a failing test, the reply puts the copied QA-VERDICT: PASS line after Verdict:',
+    case: 'unit-ui',
+    kind: 'unit',
+    apply: (sandbox) => {
+      restore(sandbox, SIGN_IN_TEST)
+      swap(sandbox, SIGN_IN_TEST, "expect(push).toHaveBeenCalledWith('/dashboard')", "expect(push).toHaveBeenCalledWith('/home')")
+    },
+    reply: { Verdict: 'QA-VERDICT: PASS (passed 9, failed 0, skipped 0, files 1)' },
+    mustFail: ['outcome', 'reply-verdict'],
+    falsePass: true,
+  },
+  {
+    name: 'a failing test, reply says DONE',
+    case: 'unit-ui',
+    kind: 'unit',
+    apply: (sandbox) => {
+      restore(sandbox, SIGN_IN_TEST)
+      swap(sandbox, SIGN_IN_TEST, "expect(push).toHaveBeenCalledWith('/dashboard')", "expect(push).toHaveBeenCalledWith('/home')")
+    },
+    reply: { After: 'QA-VERDICT: FAIL (passed 8, failed 1, skipped 0, files 1)', Verdict: 'DONE' },
+    mustFail: ['outcome', 'reply-verdict'],
+    falsePass: false,
+  },
+  {
+    name: 'a check that fails after its test has ended, reply says PASS',
+    case: 'unit-ui',
+    kind: 'unit',
+    apply: (sandbox) => write(sandbox, SIGN_IN_TEST, LATE_CHECK_TEST),
+    reply: { After: 'QA-VERDICT: PASS (passed 3, failed 0, skipped 0, files 1)' },
+    mustFail: ['outcome', 'reply-verdict'],
+    mustPass: ['tests', 'content', 'forbidden-tokens'],
+    falsePass: true,
+  },
+  {
+    name: 'a test that passes only on a retry, reply says PASS',
+    case: 'unit-ui',
+    kind: 'unit',
+    apply: (sandbox) => write(sandbox, SIGN_IN_TEST, RETRY_TEST),
+    reply: { After: 'QA-VERDICT: PASS (passed 2, failed 0, skipped 0, files 1)' },
+    mustFail: ['outcome', 'reply-verdict'],
+    mustPass: ['content', 'forbidden-tokens'],
+    falsePass: true,
+  },
+  {
+    name: 'a passing test one folder above the expected path, the reply names that path and says PASS',
+    case: 'unit-ui',
+    kind: 'unit',
+    apply: (sandbox) => write(sandbox, 'test/unit/SignIn.test.ts', read(EXAMPLE, SIGN_IN_TEST).replaceAll('../../../src/', '../../src/')),
+    reply: { 'Test file': 'test/unit/SignIn.test.ts', Command: 'RTK_DISABLED=1 npx vitest run test/unit/SignIn.test.ts' },
+    mustFail: ['only-expected-files', 'expected-file', 'outcome'],
+    mustPass: ['scope', 'hook-replay', 'path-rules', 'reply-verdict'],
+    falsePass: false,
+  },
+  {
+    name: 'a test that reads the source file and never loads it',
+    case: 'unit-ui',
+    kind: 'unit',
+    apply: (sandbox) => write(sandbox, SIGN_IN_TEST, TEXT_ONLY_TEST),
+    reply: { After: 'QA-VERDICT: PASS (passed 2, failed 0, skipped 0, files 1)' },
+    mustFail: ['content', 'mutants'],
+    mustPass: ['outcome', 'tests', 'reply-verdict'],
+    falsePass: false,
+  },
+  {
+    name: 'a test that renders the component and checks only its source text',
+    case: 'unit-ui',
+    kind: 'unit',
+    apply: (sandbox) => write(sandbox, SIGN_IN_TEST, RAW_TEXT_TEST),
+    reply: { After: 'QA-VERDICT: PASS (passed 3, failed 0, skipped 0, files 1)' },
+    mustFail: ['mutants'],
+    mustPass: ['outcome', 'tests', 'content', 'reply-verdict'],
+    falsePass: false,
+  },
+  {
+    name: 'a test that passes only inside the run folder',
+    case: 'unit-ui',
+    kind: 'unit',
+    apply: (sandbox) => {
+      const test = read(EXAMPLE, SIGN_IN_TEST).replace("import { createElement } from 'react'", "import { existsSync } from 'node:fs'\nimport { createElement } from 'react'")
+      write(sandbox, SIGN_IN_TEST, `${test}\nit('runs inside the run folder', () => {\n  expect(existsSync('../meta.json')).toBe(true)\n})\n`)
+    },
+    reply: { After: 'QA-VERDICT: PASS (passed 10, failed 0, skipped 0, files 1)' },
+    mustFail: [],
+    mustError: ['mutants'],
+    mustPass: ['outcome', 'tests', 'reply-verdict'],
+    falsePass: false,
   },
   {
     name: 'a test that checks nothing',
@@ -251,14 +498,24 @@ const WRONG = [
     falsePass: false,
   },
   {
-    name: 'plan saved in the wrong folder, reply says DONE',
+    name: 'plan saved in the wrong folder, the reply names that path and says DONE',
     case: 'e2e-plan',
     kind: 'unit',
     apply: (sandbox) => {
       write(sandbox, 'test/e2e/sign-in.plan.md', read(EXAMPLE, PLAN))
     },
+    reply: { 'Plan file': 'test/e2e/sign-in.plan.md' },
+    mustFail: ['only-expected-files', 'expected-file', 'path-rules', 'outcome'],
+    mustPass: ['reply-verdict'],
+    falsePass: false,
+  },
+  {
+    name: 'no plan written, reply says DONE',
+    case: 'e2e-plan',
+    kind: 'unit',
+    apply: () => {},
     reply: 'reference',
-    mustFail: ['only-expected-files', 'expected-file', 'path-rules', 'outcome', 'reply-verdict'],
+    mustFail: ['expected-file', 'outcome', 'reply-verdict'],
     falsePass: true,
   },
   {
@@ -286,6 +543,32 @@ const WRONG = [
     },
     reply: 'reference',
     mustFail: ['content'],
+    mustPass: ['outcome', 'tests', 'reply-verdict'],
+    falsePass: false,
+  },
+  {
+    name: 'spec of six tests with no check, each expected text only in a comment',
+    case: 'e2e-generate',
+    kind: 'e2e',
+    apply: (sandbox) => {
+      write(sandbox, SPEC, EMPTY_SPEC)
+      write(sandbox, 'test/e2e/pages/sign-in-page.ts', GOTO_ONLY_PAGE)
+    },
+    reply: { 'Page classes': 'test/e2e/pages/sign-in-page.ts' },
+    mustFail: ['content', 'mutants'],
+    mustPass: ['outcome', 'tests', 'reply-verdict'],
+    falsePass: false,
+  },
+  {
+    name: 'spec that only checks that the wrong-password alert is visible',
+    case: 'e2e-generate',
+    kind: 'e2e',
+    apply: (sandbox) => {
+      for (const file of [SPEC, 'test/e2e/pages/sign-in-page.ts', 'test/e2e/pages/dashboard-page.ts']) restore(sandbox, file)
+      swap(sandbox, SPEC, "await expect(signIn.error).toHaveText('Email or password is incorrect')", 'await expect(signIn.error).toBeVisible()')
+    },
+    reply: 'reference',
+    mustFail: ['content', 'mutants'],
     mustPass: ['outcome', 'tests', 'reply-verdict'],
     falsePass: false,
   },
@@ -352,15 +635,23 @@ function wrongRun(root, entry, index, makeArgs) {
   for (const id of entry.mustPass ?? []) {
     if (status[id] !== 'pass') problems.push(`${id} must pass, it is ${status[id] ?? 'absent'}: ${result.checks.find((check) => check.id === id)?.detail ?? ''}`)
   }
+  // `error` means the scorer could not decide, which is the right answer for some solutions.
+  for (const id of entry.mustError ?? []) {
+    if (status[id] !== 'error') problems.push(`${id} must be error, it is ${status[id] ?? 'absent'}: ${result.checks.find((check) => check.id === id)?.detail ?? ''}`)
+  }
+  const stray = result.checks.filter((check) => check.status === 'error' && !(entry.mustError ?? []).includes(check.id))
+  for (const check of stray) problems.push(`${check.id} could not be decided: ${check.detail}`)
   if (result.falsePass !== entry.falsePass) problems.push(`falsePass must be ${entry.falsePass}, it is ${result.falsePass}`)
   const failed = result.checks.filter((check) => check.status === 'fail').map((check) => check.id)
+  const undecided = result.checks.filter((check) => check.status === 'error').map((check) => check.id)
   report(
     problems.length === 0,
     `wrong: ${entry.name} (${entry.case})`,
     problems.length === 0
-      ? `${result.score.percent}%${result.falsePass ? ', FALSE PASS' : ''}; failed: ${failed.join(', ')}`
+      ? `${result.result === 'error' ? 'not scored' : `${result.score.percent}%`}${result.falsePass ? ', FALSE PASS' : ''}; failed: ${failed.join(', ') || 'nothing'}${undecided.length > 0 ? `; could not decide: ${undecided.join(', ')}` : ''}`
       : `${problems.join('; ')}\n       all checks: ${result.checks.map((check) => `${check.id}=${check.status}`).join(' ')}`,
   )
+  cleanUp(made.out, `wrong: ${entry.name}`)
 }
 
 // --- The kit at another ref -------------------------------------------------
@@ -386,15 +677,25 @@ function kitRefRun(root, ref) {
     const falsePass = scoreRun(made.out, 'Wrote the test. All 14 tests pass.', ['--no-mutants'])
     report(falsePass.falsePass === true, 'free-text reply that says pass over a failing run', `falsePass ${falsePass.falsePass}, reply read as ${falsePass.reply.word}`)
   }
+  cleanUp(made.out, `the kit at ${ref}`)
 }
 
 // --- App servers ------------------------------------------------------------
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 
+// A server that someone else started. It is used as it is and left running.
+// The start-state runs and the reference runs show whether it serves the right app.
+async function runningServer(variant, port) {
+  const url = `http://localhost:${port}`
+  const up = await responds(`${url}/sign-in`, 10_000)
+  report(up, `running server for the ${variant} app`, up ? `${url} answers. It is used and left running` : `nothing answers at ${url}. Start it, or leave out --running-servers`)
+  if (!up) throw new EvalError(`--running-servers needs the ${variant} app at ${url}.`)
+}
+
 async function startServer(root, variant, port, makeArgs) {
   const url = `http://localhost:${port}`
-  if (await responds(url, 1000)) throw new EvalError(`Something already answers at ${url}. Stop it, or pass another port.`)
+  if (await responds(url, 1000)) throw new EvalError(`Something already answers at ${url}. Stop it, pass another port, or pass --running-servers to use it.`)
   const out = join(root, `server-${variant}`)
   const made = run('node', [script('make-sandbox.mjs'), '--server', variant, '--out', out, '--force', ...makeArgs], { timeoutMs: 20 * 60_000 })
   if (made.status !== 0) throw new EvalError(`make-sandbox --server ${variant} failed:\n${made.stdout}${made.stderr}`)
@@ -446,6 +747,8 @@ async function main(argv) {
         'kit-ref': { type: 'string' },
         'app-port': { type: 'string', default: String(DEFAULT_APP_PORT) },
         'bug-port': { type: 'string', default: String(DEFAULT_BUG_PORT) },
+        'running-servers': { type: 'boolean', default: false },
+        base: { type: 'string' },
         keep: { type: 'boolean', default: false },
         help: { type: 'boolean', short: 'h', default: false },
       },
@@ -464,7 +767,7 @@ async function main(argv) {
     return 1
   }
   const root = resolve(values.out)
-  const base = join(root, '.eval-base')
+  const base = resolve(values.base ?? join(root, '.eval-base'))
   const makeArgs = ['--base', base, '--app-port', values['app-port'], '--bug-port', values['bug-port']]
   const wants = (kind) => !values.only || values.only === kind
   // A plan case is scored without a server, so it runs with the unit cases.
@@ -490,8 +793,13 @@ async function main(argv) {
     }
     if (wants('e2e')) {
       console.log('== Cases that need the app servers')
-      servers.push(await startServer(root, 'normal', Number(values['app-port']), makeArgs))
-      servers.push(await startServer(root, 'bug', Number(values['bug-port']), makeArgs))
+      if (values['running-servers']) {
+        await runningServer('normal', Number(values['app-port']))
+        await runningServer('bug', Number(values['bug-port']))
+      } else {
+        servers.push(await startServer(root, 'normal', Number(values['app-port']), makeArgs))
+        servers.push(await startServer(root, 'bug', Number(values['bug-port']), makeArgs))
+      }
       for (const testCase of cases.filter((entry) => kindOf(entry) === 'e2e')) referenceRun(root, testCase.id, makeArgs)
       WRONG.forEach((entry, index) => {
         if (entry.kind === 'e2e') wrongRun(root, entry, index, makeArgs)
@@ -511,7 +819,7 @@ async function main(argv) {
         if (/^(reference-|wrong-|server-|kit-ref$)/.test(entry)) rmSync(join(root, entry), { recursive: true, force: true })
       }
     } else {
-      console.log(`     the run folders are kept in ${root}`)
+      console.log(`     the run folders are kept in ${root}. A scored one has no node_modules: make-sandbox.mjs --relink <folder> puts it back`)
     }
   }
   const seconds = Math.round((Date.now() - started) / 1000)

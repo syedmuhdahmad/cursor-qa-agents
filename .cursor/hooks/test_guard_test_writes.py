@@ -279,6 +279,14 @@ class ShellDenied(CommandCase):
             "sed -e p -e 'e touch src/x' test/a",
             "sed '1e touch src/x' test/a",
             "sed -f test/script.sed test/a",
+            # a label ends at whitespace in GNU sed, so these hide a w or e command
+            "sed -n 't x w src/a.ts' test/a",
+            "sed -n ':x;t x e touch src/x' test/a",
+            "sed -n 'b end w src/a.ts' test/a",
+            "sed -n 'T skip W src/a.ts' test/a",
+            # a label or branch on its own is denied too, to not depend on the sed variant
+            "sed -n ':a;ta;p' test/a",
+            "sed -n 'bEnd' test/a",
             "sed -i.bak s/a/b/ src/a.ts",
             "sed -Ei s/a/b/ src/a.ts",
             "sed -i 's/a/b/w test/x' test/a",
@@ -366,7 +374,7 @@ class ShellExpansions(CommandCase):
             "ls test/*.ts",
             "ls ./*",
             "wc -l test/unit/*.test.ts",
-            "rm test/unit/*.snap",
+            "cat test/unit/*.snap",
             "cat src/app/[id]/page.tsx",
             "grep -rn foo --include=*.ts src",
             "find . -name '*.ts'",
@@ -374,7 +382,7 @@ class ShellExpansions(CommandCase):
             'echo "*"',
             "[ -f package.json ]",
             "gh api repos/o/r/pulls?state=open",
-            "rm -rf ./test/*",
+            "ls ./test/*",
         ], "allow")
 
 
@@ -491,14 +499,14 @@ class OutOfScopeWrites(CommandCase):
             "export CI",
             "unset CI",
             "printf '%s\\n' -v",
-            "npx vitest run --reporter=json --outputFile=test/unit/report.json test/unit/a.test.ts",
+            "npx vitest run --outputFile=test/unit/report.json test/unit/a.test.ts",
             "npx vitest run --outputFile.json test/unit/report.json test/unit/a.test.ts",
             "npx vitest run --config vitest.config.ts --dir test/unit test/unit/a.test.ts",
             "npx vitest run -c vitest.config.ts test/unit/a.test.ts",
             "npx vitest run --coverage --coverage.reportsDirectory=test/coverage test/unit/a.test.ts",
             "npx vitest run -t 'signs in' test/unit/a.test.ts",
             "npx playwright test -c playwright.config.ts --output=test/e2e/out test/e2e/a.spec.ts",
-            "npx playwright test --reporter=line -g 'sign in' -x test/e2e/a.spec.ts",
+            "npx playwright test -g 'sign in' -x test/e2e/a.spec.ts",
             "npx playwright test -g checkout test/e2e/a.spec.ts",
             "npx --yes --no-install vitest run test/unit/a.test.ts",
             "npx --package=vitest vitest run test/unit/a.test.ts",
@@ -506,7 +514,7 @@ class OutOfScopeWrites(CommandCase):
             "./node_modules/.bin/vitest run test/unit/a.test.ts",
             "node_modules/.bin/playwright test --list",
             "npm run test:unit -- test/unit/a.test.ts",
-            "npm run test:e2e -- test/e2e/sign-in.spec.ts --reporter=line",
+            "npm run test:e2e -- test/e2e/sign-in.spec.ts",
             "npx --no-install playwright-cli -s=tw-abc123 snapshot --filename=test/e2e/snap.md",
             "npx --no-install playwright-cli list",
             "find test -name '*.ts' -print",
@@ -1343,7 +1351,7 @@ class VitestRuns(CommandCase):
             f"npx vitest run {ROOT}/test/unit/a.test.ts",
             "npx vitest run test/unit/a.test.ts -t 'signs in'",
             "npx vitest run --project unit --no-passWithNoTests test/unit/a.test.ts",
-            "npx vitest run --reporter=verbose --no-watch test/unit/a.test.ts",
+            "npx vitest run --no-watch test/unit/a.test.ts",
             "node_modules/.bin/vitest run test/unit/a.test.ts",
             "rtk vitest run test/unit/a.test.ts",
             # The word after -t is a test name, whatever it says.
@@ -1399,6 +1407,20 @@ class VitestRuns(CommandCase):
                 "npm run test:unit -- -u",
             ], ("rewrite snapshots", "fix the test or report the bug")),
             ([
+                "npx vitest run --reporter=verbose test/unit/a.test.ts",
+                "npx vitest run --reporter dot test/unit/a.test.ts",
+                "npm run test:unit -- --reporter=json",
+            ], ("replaces Vitest's reporters", "QA-VERDICT", RUN_VITEST)),
+            ([
+                "npx vitest run --passWithNoTests test/unit/a.test.ts",
+                "npx vitest run --pass-with-no-tests test/unit/a.test.ts",
+                "npm run test:unit -- --passWithNoTests",
+            ], ("lets an empty run pass", "QA-VERDICT", RUN_VITEST)),
+            ([
+                "npx vitest run --allowOnly test/unit/a.test.ts",
+                "npx vitest run --allow-only test/unit/a.test.ts",
+            ], ("lets a stray `.only` pass", "QA-VERDICT")),
+            ([
                 "npx vitest run",
                 "npx vitest run SignIn",
                 "npx vitest run --project unit SignIn",
@@ -1450,7 +1472,7 @@ class PlaywrightRuns(CommandCase):
             "npx playwright test --list",
             "npx playwright test --list test/e2e/sign-in.spec.ts",
             "npx playwright test test/e2e/sign-in.spec.ts -g 'Wrong password'",
-            "npx playwright test test/e2e/sign-in.spec.ts --project=chromium -x --reporter=line --workers=1",
+            "npx playwright test test/e2e/sign-in.spec.ts --project=chromium -x --add-reporter=line --workers=1",
             "node_modules/.bin/playwright test test/e2e/a.spec.ts",
             "rtk playwright test test/e2e/a.spec.ts",
             # The word after -g is a title, whatever it says. playwright takes it even when it starts with a dash.
@@ -1458,7 +1480,7 @@ class PlaywrightRuns(CommandCase):
             "npx playwright test -gupdate test/e2e/sign-in.spec.ts",
             "npx playwright test --grep --headed test/e2e/sign-in.spec.ts",
             # A script from package.json already has `test`, and may run the whole suite.
-            "npm run test:e2e -- test/e2e/sign-in.spec.ts --reporter=line",
+            "npm run test:e2e -- test/e2e/sign-in.spec.ts --add-reporter=line",
             "npm run test:e2e -- --repeat-each=2",
         ], "allow")
 
@@ -1507,13 +1529,21 @@ class PlaywrightRuns(CommandCase):
                 "npx playwright test test/e2e/a.spec.ts --repeat-each=many",
                 "npx playwright test test/e2e/a.spec.ts --repeat-each",
                 "npm run test:e2e -- --repeat-each=50",
+                # the last value wins in Playwright, so every one is checked
+                "npx playwright test test/e2e/a.spec.ts --repeat-each 3 --repeat-each 100",
+                "npx playwright test test/e2e/a.spec.ts --repeat-each=2 --repeat-each=9",
+                "npx playwright test test/e2e/a.spec.ts --repeat-each=3 --repeat-each 7",
             ], ("from 1 to 5", "`--repeat-each=3`")),
+            ([
+                "npx playwright test test/e2e/a.spec.ts --reporter=line",
+                "npx playwright test test/e2e/a.spec.ts --reporter dot",
+                "npm run test:e2e -- --reporter=line",
+            ], ("replaces Playwright's reporters", "QA-VERDICT", "--add-reporter")),
             ([
                 "npx playwright test",
                 "npx playwright test sign-in",
                 "npx playwright test src/a.spec.ts",
                 "npx playwright test tests/sign-in.spec.ts",
-                "npx playwright test --reporter=line -x",
                 "npx playwright test --project chromium",
                 # the word after -g is its value, not a spec
                 "npx playwright test -g test/e2e/a.spec.ts",
@@ -1802,6 +1832,8 @@ class DenyMessages(CommandCase):
         """sed, rg, sort, uniq, printf, and find each say which of their options is the problem."""
         for command, fragment in (
             ("sed -n 'w src/a.ts' test/a", "sed may only print or filter lines"),
+            ("sed -n 't x w src/a.ts' test/a", "A label or branch"),
+            ("sed -n ':x;t x e touch src/x' test/a", "A label or branch"),
             ("sed -f test/script.sed test/a", "-f is not allowed"),
             ("rg --pre=bash foo test/x.sh", "rg may not use --pre"),
             ("sort -o src/a.ts test/a", "sort may write only inside the write scope"),
@@ -2113,11 +2145,46 @@ class FileContent(ProjectCase):
         self.assertEqual(self.write("test/unit/b.test.ts", on_disk), "deny")
 
     def test_playwright_text_is_checked_under_e2e_only(self):
-        """`force: true` is also an option of fs.rm, which an integration test may need."""
-        cleanup = "afterEach(() => rmSync(dir, { recursive: true, force: true }))\n"
-        self.assertEqual(self.write("test/integration/files.test.ts", cleanup), "allow")
+        """waitForTimeout( and networkidle are Playwright-only, so they count under test/e2e/ only."""
+        wait = "await page.waitForTimeout(500)\n"
+        self.assertEqual(self.write("test/integration/files.test.ts", wait), "allow")
         self.assertEqual(self.write("test/unit/a.test.ts", "// waitForTimeout( and networkidle\n"), "allow")
-        self.assertEqual(self.write("test/e2e/a.spec.ts", cleanup), "deny")
+        self.assertEqual(self.write("test/e2e/a.spec.ts", wait), "deny")
+
+    def test_force_true_is_only_a_locator_action(self):
+        """force: true is denied as an option of a Playwright action, and allowed as an fs.rm option.
+
+        A globalSetup or fixture under test/e2e/ clears a temp folder with
+        `fs.rm({ force: true })`, which is not a locator action. Only an action
+        such as click or fill with `force: true` is denied.
+        """
+        fs_cleanup = "import { rmSync } from 'node:fs'\nrmSync(dir, { recursive: true, force: true })\n"
+        for path in ("test/e2e/fixtures.ts", "test/e2e/global-setup.ts", "test/e2e/a.spec.ts",
+                     "test/integration/files.test.ts"):
+            with self.subTest(path=path):
+                self.assertEqual(self.write(path, fs_cleanup), "allow")
+        for line in (
+            "await button.click({ force: true })",
+            "await this.save.click({force:true})",
+            "await page.getByRole('button').check({ timeout: 10, force: true })",
+            "await el.fill('x', { force: true })",
+            "await el.selectOption('a', { force: true })",
+        ):
+            with self.subTest(line=line):
+                self.assertIn("adds `force: true`", self.message("test/e2e/a.spec.ts", line + "\n"))
+
+    def test_naming_rules_apply_to_new_files_only(self):
+        """A wrongly named file a person made may be edited; a new one may not be created. Content still applies."""
+        # a new file with a wrong name is denied by the naming rule
+        self.assertIn("files under test/ end in .ts", self.message("test/unit/a.test.tsx", UNIT_TEST))
+        self.assertIn("Do not create a __tests__/ folder", self.message("test/__tests__/a.test.ts", UNIT_TEST))
+        # once the file exists, it may be edited, whatever its name
+        self.file("test/unit/a.test.tsx", UNIT_TEST)
+        self.assertEqual(self.write("test/unit/a.test.tsx", UNIT_TEST + "// edit\n"), "allow")
+        self.file("test/__tests__/a.test.ts", UNIT_TEST)
+        self.assertEqual(self.write("test/__tests__/a.test.ts", UNIT_TEST + "// edit\n"), "allow")
+        # the content rules still apply to the existing file
+        self.assertIn("adds `.skip(`", self.message("test/unit/a.test.tsx", UNIT_TEST + "it.skip('x', () => {})\n"))
 
     def test_files_that_are_not_test_code(self):
         """A plan, a flow, a skill, and the README may mention any of the text."""
@@ -2375,6 +2442,76 @@ class MessageHeredoc(CommandCase):
             "cat > test/unit/a.test.ts <<'EOF'\nimport { it } from 'vitest'\nEOF",
             "cat <<'EOF'\nhello\nEOF",
         ], "deny")
+
+
+class MutatingWildcards(CommandCase):
+    """A wildcard in a write command's operand is denied (review finding 2).
+
+    is_allowed takes a glob such as `test/*/` literally, so it resolves inside
+    test/ and passes, but the shell expands it to whatever it matches, which can
+    be a symlink under test/ that leads outside the write scope. The hook denies
+    the wildcard rather than guess what it matches.
+    """
+
+    def test_denied(self):
+        self.assert_denied_with([
+            "rm -rf test/*/",
+            "rm -R test/lin?/a.ts -rf",
+            "mv test/lin?/a.ts -b test",
+            "cp test/a.ts test/*/b.ts",
+            "truncate -s 0 test/*.txt",
+            "rm test/[ab].ts",
+            "cp --target-directory=test/* test/a.ts",
+            "tee test/out-*.txt",
+        ], "wildcard")
+
+    def test_allowed(self):
+        self.assert_all([
+            "rm -rf test/unit/old",
+            "rm test/unit/components/SignIn.test.ts",
+            "mv test/unit/a.test.ts test/unit/b.test.ts",
+            "cp test/a.ts .cursor/skills/x/a.ts",
+            "truncate -s 0 test/unit/out.txt",
+            "mkdir -p test/unit/components",
+            "touch test/e2e/a.spec.ts",
+        ], "allow")
+
+
+class ZshSyntax(CommandCase):
+    """zsh-only syntax that runs code or expands differently under zsh is denied (review finding 3).
+
+    A `(` joined to the word before it is zsh's `=(...)` process substitution or
+    a glob qualifier, both of which run a command. The hook cannot know the
+    shell, so it denies them. A subshell `(` that starts a word stays a compound
+    command, and `$(`, `<(`, and `>(` keep their own message.
+    """
+
+    def test_denied(self):
+        self.assert_denied_with([
+            "cat =(touch src/pwned)",
+            "diff =(cat a) =(cat b)",
+            "ls test/unit/*(e:'rm -rf nothing':)",
+            "ls test/unit/*(.)",
+            "echo foo(bar)",
+        ], "joined to the word before it")
+
+    def test_substitution_keeps_its_own_message(self):
+        """$( , <( , and >( are process substitution, denied before the paren check."""
+        self.assert_denied_with([
+            "echo $(ls)",
+            "cat <(ls)",
+            "tee >(cat) < test/a",
+        ], "process substitution")
+
+    def test_allowed(self):
+        self.assert_all([
+            "ls test/*.ts",
+            "grep -rn 'text' src test",
+            "grep '(abc)' src/a.ts",
+            "git show HEAD~2",
+            "echo '=(x)'",
+            "npx playwright test test/e2e/sign-in.spec.ts -g 'sign in (fast)'",
+        ], "allow")
 
 
 class Links(CommandCase):

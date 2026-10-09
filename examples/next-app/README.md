@@ -12,7 +12,7 @@ Run this from the repository root:
 node scripts/test-example.mjs
 ```
 
-It copies this folder to a temporary folder and installs the kit there with `scripts/install-into.mjs`, which follows the install steps in the root README. Then it runs `npm install`, `npx playwright install chromium`, `npm run build`, and the three test commands. It stops at the first failure.
+It copies this folder to a temporary folder and installs the kit there with `scripts/install-into.mjs`, which follows the install steps in the root README. Then it runs `npm install`, `npx playwright install chromium`, `npm run build`, and the three test commands. It also runs two throwaway tests that import with the `@/` alias, and type-checks the tests with `npx tsc --noEmit -p test`. It stops at the first failure.
 
 | Option | What it does |
 | --- | --- |
@@ -40,10 +40,21 @@ It copies this folder to a temporary folder and installs the kit there with `scr
 | `test/e2e/plan/sign-in.plan.md` | Reference plan with six scenarios |
 | `test/e2e/sign-in.spec.ts` | Reference spec for that plan |
 | `test/e2e/pages/` | The page classes the spec uses |
+| `test/tsconfig.json` | Makes the `@/` alias work in test files. See [Settings that differ from a new Next.js app](#settings-that-differ-from-a-new-nextjs-app). |
 
 There is one account: `ada@example.com` with the password `correct-horse-battery`. Sessions are kept in memory and are lost when the server restarts.
 
-Imports use the `@/` alias from `tsconfig.json`, for example `@/lib/db`.
+Imports use the `@/` alias from `tsconfig.json`, for example `@/lib/db`. The reference tests import by relative path.
+
+### The sign-in code is a test fixture
+
+The sign-in exists so that the tests have something to test. Do not copy it into a real app. It leaves out what a real sign-in needs:
+
+- `lib/db.ts` hashes the password with one round of SHA-256 and no salt. A real app uses a password hash such as Argon2, scrypt, or bcrypt.
+- `lib/db.ts` has the account's password in the source.
+- `app/api/session/route.ts` sets the session cookie without `secure`.
+- The form in `src/components/SignIn.tsx` has no `method`. If it is submitted before the page's script has loaded, the browser puts the email and the password in the URL.
+- Nothing limits the number of sign-in attempts.
 
 ## Run the app alone
 
@@ -63,4 +74,5 @@ Do not commit `node_modules/` or `package-lock.json` from this folder. Both are 
 | `next.config.ts` | `agentRules: false` | When `next dev` runs under a coding agent, Next.js 16.4 adds its own block to `AGENTS.md`. This setting keeps `AGENTS.md` as the kit ships it. |
 | `next.config.ts` | `turbopack.root` | This folder sits inside a repository that has its own lockfile. Without the setting, Next.js warns that it had to guess the workspace root. |
 | `tsconfig.json` | `test` in `exclude` | A new Next.js app type-checks every `.ts` file during `next build`, tests included. The test tools are not installed in this folder, so the build would fail on the imports in the tests. |
+| `test/tsconfig.json` | Extends `../tsconfig.json` and includes every `.ts` file under `test/` | Vitest reads the `paths` of a `tsconfig.json` only for the files it includes. With `test` in `exclude` and without this file, `import ... from '@/lib/db'` in a test fails with `Cannot find package '@/lib/db'`, and `vi.mock('@/lib/db')` replaces nothing and prints no warning. |
 | `package.json` | `@types/node` is `^26.6.3` | A new Next.js app gets `^20`. `npm install` fails with that range next to Vitest 5, which accepts `^22.0.0` or `>=24.0.0`. |

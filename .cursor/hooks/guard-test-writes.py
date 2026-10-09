@@ -156,13 +156,24 @@ FIXME_MARKER = "// product bug:"
 FIXME = call_pattern("fixme")
 # Plain text that every match of FIXME holds. See content_problem().
 FIXME_TEXT = ".fixme("
+# `force: true` as an option of a Playwright locator action (click, fill, and
+# the like). A test may also pass `force: true` to fs.rm or rmSync when it
+# clears a temp directory, which is not an action and is left alone. The option
+# object opens with `{` on the same line as the action call, after the
+# positional arguments, so the match does not cross a newline before the `{`.
+FORCE_TRUE = re.compile(
+    r"\.(?:click|dblclick|tap|check|uncheck|hover|fill|selectOption|setChecked|"
+    r"setInputFiles|dragTo|clear|selectText|scrollIntoViewIfNeeded)\s*\("
+    r"[^;{}\n]*\{[^;}]*force\s*:\s*true"
+)
 # Text a write under test/ may not add. Each entry is (name shown to the
 # agent, plain text that every match holds, pattern, True when it applies
 # only under test/e2e/, what to do instead). The match is on plain text: the
 # same text inside a comment or a string counts too. That keeps the rule easy
 # to predict, and a comment does not need to spell out `it.only(`. The last
-# three are Playwright calls, and `force: true` is also a normal option of
-# fs.rm in an integration test, so they are checked under test/e2e/ only.
+# three are Playwright calls, checked under test/e2e/ only. `waitForTimeout(`
+# and `networkidle` are plain text; `force: true` is matched only as an option
+# of a locator action, so a fixture's fs.rm({ force: true }) is allowed.
 # test.fixme( has its own rule, see content_problem().
 ADVICE_ONLY = "To run one test, pass its file to the test command."
 ADVICE_REPORT = "If the product is wrong, leave the test failing and report the bug."
@@ -183,7 +194,7 @@ FORBIDDEN_TEXT = (
     ("test.fail(", "test.fail(", re.compile(re.escape("test.fail(")), False, ADVICE_FAILS),
     ("waitForTimeout(", "waitForTimeout(", re.compile(re.escape("waitForTimeout(")), True, ADVICE_WAIT),
     ("networkidle", "networkidle", re.compile("networkidle"), True, ADVICE_WAIT),
-    ("force: true", "force", re.compile(r"force\s*:\s*true"), True, ADVICE_FORCE),
+    ("force: true", "force", FORCE_TRUE, True, ADVICE_FORCE),
 )
 
 # Environment variables a command may set, export, or unset. Any other name is
@@ -611,6 +622,11 @@ DENY_SED = (
     "sed may only print or filter lines, such as `sed -n '10,40p' src/a.ts`. Its script may not write a file "
     "or run a command, and -f is not allowed. To change a file under test/, use the file edit tool."
 )
+DENY_SED_BRANCH = (
+    "sed may only print or filter lines, such as `sed -n '10,40p' src/a.ts`. A label or branch (`:`, `b`, "
+    "`t`, `T`) is not allowed, because it can hide a command that writes a file or runs a program. To search "
+    "a file use `grep`; to read it use `cat` or `sed -n` with a line range."
+)
 DENY_RG = "rg may not use --pre or --hostname-bin, because they run another program. Search without them."
 DENY_SORT = (
     "sort may write only inside the write scope with -o, and may not use --compress-program. "
@@ -625,6 +641,10 @@ DENY_FIND = (
     "find may only list files. -delete, -exec, -ok, -fprint, and -fls are not allowed. "
     "To delete a file under test/, use rm with its path."
 )
+DENY_MUTATING_WILDCARD = (
+    "`{program}` may not take a wildcard (`*`, `?`, `[`) in a path: the shell can expand it to a file "
+    "outside the write scope, such as a symlink under test/ that leads to src/. Name each file in full."
+)
 DENY_SUBSTITUTION = (
     "Shell commands cannot use $(...), backticks, or process substitution. Run each command on its own. "
     "For a commit message with several paragraphs, pass -m once for each paragraph."
@@ -634,6 +654,10 @@ DENY_VARIABLE = (
     "Write the value out. To pass a literal $, put it in single quotes."
 )
 DENY_BRACES = "Shell commands cannot use brace expansion such as {a,b}. Write each word out."
+DENY_PAREN = (
+    "A `(` joined to the word before it, as in zsh `=(...)` or a glob followed by `(...)`, runs a command or "
+    "a file name the hook cannot read. Remove it, and run each command on its own."
+)
 DENY_WILDCARD = (
     "A word that starts with a wildcard, or an option with a wildcard in its name, can expand to a file name "
     "that the program reads as an option. Start the pattern with ./ or put it in quotes."
@@ -673,6 +697,18 @@ DENY_VITEST_PATH = (
     "Give the full path of a test file under test/, as in " + VITEST_COMMAND + ". "
     "A name alone, or no path, runs other files too."
 )
+DENY_VITEST_REPORTER = (
+    "`{option}` replaces Vitest's reporters, which removes the `QA-VERDICT:` line the kit reads. Run without "
+    "it, as in " + VITEST_COMMAND + "."
+)
+DENY_VITEST_PASS = (
+    "`{option}` lets an empty run pass, which the kit's `QA-VERDICT:` line counts as a failure. Run without "
+    "it and give the path of a test file, as in " + VITEST_COMMAND + "."
+)
+DENY_VITEST_ALLOW_ONLY = (
+    "`{option}` lets a stray `.only` pass, which hides the other tests from the kit's `QA-VERDICT:` line. "
+    "Run without it, as in " + VITEST_COMMAND + ", and remove the `.only`."
+)
 DENY_PLAYWRIGHT_COMMAND = (
     "playwright may only run tests, as in " + PLAYWRIGHT_COMMAND + ". "
     "If a browser is missing, tell the user to run `npx playwright install`."
@@ -698,6 +734,10 @@ DENY_PLAYWRIGHT_REPEAT = (
 DENY_PLAYWRIGHT_PATH = (
     "Give the path of a spec under test/, as in " + PLAYWRIGHT_COMMAND + ". "
     "To see the tests without running them, add `--list`."
+)
+DENY_PLAYWRIGHT_REPORTER = (
+    "`{option}` replaces Playwright's reporters, which removes the `QA-VERDICT:` line the kit reads. Run "
+    "without it, as in " + PLAYWRIGHT_COMMAND + ". To add a reporter beside the kit's, use `--add-reporter`."
 )
 DENY_RUNNER_PATH = (
     "Test runner options that name a file or folder, such as --outputFile, --output, --config, --root, "
@@ -1159,9 +1199,19 @@ def skip_delimited(script, index, delimiter, count):
     return index
 
 
-def sed_script_safe(script):
-    """False when a sed script can write a file or run a command (`w`, `W`, `e`, or `s///w|e`).
-    Unknown commands are unsafe."""
+def sed_script_reason(script):
+    """A deny message when a sed script can write, run a program, or branch, or "" when it only filters.
+
+    The script is read command by command, skipping addresses. A command that
+    writes a file (`w`, `W`), runs a program (`e`, the `e` flag of `s`), or
+    writes with the `w` flag of `s` is denied. So is every label and branch
+    command (`:`, `b`, `t`, `T`): GNU sed ends a label at whitespace and BSD
+    sed at the end of the line, so a label can hide a following `w FILE` or
+    `e CMD` from a parser that picks the wrong rule. Rather than depend on one
+    sed's rule, the hook denies every label and branch; the skills use none.
+    An `a`, `i`, or `c` appends literal text and an `r` or `R` reads a file,
+    neither of which writes or runs anything. An unknown command is denied.
+    """
     index = 0
     while index < len(script):
         char = script[index]
@@ -1172,41 +1222,39 @@ def sed_script_safe(script):
             if char == "\\":
                 index += 1
                 if index >= len(script):
-                    return False
+                    return DENY_SED
             index = skip_delimited(script, index + 1, script[index], 1)
             if index < 0:
-                return False
+                return DENY_SED
             while index < len(script) and script[index] in "IM":
                 index += 1
             continue
+        if char in "btT:":
+            return DENY_SED_BRANCH
         if char in "wWe":
-            return False
+            return DENY_SED
         if char in "sy":
             if index + 1 >= len(script):
-                return False
+                return DENY_SED
             index = skip_delimited(script, index + 2, script[index + 1], 2)
             if index < 0:
-                return False
+                return DENY_SED
             flags_end = index
             while flags_end < len(script) and script[flags_end] not in ";\n}":
                 flags_end += 1
             if char == "s" and any(flag in "we" for flag in script[index:flags_end]):
-                return False
+                return DENY_SED
             index = flags_end
             continue
         if char in "aicrR":
             while index < len(script) and script[index] != "\n":
                 index += 1
             continue
-        if char in "btT:":
-            while index < len(script) and script[index] not in ";\n":
-                index += 1
-            continue
         if char in SED_SAFE_COMMANDS:
             index += 1
             continue
-        return False
-    return True
+        return DENY_SED
+    return ""
 
 
 def sed_in_place(tokens):
@@ -1239,8 +1287,12 @@ def sed_allowed(tokens, cwd):
     in src/.
     """
     scripts, script_files, operands = parse_pattern_command(tokens)
-    if script_files or not all(sed_script_safe(script) for script in scripts):
+    if script_files:
         raise Denied(DENY_SED)
+    for script in scripts:
+        reason = sed_script_reason(script)
+        if reason:
+            raise Denied(reason)
     suffixes = sed_in_place(tokens)
     if suffixes:
         if not operands:
@@ -2437,12 +2489,19 @@ def check_vitest_options(options):
     """
     for option in options:
         long_name, letters = vitest_option_name(option)
+        shown = option.partition("=")[0]
         if long_name == "watch" or "w" in letters:
             raise Denied(DENY_VITEST_WATCH)
         if long_name == "ui":
             raise Denied(DENY_VITEST_UI)
         if long_name == "update" or "u" in letters:
             raise Denied(DENY_VITEST_UPDATE)
+        if long_name == "reporter":
+            raise Denied(DENY_VITEST_REPORTER.format(option=shown))
+        if long_name == "passwithnotests":
+            raise Denied(DENY_VITEST_PASS.format(option=shown))
+        if long_name == "allowonly":
+            raise Denied(DENY_VITEST_ALLOW_ONLY.format(option=shown))
 
 
 def vitest_allowed(args, cwd):
@@ -2514,12 +2573,19 @@ def check_playwright_options(options, args):
             raise Denied(DENY_PLAYWRIGHT_MASKING.format(option=name))
         if name == "--update-snapshots":
             raise Denied(DENY_PLAYWRIGHT_UPDATE.format(option=name))
-        if name == "--repeat-each":
-            if not has_value:
-                position = args.index(option)
-                value = args[position + 1] if position + 1 < len(args) else ""
-            if not (value.isascii() and value.isdigit()) or not 1 <= int(value) <= MAX_REPEAT_EACH:
-                raise Denied(DENY_PLAYWRIGHT_REPEAT)
+        if name == "--reporter":
+            raise Denied(DENY_PLAYWRIGHT_REPORTER.format(option=name))
+    # Check every --repeat-each, not only the first. Playwright uses the last
+    # value, so `--repeat-each 3 --repeat-each 100` would run 100 times while a
+    # check of the first value alone saw 3.
+    for index, arg in enumerate(args):
+        name, has_value, value = arg.partition("=")
+        if name != "--repeat-each":
+            continue
+        if not has_value:
+            value = args[index + 1] if index + 1 < len(args) else ""
+        if not (value.isascii() and value.isdigit()) or not 1 <= int(value) <= MAX_REPEAT_EACH:
+            raise Denied(DENY_PLAYWRIGHT_REPEAT)
 
 
 def playwright_allowed(args, cwd):
@@ -3033,6 +3099,13 @@ def file_operation_allowed(program, tokens, cwd):
     paths = mutating_paths(program, tokens)
     if not paths:
         raise Denied(DENY_NO_PATH.format(program=program))
+    # A wildcard operand is taken literally by is_allowed, so `test/*/` resolves
+    # inside test/ and passes, but the shell expands it to whatever it matches,
+    # which can be a symlink under test/ that leads outside. The destination of
+    # cp and the -t directory are in paths too. Deny the wildcard instead of
+    # guessing what it matches; the skills name each file.
+    if any(has_wildcard(path) for path in paths):
+        raise Denied(DENY_MUTATING_WILDCARD.format(program=program))
     creates = program in {"mkdir", "touch"}
     if program == "tee":
         deny_shell_write(paths, cwd, HINT_PIPE)
@@ -3041,6 +3114,9 @@ def file_operation_allowed(program, tokens, cwd):
     deny_outside(program, paths, cwd, HINT_TEST_FOLDERS if creates else HINT_REPORT)
     if creates:
         for path in paths:
+            # Naming rules apply to a new path only, as in guard_tool().
+            if exists(path, cwd):
+                continue
             problem = path_problem(path, cwd)
             if problem:
                 raise Denied(problem)
@@ -3229,6 +3305,29 @@ def word_start_problem(command):
     return ""
 
 
+def attached_paren_problem(command):
+    """Why a `(` joined to the word before it is not allowed, as a deny message, or "".
+
+    An unquoted `(` that follows a word character, rather than starting a word,
+    is zsh syntax the hook cannot read the same way a shell would: `=(...)`
+    makes zsh run the command and feed its output as a file, and a glob
+    qualifier such as `*(e:'cmd':)` makes zsh run the command. bash does not
+    treat either specially, and the hook cannot know the shell, so it denies
+    them. `$(`, `<(`, and `>(` are caught before this by expansion_problem,
+    and a `(` that starts a word is a subshell, denied as a compound command.
+    """
+    previous = -2
+    prior_char = ""
+    for index in unquoted(command):
+        char = command[index]
+        joined = previous == index - 1 and prior_char not in WORD_BREAKS
+        previous = index
+        prior_char = char
+        if char == "(" and joined:
+            return DENY_PAREN
+    return ""
+
+
 def message_heredoc_end(command, start, delimiter):
     """Where the body of a message heredoc ends: (body, index after `)"`), or None when it is not that form.
 
@@ -3369,6 +3468,10 @@ def guard_shell(command, cwd):
     if placeholder:
         emit("deny", DENY_PLACEHOLDER.format(placeholder=placeholder))
     problem = expansion_problem(command)
+    if problem:
+        emit("deny", problem)
+    # After expansion_problem, so $( , <( , and >( keep their own message.
+    problem = attached_paren_problem(command)
     if problem:
         emit("deny", problem)
     if option_wildcard(command):
@@ -3543,6 +3646,11 @@ def guard_tool(payload, cwd):
             emit("deny", outside_scope_message(path))
     if tool_name != DELETE_TOOL:
         for path in paths:
+            # Naming rules apply to a new file only. A file that already exists
+            # was put there by a person, so editing it is allowed even when its
+            # name is wrong. The content rules still apply to it.
+            if exists(path, cwd):
+                continue
             problem = path_problem(path, cwd)
             if problem:
                 emit("deny", problem)

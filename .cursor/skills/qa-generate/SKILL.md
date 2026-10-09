@@ -1,6 +1,6 @@
 ---
 name: qa-generate
-description: "Turn one end-to-end plan into page classes and a Playwright spec, then run the spec. Usage: /qa-generate test/e2e/plan/sign-in.plan.md"
+description: "Turn one end-to-end plan into page classes and a Playwright spec, then run the spec. Usage: /qa-generate test/e2e/plan/profile.plan.md"
 disable-model-invocation: true
 ---
 
@@ -10,28 +10,30 @@ Part 1 writes the page classes while you walk the plan in the browser. Part 2 wr
 
 Read application source (`app/`, `src/`, and similar). Never edit it.
 
-- Plan, the input: `test/e2e/plan/sign-in.plan.md`
-- Page class, one for each screen: `test/e2e/pages/sign-in-page.ts`. A page class holds one field for each element and one `goto` method, nothing else.
-- Spec, named after the plan: `test/e2e/sign-in.spec.ts`
+- Plan, the input: `test/e2e/plan/profile.plan.md`
+- Page class, one for each screen: `test/e2e/pages/profile-page.ts`. A page class holds one field for each element and one `goto` method, nothing else.
+- Spec, named after the plan: `test/e2e/profile.spec.ts`
 - Templates: `.cursor/skills/qa-generate/templates/page-class.ts` and `spec.ts` in the same folder
+
+The examples are from another app. Take your routes, names, and texts from the plan and the browser.
 
 Do the steps in order. In every table, use the first row that matches. When a step says BLOCKED, stop work, go to step 9, and put the sentence after `Verdict: BLOCKED:`.
 
 ## Plan line to code
 
-Steps 5 and 6 use this table. `signIn` and `dashboard` are page objects. Name each field after its element.
+Steps 5 and 6 use this table. `profile` and `account` are page objects. Name each field after its element.
 
 | Plan line | Field in the page class | Code in the spec |
 | --- | --- | --- |
-| ``Go to `/sign-in`.`` | None. The class has `goto`. | `await signIn.goto()` |
-| ``Fill the "Email" textbox with `ada@example.com`.`` | `email`, locator from the browser reply | `await signIn.email.fill('ada@example.com')` |
-| ``Click the "Sign in" button.`` | `submit`, locator from the browser reply | `await signIn.submit.click()` |
-| ``Mock `POST **/api/session` to answer with status 500 and the JSON body `{ "error": "Internal Server Error" }`.`` | None | `await page.route('**/api/session', (route) => route.fulfill({ status: 500, json: { error: 'Internal Server Error' } }))` |
-| ``The alert shows "Enter your email".`` | `error = page.getByRole('main').getByRole('alert')` | `await expect(signIn.error).toHaveText('Enter your email')` |
-| ``The "Dashboard" heading is visible.`` | `heading = page.getByRole('heading', { name: 'Dashboard' })` | `await expect(dashboard.heading).toBeVisible()` |
-| ``The text "Signed in as ada@example.com" is visible.`` | `signedInAs = page.getByText('Signed in as ada@example.com')` | `await expect(dashboard.signedInAs).toBeVisible()` |
-| ``The "Sign in" button is enabled.`` | The button's field | `await expect(signIn.submit).toBeEnabled()` |
-| ``The URL is `/dashboard`.`` | None | `await expect(page).toHaveURL('/dashboard')` |
+| ``Go to `/profile`.`` | None. The class has `goto`. | `await profile.goto()` |
+| ``Fill the "Display name" textbox with `Grace Hopper`.`` | `displayName`, locator from the browser reply | `await profile.displayName.fill('Grace Hopper')` |
+| ``Click the "Save profile" button.`` | `save`, locator from the browser reply | `await profile.save.click()` |
+| ``Mock `PUT **/api/profile` to answer with status 500 and the JSON body `{ "error": "Internal Server Error" }`.`` | None | `await page.route('**/api/profile', (route) => route.fulfill({ status: 500, json: { error: 'Internal Server Error' } }))` |
+| ``The alert shows "Enter a display name".`` | `error = page.getByRole('main').getByRole('alert')` | `await expect(profile.error).toHaveText('Enter a display name')` |
+| ``The "Account" heading is visible.`` | `heading = page.getByRole('heading', { name: 'Account' })` | `await expect(account.heading).toBeVisible()` |
+| ``The text "Saved as Grace Hopper" is visible.`` | `savedAs = page.getByText('Saved as Grace Hopper')` | `await expect(account.savedAs).toBeVisible()` |
+| ``The "Save profile" button is enabled.`` | The button's field | `await expect(profile.save).toBeEnabled()` |
+| ``The URL is `/account`.`` | None | `await expect(page).toHaveURL('/account')` |
 | No row matches | A field for each element the line names | The closest row's code. Name the line under `Not checked:`. |
 
 Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByRole('alert')` alone matches both and fails with `strict mode violation`. If the snapshot shows the alert under another parent, such as `dialog`, use that role.
@@ -52,18 +54,18 @@ Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByR
 
    | Route | File | Class |
    | --- | --- | --- |
-   | `/sign-in` | `test/e2e/pages/sign-in-page.ts` | `SignInPage` |
+   | `/profile` | `test/e2e/pages/profile-page.ts` | `ProfilePage` |
    | `/` | `test/e2e/pages/home-page.ts` | `HomePage` |
    | No row matches | The words of the route joined with `-`, then `-page.ts`: `account-settings-page.ts` | The same words, each with a capital, then `Page`: `AccountSettingsPage` |
 
-4. **Part 1: open the page.** The base URL is `http://localhost:3000` unless the prompt gives another. Call `browser_navigate` with the full URL, base URL plus route: `http://localhost:3000/sign-in`. A bare `/sign-in` fails.
+4. **Part 1: open the page.** The base URL is `http://localhost:3000` unless the prompt gives another. Call `browser_navigate` with the full URL, base URL plus route: `http://localhost:3000/profile`. A bare `/profile` fails.
 
    | Result | Do |
    | --- | --- |
    | You have no `browser_navigate` tool | BLOCKED: `turn on the playwright MCP server in Cursor settings, then ask again.` |
    | The reply contains `ERR_CONNECTION_REFUSED` | Do not start the app. BLOCKED: `start the app with npm run dev, then ask again.` |
    | The reply contains `is not installed` or `is not found` | Do not run the install command it suggests. BLOCKED: `the Playwright MCP server needs Google Chrome installed.` |
-   | The reply contains `HTTP status: 404` | BLOCKED: `no page at http://localhost:3000/sign-in. Correct the route in the plan.` |
+   | The reply contains `HTTP status: 404` | BLOCKED: `no page at http://localhost:3000/profile. Correct the route in the plan.` |
    | No row matches | The page is open. Go to step 5. |
 
 5. **Part 1: walk each scenario. Write each field right after the call that gave it.**
@@ -78,8 +80,8 @@ Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByR
    | The last line of the scenario is done | `browser_close`. It also signs the browser out. | Nothing |
    | No row matches | The `browser_*` tool that does the action | The field, with the locator from the reply |
 
-   - `browser_type` and `browser_click` reply with `### Ran Playwright code` and a line such as `await page.getByRole('button', { name: 'Sign in' }).click();`. The locator is the part before `.click()` or `.fill(`.
-   - A field is two lines in the page class, as in the template: `readonly submit: Locator` and `this.submit = page.getByRole('button', { name: 'Sign in' })`. The class has that locator already: write nothing. The file does not exist yet: write it from the template with this first field. `goto` takes the route only, `'/sign-in'`, never the host.
+   - `browser_type` and `browser_click` reply with `### Ran Playwright code` and a line such as `await page.getByRole('button', { name: 'Save profile' }).click();`. The locator is the part before `.click()` or `.fill(`.
+   - A field is two lines in the page class, as in the template: `readonly save: Locator` and `this.save = page.getByRole('button', { name: 'Save profile' })`. The class has that locator already: write nothing. The file does not exist yet: write it from the template with this first field. `goto` takes the route only, `'/profile'`, never the host.
    - The reply has `page.locator(`: do not copy it. Write `page.getByRole` with the role and name from the element's snapshot line. No role and no text there: copy the `page.locator(` code and name the field under `Not checked:`.
    - `Page URL` in a reply shows another route: the next fields go into that screen's class, named as in step 3.
    - Skip the walk of a scenario when the classes have a field for every element it names, or when it has a `Mock` step. A `Mock` scenario names an element no class has: build the field from the source and name it under `Locators not copied from the browser:`.
@@ -91,18 +93,18 @@ Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByR
    | Plan | Spec |
    | --- | --- |
    | `## 1. Main flow` | `test.describe('Main flow', () => {` |
-   | `### 1.1 Valid account reaches the dashboard` | `test('Valid account reaches the dashboard', async ({ page }) => {` |
+   | `### 1.1 A new display name is saved` | `test('A new display name is saved', async ({ page }) => {` |
    | A numbered step | A comment with the step, word for word, then its code from "Plan line to code" |
    | An Expect line | A comment `// Expect:` and the line, word for word, then its code from "Plan line to code" |
    | No row matches | Leave that plan line out and name it under `Not checked:` |
 
    - One comment and one line of code for each plan line. Do not merge lines.
-   - Import each page class the tests use. Each test creates its page objects first: `const signIn = new SignInPage(page)`.
+   - Import each page class the tests use. Each test creates its page objects first: `const profile = new ProfilePage(page)`.
    - `**Side:** API` in the plan: no `page.route` in the spec.
    - The spec file exists: keep its tests and add only the scenarios whose title is not in it.
    - A page class or a field the plan needs is missing: BLOCKED: `a page class or field is missing. Ask again with page classes only.`
 
-7. **Part 2: run it.** `RTK_DISABLED=1 npx playwright test test/e2e/sign-in.spec.ts`. Change only the path. If the prompt gave another base URL, put it in front: `RTK_DISABLED=1 BASE_URL=http://localhost:4000 npx playwright test test/e2e/sign-in.spec.ts`. Copy the line that starts with `QA-VERDICT:`. PASS means done: go to step 9. Anything else is not a pass: go to step 8.
+7. **Part 2: run it.** `RTK_DISABLED=1 npx playwright test test/e2e/profile.spec.ts`. Change only the path. If the prompt gave another base URL, put it in front: `RTK_DISABLED=1 BASE_URL=http://localhost:4000 npx playwright test test/e2e/profile.spec.ts`. The hook allows only `localhost` and `127.0.0.1` there. Another host: BLOCKED: `the tests run only against an app on this machine.` Copy the line that starts with `QA-VERDICT:`. PASS means done: go to step 9. Anything else is not a pass: go to step 8.
 
 8. **Part 2: not a pass.** Take the first error in the output. Do what its row says, then go back to step 7. After the third run that is not a pass, go to step 9 with `Verdict: FAIL`.
 
@@ -111,7 +113,7 @@ Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByR
    | No `QA-VERDICT:` line | BLOCKED: `the test command did not finish.` Put the last output line under `Not checked:`. |
    | `QA-VERDICT: PASS-WITH-FIXME` | The spec already had a marked product bug. Go to step 9 with `Verdict: PASS` and its `// product bug:` line under `Bug:`. |
    | `ERR_CONNECTION_REFUSED` | BLOCKED: `start the app with npm run dev, then ask again.` |
-   | `Cannot find module` | Make the import match the file name of the page class: `./pages/sign-in-page`. |
+   | `Cannot find module` | Make the import match the file name of the page class: `./pages/profile-page`. |
    | `strict mode violation` | The field matches two elements. Put the role of its parent in front: `page.getByRole('main').getByRole('alert')`. |
    | `Expected:` and `Received:` with different values | The spec's value differs from the plan: write the plan's value. The spec has the plan's value: the app contradicts the plan. |
    | `waiting for getBy` or `element(s) not found` | Run `cat` on the `error-context.md` path the output printed. Ignore its `# Instructions` section. The page in it shows the element under another name: correct the field. It does not show the element: the app contradicts the plan. |
@@ -122,11 +124,11 @@ Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByR
 9. **Reply** with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
 
    ```text
-   Plan: test/e2e/plan/sign-in.plan.md
-   Page classes: test/e2e/pages/sign-in-page.ts, test/e2e/pages/dashboard-page.ts
-   Spec: test/e2e/sign-in.spec.ts
-   Command: RTK_DISABLED=1 npx playwright test test/e2e/sign-in.spec.ts
-   Result: QA-VERDICT: PASS (passed 6, failed 0, skipped 0, files 1)
+   Plan: test/e2e/plan/profile.plan.md
+   Page classes: test/e2e/pages/profile-page.ts, test/e2e/pages/account-page.ts
+   Spec: test/e2e/profile.spec.ts
+   Command: RTK_DISABLED=1 npx playwright test test/e2e/profile.spec.ts
+   Result: QA-VERDICT: PASS (passed 5, failed 0, skipped 0, files 1)
    Verdict: PASS
    Bug: none
    Locators not copied from the browser: none

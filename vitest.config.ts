@@ -11,6 +11,8 @@ const ownReporters = configDefaults.reporters.length > 0 ? configDefaults.report
 // so they exit 0 while a folder is still empty.
 export default defineConfig({
   // Resolve import aliases such as `@/lib/db` from the `paths` in tsconfig.json.
+  // The paths apply only to the files that tsconfig.json includes. When it leaves
+  // out `test`, test/tsconfig.json makes them apply to the tests. See the README.
   resolve: { tsconfigPaths: true },
   // Some apps, for example older Next.js apps, set "jsx": "preserve" in tsconfig.json.
   // Vite cannot parse JSX that is left as it is, so compile it here.

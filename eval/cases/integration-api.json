@@ -21,6 +21,11 @@
         "glob": "test/integration/api/session/route.test.ts",
         "absent": ["@vitest-environment jsdom"],
         "why": "a route handler runs in Node"
+      },
+      {
+        "glob": "test/integration/api/session/route.test.ts",
+        "absent": ["readFileSync", "readFile("],
+        "why": "a test runs the source, it does not read the file as text"
       }
     ],
     "minKilled": 1,

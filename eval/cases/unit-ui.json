@@ -20,7 +20,12 @@
       {
         "glob": "test/unit/components/SignIn.test.ts",
         "firstLine": "// @vitest-environment jsdom",
-        "why": "a component test runs in jsdom, and the directive must be line 1"
+        "why": "the skill asks for this exact line 1 in a component test. Vitest itself also reads the directive in a block comment and on a later line"
+      },
+      {
+        "glob": "test/unit/components/SignIn.test.ts",
+        "absent": ["readFileSync", "readFile("],
+        "why": "a test runs the source, it does not read the file as text"
       }
     ],
     "minKilled": 1,
