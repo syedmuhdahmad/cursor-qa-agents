@@ -20,11 +20,13 @@ The scripts start no model. You run the agent.
 | `env-note.example.txt` | A note to put in front of the prompt for an agent that is not Cursor |
 | `self-test.mjs` | Checks the harness with the reference tests and with wrong solutions |
 | `eval.test.mjs` | Fast tests for the scripts and the case files |
-| `results/` | Recorded scores |
+| `results/` | Recorded scores, and [a note on how they were made](results/README.md) |
 
 ## Before you start
 
 You need Node, npm, git, `tar`, and Python 3. The hook is a Python script, and the scorer asks it about every file the agent wrote.
+
+The plan and generate cases also need Google Chrome. Their skills open the app with `playwright-cli`, and that starts the Chrome that is installed on the machine. See [The browser an agent opens](#the-browser-an-agent-opens).
 
 The first sandbox runs `npm install` once in a shared folder and `npx playwright install chromium`. That took 47 seconds here with a warm npm cache. Every later sandbox links to those files and took about 1 second.
 
@@ -61,7 +63,7 @@ This works with any agent that can read files, write files, and run shell comman
 
    | Option | What it does |
    | --- | --- |
-   | `--env-note eval/env-note.example.txt` | Puts the text of a file in front. Use it to tell an agent outside Cursor what differs, for example that no hook runs. `{{SANDBOX}}` and `{{BASE_URL}}` in the file are filled in. The example file is a start. Change it to fit your agent. |
+   | `--env-note eval/env-note.example.txt` | Puts the text of a file in front. Use it to tell an agent outside Cursor what differs, for example that no hook runs. `{{SANDBOX}}` and `{{BASE_URL}}` in the file are filled in. The example file is a start. Change it to fit your agent. It needs no word about the browser: the skills give the `playwright-cli` commands themselves. |
    | `--no-agents-md` | Leaves `AGENTS.md` out, for an agent that loads it by itself |
    | `--user-only` | Prints only the user's text, for Cursor itself |
 
@@ -82,6 +84,8 @@ This works with any agent that can read files, write files, and run shell comman
    pass  reply-verdict        the reply says "Verdict: PASS", and the scorer's own result is PASS
    eval unit-ui [working tree 51cf1fe+, /qa-unit]: PASS 100% (13 of 13 checks)
    ```
+
+   A line that starts with `note` can follow the checks. It is not part of the score. See [Notes](#notes).
 
    The whole result is saved as `$RUNS/run-01/score.json`. `--json` prints that JSON and nothing else. The exit code is 0 when every check passes, 1 when a check fails, and 2 when the score could not be worked out.
 
@@ -130,7 +134,7 @@ The count is right when the shared `node_modules` are on the same file system as
 node eval/make-sandbox.mjs --clean "$RUNS/run-01"
 ```
 
-It writes the agent's changes to `$RUNS/run-01/changes.diff`. Then it removes `node_modules` and `.next` from the sandbox. `meta.json`, `prompt.txt`, the reply, `score.json`, and the sandbox's own files with their git repository stay. `score.mjs --clean` does the same after scoring. It leaves a run alone that it could not score.
+It writes the agent's changes to `$RUNS/run-01/changes.diff`. It closes a browser that the agent left open. Then it removes `node_modules` and `.next` from the sandbox. `meta.json`, `prompt.txt`, the reply, `score.json`, and the sandbox's own files with their git repository stay. `score.mjs --clean` does the same after scoring. It leaves a run alone that it could not score.
 
 To score a cleaned run again, put `node_modules` back from the shared folder that `meta.json` names:
 
@@ -167,7 +171,17 @@ Change the ports with `--app-port` and `--bug-port`. Pass the same two flags whe
 
 Start the servers before the agent runs. With the server down, `playwright.config.ts` tells Playwright to start `npm run dev` itself. That listens on port 3000, not on the case's port, so the run fails after the config's two-minute wait. This was read from the config, not run.
 
-The planner and the generator also need the Playwright MCP server from `.cursor/mcp.json`.
+## The browser an agent opens
+
+The planner and the generator look at the running app with `playwright-cli`. It is a dev dependency of the kit, so every sandbox has it in `node_modules`. They need no MCP server. When the skill of a case names `playwright-cli open`, `make-sandbox.mjs` asks the sandbox's hook about that command with the URL of the case's server. A hook that does not allow it is listed under `Missing`.
+
+Three things to know when you run these cases:
+
+- **It starts Google Chrome.** `npx playwright install chromium` installs the browser for test runs only. On a machine without Chrome, `open` fails. That was read from the code of `playwright-cli` 0.1.22 and not seen, because the machine this was written on has Chrome.
+- **Each sandbox has its own browser.** `playwright-cli` keeps its sessions for each project folder. So two agents that run at the same time in two sandboxes do not share a browser, also when both use the session named `default`. This holds as long as no folder above the sandboxes has a `.playwright/` folder. With one, `playwright-cli` takes that folder as the project, and all sandboxes below it share their sessions.
+- **It saves files in the sandbox.** `open` saves a page snapshot and a console log in `.playwright-cli/`, and a click saves another snapshot. The scorer sets these files aside. They do not count as changes of the agent, also when the agent has edited `.gitignore` or has started `playwright-cli` in a folder below the root.
+
+A browser stays open until the agent runs `close`. The documentation of `playwright-cli` says that one without a window closes by itself after an hour without a command. That was not waited for here. The scorer tells you about a browser that is still open in a [note](#notes).
 
 ## Cases
 
@@ -217,6 +231,27 @@ A check is `pass`, `fail`, `na` (it does not apply to this case or this kit), or
 | `reply-form` | The reply has every line of the skill's reply form. The form is read from the `SKILL.md` in the sandbox. |
 | `reply-verdict` | The word after `Verdict:` is one the form allows, and it agrees with the scorer's own run |
 | `reply-bug` | In a product-bug case, the reply names the source file and line |
+
+### Notes
+
+A note says something about the run that is worth knowing and is not part of the score. `score.mjs` prints it after the checks, on a line that starts with `note`. The ids are in `notes` of `score.json` and of the recorded line, and at the end of the summary line.
+
+| Note | Means |
+| --- | --- |
+| `browser-open` | A browser that the agent opened with `playwright-cli` was still open when the run was scored. The agent stopped before `close`, or left it out. |
+| `browser-unknown` | `playwright-cli` is in the sandbox and did not say which browsers are open |
+
+This is a note and not a check, because the answer depends on when you score. Once the browser has closed by itself, the same sandbox gets no note. Score a run soon after its reply if you want to know.
+
+`open` leaves the browser running also when the page did not load, for example with `ERR_CONNECTION_REFUSED` because the app is down. So a reply of `BLOCKED` can come with this note.
+
+The scorer does not close the browser. `--clean` does, and so does this command in the sandbox:
+
+```bash
+npx --no-install playwright-cli close-all
+```
+
+It closes only the browsers of the folder it runs in. After `--clean` the sandbox has no `node_modules`, so the command no longer works there. That is why `--clean` closes the browser first.
 
 ### The scorer's own run
 
@@ -289,6 +324,8 @@ Three things differ in the score for such a kit:
 
 The old README did not list `.cursorignore`, so an old-kit sandbox has none. `make-sandbox.mjs` prints that under `Missing`.
 
+A kit from before the switch to `playwright-cli` names the `browser_*` tools of the Playwright MCP server in its plan and generate steps. An agent that has no such tools then needs an environment note that gives the `playwright-cli` command for each tool. Rounds 1 and 2 were run that way. See [results/README.md](results/README.md).
+
 ## Run it with the Cursor CLI
 
 Not yet run. The Cursor CLI was not installed on the machine this was written on. The flags and the output format come from Cursor's documentation.
@@ -298,12 +335,12 @@ With the CLI, Cursor attaches the skill and loads `AGENTS.md` itself. Give it on
 ```bash
 agent models
 cd "$RUNS/run-01/sandbox"
-agent -p --force --trust --approve-mcps --model MODEL_ID --output-format stream-json \
+agent -p --force --trust --model MODEL_ID --output-format stream-json \
   "$(node "$KIT/eval/prompt.mjs" "$RUNS/run-01" --user-only)" > "$RUNS/run-01/stream.jsonl"
 cd "$KIT"
 ```
 
-Take `MODEL_ID` from the list that `agent models` prints. `--approve-mcps` lets the planner and the generator use the Playwright MCP server.
+Take `MODEL_ID` from the list that `agent models` prints. No case needs an MCP server.
 
 The reply is the text of the last `assistant` event in the stream:
 
@@ -336,7 +373,7 @@ node eval/score.mjs "$RUNS/run-01" --reply "$RUNS/run-01/reply.txt" \
   --model composer-2.5 --label after --record eval/results/runs.jsonl
 ```
 
-`--record` appends one line of JSON to the file: the time, case, kit, commit, route, model, label, result, score, `falsePass`, the checks that did not pass, the scorer's own verdict, and what the reply's verdict reads as (`PASS`, `FAIL`, `BLOCKED`, `DONE`, or nothing). The full detail stays in `score.json` in the run folder. Keep the run folder if you want to look at the agent's files later. `--clean` makes it small.
+`--record` appends one line of JSON to the file: the time, case, kit, commit, route, model, label, result, score, `falsePass`, the checks that did not pass, the scorer's own verdict, what the reply's verdict reads as (`PASS`, `FAIL`, `BLOCKED`, `DONE`, or nothing), and the ids of the [notes](#notes). [results/README.md](results/README.md) explains each field. The full detail stays in `score.json` in the run folder. Keep the run folder if you want to look at the agent's files later. `--clean` makes it small.
 
 `report.mjs` turns the file into a table, one row per case and one column per kit, model, and label:
 
@@ -344,9 +381,9 @@ node eval/score.mjs "$RUNS/run-01" --reply "$RUNS/run-01/reply.txt" \
 node eval/report.mjs eval/results/runs.jsonl
 ```
 
-A cell such as `2/3, FP 1` means: three runs, two passed every check, one was a false pass. `blocked 1` means one reply said `BLOCKED`. `not scored 1` means the scorer could not decide, for example because a server was down.
+A cell such as `2/3, FP 1` means: three runs, two passed every check, one was a false pass. `blocked 1` means one reply said `BLOCKED`. `not scored 1` means the scorer could not decide, for example because a server was down. `browser open 1` means one run got the note `browser-open`.
 
-Commit `eval/results/runs.jsonl` together with a note that gives the date, the Cursor version, and how the agent was run. One run per case says little. A model can pass and fail the same case on two tries, so run each case several times.
+Commit `eval/results/runs.jsonl` together with a note that gives the date, the Cursor version, and how the agent was run. [results/README.md](results/README.md) is that note for the rounds recorded so far. Give each round a `--label` of its own and explain it there. A test fails when the file has a label or a model that the note does not name. One run per case says little. A model can pass and fail the same case on two tries, so run each case several times.
 
 ## Check the harness itself
 
@@ -365,6 +402,8 @@ The second command builds a sandbox for every case, puts the reference solution 
 - A passing test one folder above the expected path, with a true reply.
 - A test that reads the source file as text, and one that renders the component and checks only its text.
 - A spec of six tests with no `expect`.
+
+With the end-to-end cases it also scores one reference solution in a sandbox where `playwright-cli` has opened the app and was not closed. The score must stay at 100 percent, with the note `browser-open` and with nothing from `.playwright-cli/` among the changed paths. `--clean` must then close the browser. This part needs Google Chrome.
 
 It starts the two app servers on ports 3424 and 3425 and stops them. Each sandbox is cleaned with `make-sandbox.mjs --clean` as soon as it is scored, so one hard-linked `node_modules` exists at a time. With `--kit-ref origin/main` and `--running-servers` it took 5 minutes 30 seconds here. That includes one `npm install`: the two kits have the same dependencies and share one folder.
 
@@ -388,5 +427,5 @@ Run both after a change to a skill's reply form, to the example app, or to a ref
 - The product-bug server holds the bug of every case with `"server": "bug"`. A new case of that kind changes which tests of `e2e-generate` fail there. Then update `bugServer.mustFail` in `cases/e2e-generate.json`.
 - `reply-verdict` reads a `Verdict:` line that is not in the form by word match. It knows words such as `passed`, `ok`, `green`, `failed`, and `not`. A line in other words reads as nothing, and is then no false pass.
 - `plan-texts` counts every text in double quotes. A plan that quotes its own words, and not a text of the app, fails it.
-- The prompt from `prompt.mjs` stands in for Cursor. Tool names, the hook's deny messages, and the MCP browser tools are only real inside Cursor.
+- The prompt from `prompt.mjs` stands in for Cursor. Tool names and the hook's deny messages are only real inside Cursor. The `playwright-cli` commands are the same in both, but outside Cursor no hook denies the ones the kit forbids.
 - The hard links share files between sandboxes. A tool that edits a file inside `node_modules` in place would change it for all of them. Vitest, Playwright, and Next.js did not do that in the runs here.

@@ -381,10 +381,15 @@ const TEST = `import { expect, it } from 'vitest'\n\nit('adds', () => {\n  expec
 const SPEC = `import { expect, test } from '@playwright/test'\n\ntest.fixme('home', async ({ page }) => {\n  await page.goto('/')\n  await expect(page).toHaveURL('/')\n})\n`
 
 // Asks the installed hook a few fixed questions. The first two show that the
-// guard is alive. The others show which of the newer rules it has.
-function probeHook(sandbox) {
+// guard is alive. The others show which of the newer rules it has. `browseUrl`
+// is set when the skill of this case opens the app with playwright-cli. Then
+// the hook is also asked about that command, with the URL of the case's server.
+function probeHook(sandbox, browseUrl) {
   const write = (file, content) => ({ tool_name: 'Write', tool_input: { file_path: join(sandbox, file), content } })
   const shell = (command) => ({ command, cwd: '' })
+  const browse = browseUrl
+    ? [{ name: 'allows the playwright-cli command that opens the app', expected: 'allow', event: 'beforeShellExecution', payload: shell(`npx --no-install playwright-cli open ${browseUrl}/sign-in`) }]
+    : []
   const probes = [
     { name: 'allows a test file under test/', must: true, expected: 'allow', event: 'preToolUse', payload: write('test/unit/eval-probe.test.ts', TEST) },
     { name: 'denies a write to application source', must: true, expected: 'deny', event: 'preToolUse', payload: write('src/eval-probe.ts', 'export const probe = 1\n') },
@@ -393,6 +398,7 @@ function probeHook(sandbox) {
     { name: 'denies test.fixme( without the product bug comment', expected: 'deny', event: 'preToolUse', payload: write('test/e2e/eval-probe.spec.ts', SPEC) },
     { name: 'allows the Vitest command the skills teach', expected: 'allow', event: 'beforeShellExecution', payload: shell('RTK_DISABLED=1 npx vitest run test/unit/lib/validation.test.ts') },
     { name: 'denies vitest without run', expected: 'deny', event: 'beforeShellExecution', payload: shell('RTK_DISABLED=1 npx vitest test/unit/lib/validation.test.ts') },
+    ...browse,
   ]
   return probes.map(({ name, must = false, expected, event, payload }) => {
     const answer = askHook(sandbox, event, payload)
@@ -400,7 +406,7 @@ function probeHook(sandbox) {
   })
 }
 
-function reportKit(sandbox, testCase) {
+function reportKit(sandbox, testCase, url) {
   const read = (path) => (existsSync(join(sandbox, path)) ? readFileSync(join(sandbox, path), 'utf8') : null)
   const route = routeOf(read, testCase.skill)
   const missing = []
@@ -419,7 +425,14 @@ function reportKit(sandbox, testCase) {
     }
   }
 
-  const hookProbes = existsSync(join(sandbox, '.cursor', 'hooks.json')) ? probeHook(sandbox) : []
+  // A skill that opens the app with playwright-cli needs the package, which
+  // comes from the kit's dev dependencies, and a hook that allows the command.
+  const browses = route === 'skill' && /\bplaywright-cli open\b/.test(read(`.cursor/skills/${testCase.skill}/SKILL.md`))
+  if (browses && !existsSync(join(sandbox, 'node_modules', '@playwright', 'cli', 'package.json'))) {
+    missing.push('@playwright/cli is not installed in the sandbox, so the skill cannot open the app with playwright-cli')
+  }
+
+  const hookProbes = existsSync(join(sandbox, '.cursor', 'hooks.json')) ? probeHook(sandbox, browses ? url : null) : []
   for (const probe of hookProbes) {
     if (probe.got === probe.expected) continue
     missing.push(
@@ -492,7 +505,7 @@ async function buildSandbox(options) {
     pointPlaywrightAt(sandbox, server.url)
   }
 
-  const kitReport = reportKit(sandbox, testCase)
+  const kitReport = reportKit(sandbox, testCase, server?.url)
   const baseline = commitBaseline(sandbox)
 
   const meta = {

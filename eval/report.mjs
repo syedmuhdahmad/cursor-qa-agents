@@ -8,6 +8,8 @@
 // every check. `FP 1` means one of them was a false pass: the reply said it
 // worked and the scorer's own run says it did not. `blocked 1` means one
 // reply said BLOCKED. `not scored 1` means the scorer could not decide.
+// `browser open 1` means one run left a browser open that it had started with
+// playwright-cli. That is a note of the scorer and not part of the score.
 //
 // Node built-ins only.
 
@@ -38,11 +40,13 @@ export function table(records) {
     const falsePasses = runs.filter((record) => record.falsePass).length
     const blocked = runs.filter((record) => record.replyVerdict === 'BLOCKED').length
     const errors = runs.filter((record) => record.result === 'error').length
+    const browsers = runs.filter((record) => (record.notes ?? []).includes('browser-open')).length
     return (
       `${passed}/${runs.length}` +
       (falsePasses ? `, FP ${falsePasses}` : '') +
       (blocked ? `, blocked ${blocked}` : '') +
-      (errors ? `, not scored ${errors}` : '')
+      (errors ? `, not scored ${errors}` : '') +
+      (browsers ? `, browser open ${browsers}` : '')
     )
   }
   const lines = [`| Case | ${groups.join(' | ')} |`, `| --- | ${groups.map(() => '---').join(' | ')} |`]

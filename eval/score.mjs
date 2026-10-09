@@ -18,6 +18,12 @@
 // as test-results/. With --clean it then writes <run-folder>/changes.diff and
 // removes node_modules and .next from the sandbox, which frees their inodes.
 //
+// After the checks it prints a `note` line when a browser that the agent
+// opened with playwright-cli is still open. A note is not a check and does not
+// change the score: the answer depends on when the run is scored, because
+// playwright-cli closes a browser that has been idle for long. --clean closes
+// it at once.
+//
 // Node built-ins only.
 
 import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
@@ -32,6 +38,7 @@ import {
   answersInSkill,
   askHook,
   breath,
+  browserSessions,
   cleanReport,
   cleanRun,
   dropHolder,
@@ -76,9 +83,20 @@ const isKitFile = (path) => path.startsWith('.cursor/') || path === '.cursorigno
 
 const QUIET = ['-c', `core.excludesFile=${devNull}`, '-c', 'core.quotePath=false']
 
+// Folders that a tool may write next to any file, not only in the project
+// root. playwright-cli saves its snapshots in the folder it is started from.
+const GENERATED_ANYWHERE = ['node_modules', '__pycache__', '.playwright-cli']
+
+// True for a path that a tool wrote and the agent did not.
+export function isGeneratedPath(path) {
+  const parts = path.split('/')
+  return GENERATED.has(parts[0]) || GENERATED_ANYWHERE.some((name) => parts.includes(name))
+}
+
 // Every path that differs from the baseline commit, tracked or not. Paths that
-// tools write (test-results/, .playwright-mcp/, and so on) are set aside.
-function changedPaths(sandbox, baseline) {
+// tools write (test-results/, .playwright-cli/, and so on) are set aside. That
+// does not rest on the sandbox's .gitignore, which the agent may edit.
+export function changedPaths(sandbox, baseline) {
   const changed = []
   const fields = git(sandbox, [...QUIET, 'diff', '--name-status', '--no-renames', '-z', baseline]).split('\0')
   for (let at = 0; at + 1 < fields.length; at += 2) {
@@ -89,13 +107,9 @@ function changedPaths(sandbox, baseline) {
     if (path !== '' && !changed.some((entry) => entry.path === path)) changed.push({ path, status: 'added' })
   }
   changed.sort((a, b) => (a.path < b.path ? -1 : 1))
-  const isGenerated = (path) => {
-    const parts = path.split('/')
-    return GENERATED.has(parts[0]) || parts.includes('node_modules') || parts.includes('__pycache__')
-  }
   return {
-    changed: changed.filter((entry) => !isGenerated(entry.path)),
-    ignored: changed.filter((entry) => isGenerated(entry.path)).map((entry) => entry.path),
+    changed: changed.filter((entry) => !isGeneratedPath(entry.path)),
+    ignored: changed.filter((entry) => isGeneratedPath(entry.path)).map((entry) => entry.path),
   }
 }
 
@@ -902,6 +916,27 @@ function planChecks({ testCase, sandbox, read }) {
   }
 }
 
+// --- Notes --------------------------------------------------------------------
+
+// A note says something about the run that is worth knowing and is not part
+// of the score. `sessions` is what browserSessions() returned for the sandbox.
+//   browser-open     a browser the agent opened with playwright-cli is still open
+//   browser-unknown  playwright-cli is there and did not say which browsers are open
+export function sessionNotes(sessions, sandbox) {
+  if (sessions === null) return []
+  if (sessions.problem) return [{ id: 'browser-unknown', detail: `could not find out whether the agent left a browser open: ${sessions.problem}` }]
+  if (sessions.names.length === 0) return []
+  const which = sessions.names.length === 1 ? `the playwright-cli session "${sessions.names[0]}"` : `the playwright-cli sessions ${sessions.names.map((name) => `"${name}"`).join(', ')}`
+  return [
+    {
+      id: 'browser-open',
+      detail:
+        `the agent left a browser open: ${which}. ` +
+        `Close it with \`npx --no-install playwright-cli close-all\` in ${sandbox}, or score with --clean`,
+    },
+  ]
+}
+
 // --- One run ----------------------------------------------------------------
 
 // Test files, or plans, that the agent wrote at another path than the case asks for.
@@ -969,6 +1004,8 @@ export async function score(runDir, { reply, model = null, label = null, skipMut
   const form = skillText === null ? null : replyForm(skillText)
   const { changed, ignored } = changedPaths(sandbox, meta.baseline)
   const context = { testCase, sandbox, meta, route, read, baselineRead, changed, reply, form, skipMutants }
+  // Asked first, before the scorer's own test runs take their time.
+  const notes = sessionNotes(browserSessions(sandbox), sandbox)
 
   const found = await ownRun(context)
   await breath()
@@ -1024,6 +1061,7 @@ export async function score(runDir, { reply, model = null, label = null, skipMut
     changed,
     ignored,
     checks,
+    notes,
   }
 }
 
@@ -1037,7 +1075,8 @@ export function summaryLine(result) {
     `(${result.score.passed} of ${result.score.counted} checks)` +
     (result.falsePass ? ' FALSE PASS' : '') +
     (failed.length > 0 ? `; not passed: ${failed.join(', ')}` : '') +
-    (result.answerInSkill?.length > 0 ? `; the skill prints the answer of this case: ${result.answerInSkill.join(' and ')}` : '')
+    (result.answerInSkill?.length > 0 ? `; the skill prints the answer of this case: ${result.answerInSkill.join(' and ')}` : '') +
+    (result.notes?.length > 0 ? `; notes: ${result.notes.map((note) => note.id).join(', ')}` : '')
   )
 }
 
@@ -1060,6 +1099,7 @@ export function recordLine(result) {
     notPassed: result.checks.filter((check) => check.status === 'fail' || check.status === 'error').map((check) => check.id),
     run: result.run.verdict,
     replyVerdict: result.reply.word,
+    notes: (result.notes ?? []).map((note) => note.id),
   })
 }
 
@@ -1113,6 +1153,7 @@ async function main(argv) {
       console.error(summaryLine(result))
     } else {
       for (const check of result.checks) console.log(`${check.status.padEnd(5)} ${check.id.padEnd(20)} ${check.detail}`)
+      for (const note of result.notes) console.log(`${'note'.padEnd(5)} ${note.id.padEnd(20)} ${note.detail}`)
       console.log(summaryLine(result))
     }
     // A run that could not be scored keeps its node_modules: it will be scored again.

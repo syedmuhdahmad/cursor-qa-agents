@@ -10,6 +10,11 @@
 // reference solution must score 100 percent. Then it scores a list of wrong
 // solutions. Each one must fail the checks named for it.
 //
+// With the end-to-end cases it also scores one reference solution in a sandbox
+// where playwright-cli has opened the app and was not closed, the way an agent
+// can leave it. The score must be the same, with a note about the browser, and
+// --clean must close the browser. This part needs Google Chrome.
+//
 // --out is a folder outside this repository. The run folders in it are removed
 // at the end unless --keep is given. The shared node_modules stay in
 // <out>/.eval-base, or in the folder given with --base.
@@ -145,6 +150,71 @@ function referenceRun(root, id, makeArgs) {
     cleanUp(made.out, `reference ${id} again`)
   }
   return made
+}
+
+// --- A browser left open ------------------------------------------------------
+
+function isRunning(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// A reference solution of /qa-generate in a sandbox with what a real agent
+// leaves behind: the files playwright-cli saved, and a browser it did not close.
+function browserRun(root, makeArgs) {
+  const id = 'e2e-generate'
+  const name = `reference ${id} with a browser left open`
+  const testCase = loadCase(id)
+  const made = makeSandbox(join(root, 'reference-browser-left-open'), ['--case', id, ...makeArgs])
+  applyReference(made.sandbox, testCase)
+
+  const page = `${made.meta.server.url}/sign-in`
+  const cli = (...args) => run('npx', ['--no-install', 'playwright-cli', ...args], { cwd: made.sandbox, env: { ...process.env, NO_UPDATE_NOTIFIER: '1' }, timeoutMs: 180_000 })
+  const opened = cli('open', page)
+  const pid = Number(/opened with pid (\d+)/.exec(opened.stdout)?.[1])
+  const saved = existsSync(join(made.sandbox, '.playwright-cli')) ? readdirSync(join(made.sandbox, '.playwright-cli')) : []
+  const isOpen = opened.status === 0 && pid > 0 && saved.length > 0
+  report(
+    isOpen,
+    `playwright-cli opens ${page} in the sandbox`,
+    isOpen
+      ? `the browser runs with pid ${pid}, and ${saved.length} files are in .playwright-cli/`
+      : `exit ${opened.status}. playwright-cli starts Google Chrome, which must be installed.\n${`${opened.stdout}${opened.stderr}`.trim().split('\n').slice(0, 12).join('\n')}`,
+  )
+  if (!isOpen) {
+    // `open` can leave a browser running although it failed.
+    cli('close-all')
+    return
+  }
+
+  const reply = formReply(made.sandbox, testCase, testCase.reference.reply, { BASE_URL: made.meta.server.url })
+  const result = scoreRun(made.out, reply)
+  const notes = (result.notes ?? []).map((note) => note.id)
+  const counted = [...result.changed, ...result.ignored.map((path) => ({ path }))].filter((entry) => entry.path.includes('.playwright-cli'))
+  const problems = []
+  if (result.result !== 'pass' || result.falsePass) problems.push(`wanted 100%, got ${result.score.percent}%: ${describe(notPassed(result))}`)
+  if (notes.join() !== 'browser-open') problems.push(`wanted the note browser-open, got: ${notes.join(', ') || 'no note'}`)
+  if (counted.length > 0) problems.push(`these paths were listed: ${counted.map((entry) => entry.path).join(', ')}`)
+  if (!isRunning(pid)) problems.push('the scorer must not close the browser, and it is gone')
+  report(
+    problems.length === 0,
+    name,
+    problems.length === 0
+      ? `${result.score.percent}% (${result.score.passed} of ${result.score.counted} checks), the note browser-open, and nothing from .playwright-cli/ among the changed paths`
+      : problems.join('; '),
+  )
+
+  // --clean must close the browser before it removes the playwright-cli that can name it.
+  const cleaned = run('node', [script('make-sandbox.mjs'), '--clean', made.out])
+  const said = /Closed the browser the agent left open: default\./.test(cleaned.stdout)
+  for (let waited = 0; waited < 20 && isRunning(pid); waited += 1) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250)
+  const closed = cleaned.status === 0 && said && !isRunning(pid)
+  report(closed, `clean ${name}`, closed ? `--clean says it closed the browser, and pid ${pid} is gone` : `exit ${cleaned.status}, said so: ${said}, pid ${pid} still runs: ${isRunning(pid)}\n${cleaned.stdout}${cleaned.stderr}`)
+  if (isRunning(pid)) process.kill(pid, 'SIGTERM')
 }
 
 // --- Wrong solutions --------------------------------------------------------
@@ -801,6 +871,7 @@ async function main(argv) {
         servers.push(await startServer(root, 'bug', Number(values['bug-port']), makeArgs))
       }
       for (const testCase of cases.filter((entry) => kindOf(entry) === 'e2e')) referenceRun(root, testCase.id, makeArgs)
+      browserRun(root, makeArgs)
       WRONG.forEach((entry, index) => {
         if (entry.kind === 'e2e') wrongRun(root, entry, index, makeArgs)
       })

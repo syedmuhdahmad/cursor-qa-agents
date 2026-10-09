@@ -276,6 +276,9 @@ export function linkTree(from, to, counts = { linked: 0, copied: 0, folders: 0, 
 }
 
 // Folders and files that tools write and that are not the agent's work.
+// .playwright-cli holds the page snapshots and console logs that playwright-cli
+// saves while /qa-plan and /qa-generate look at the app. .playwright-mcp is
+// what the Playwright MCP server saved for the kit before that.
 export const GENERATED = new Set([
   'node_modules',
   '.git',
@@ -367,6 +370,54 @@ export function answersInSkill(skillText, testCase) {
   if (skillText.includes(`${bug.file}:${bug.line}`)) found.push(`${bug.file}:${bug.line}`)
   if (typeof bug.got === 'string' && skillText.includes(bug.got)) found.push(`"${bug.got}"`)
   return found
+}
+
+// --- The browser an agent opened ----------------------------------------------
+
+// The names of the open sessions in the output of `playwright-cli list --json`.
+// Null when the text is not that output.
+export function openSessionNames(text) {
+  let listed
+  try {
+    listed = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (!Array.isArray(listed?.browsers)) return null
+  return listed.browsers.filter((browser) => browser?.status === 'open').map((browser) => String(browser.name))
+}
+
+const CLI = ['--no-install', 'playwright-cli']
+const hasCli = (sandbox) => existsSync(join(sandbox, 'node_modules', '@playwright', 'cli', 'package.json'))
+// Once a day playwright-cli asks the npm registry for a newer version and
+// prints a notice. This variable turns that off for the harness's own calls.
+const cliEnv = () => ({ ...process.env, NO_UPDATE_NOTIFIER: '1' })
+
+// The playwright-cli sessions of a sandbox that are still open: the browsers
+// its agent started and did not close. playwright-cli keeps its sessions per
+// project folder, so the answer holds only this sandbox's. It is asked with
+// the sandbox's own copy of the CLI, because the copy is what names the
+// project. Returns { names } or { problem }, and null when the sandbox has no
+// playwright-cli, for example after --clean.
+export function browserSessions(sandbox) {
+  if (!hasCli(sandbox)) return null
+  const listed = run('npx', [...CLI, 'list', '--json'], { cwd: sandbox, env: cliEnv(), timeoutMs: 60_000 })
+  const names = listed.status === 0 ? openSessionNames(listed.stdout) : null
+  if (names === null) {
+    const last = (listed.stderr || listed.stdout || listed.error?.message || '').trim().split(/\r?\n/).at(-1)
+    return { problem: `\`npx ${CLI.join(' ')} list --json\` gave no list (exit ${listed.status}): ${last}` }
+  }
+  return { names }
+}
+
+// Closes the open sessions of a sandbox and returns their names. `close-all`
+// reaches only the sessions of the folder it runs in.
+export function closeBrowserSessions(sandbox) {
+  const open = browserSessions(sandbox)
+  if (!open?.names || open.names.length === 0) return []
+  run('npx', [...CLI, 'close-all'], { cwd: sandbox, env: cliEnv(), timeoutMs: 60_000 })
+  const left = browserSessions(sandbox)?.names ?? []
+  return open.names.filter((name) => !left.includes(name))
 }
 
 // --- Temporary folders ------------------------------------------------------
@@ -564,10 +615,15 @@ export const DIFF_NAME = 'changes.diff'
 // changes to <run>/changes.diff, then removes node_modules and .next from the
 // sandbox. The sandbox's own files, its git repository, meta.json, the reply,
 // and score.json stay.
+//
+// A browser that the agent left open is closed first. Once node_modules is
+// gone, the sandbox has no playwright-cli to close it with, and the browser
+// would run until playwright-cli closes it for being idle.
 export function cleanRun(runDir) {
   const { root, meta, sandbox } = readRun(runDir)
   const diff = diffOfRun(sandbox, meta.baseline)
   writeFileSync(join(root, DIFF_NAME), diff)
+  const closed = closeBrowserSessions(sandbox)
   const removed = []
   for (const name of REBUILDABLE) {
     const path = join(sandbox, name)
@@ -578,13 +634,14 @@ export function cleanRun(runDir) {
     removed.push({ name, entries: tree.files + tree.folders })
   }
   const kept = [META_NAME, DIFF_NAME, ...readdirSync(root).filter((name) => /^(reply.*\.txt|score\.json|prompt\.txt)$/.test(name))]
-  return { root, sandbox, removed, kept, diffBytes: Buffer.byteLength(diff) }
+  return { root, sandbox, removed, kept, closed, diffBytes: Buffer.byteLength(diff) }
 }
 
 // One line for what cleanRun() did.
 export function cleanReport(cleaned) {
   const gone = cleaned.removed.map((entry) => `${entry.name} (${entry.entries} files and folders)`).join(', ')
-  return `Cleaned:  ${cleaned.root}. Removed from the sandbox: ${gone || 'nothing, it was clean'}. Kept: ${cleaned.kept.join(', ')}, and the sandbox's own files.`
+  const closed = (cleaned.closed ?? []).length > 0 ? ` Closed the browser the agent left open: ${cleaned.closed.join(', ')}.` : ''
+  return `Cleaned:  ${cleaned.root}.${closed} Removed from the sandbox: ${gone || 'nothing, it was clean'}. Kept: ${cleaned.kept.join(', ')}, and the sandbox's own files.`
 }
 
 // Puts node_modules back into a sandbox that --clean emptied, from the shared

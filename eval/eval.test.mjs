@@ -14,6 +14,7 @@ import {
   INODE_MARGIN,
   KIT_ROOT,
   answersInSkill,
+  browserSessions,
   cleanRun,
   countTree,
   diffOfRun,
@@ -28,6 +29,7 @@ import {
   listCaseIds,
   loadCase,
   matchesAny,
+  openSessionNames,
   relinkRun,
   replyForm,
   routeOf,
@@ -38,8 +40,10 @@ import {
 } from './lib.mjs'
 import { readRecords, table } from './report.mjs'
 import {
+  changedPaths,
   contentProblems,
   inWriteScope,
+  isGeneratedPath,
   judgeVerdict,
   mutantOutcome,
   mutate,
@@ -49,6 +53,7 @@ import {
   readPlaywrightReport,
   readVitestReport,
   recordLine,
+  sessionNotes,
   strayWork,
   summaryLine,
   testsWithoutAssertion,
@@ -564,6 +569,75 @@ test('clean: keeps the diff, the reply, and the score, and removes node_modules'
   assert.throws(() => relinkRun(run), /are gone/)
 })
 
+// --- What playwright-cli leaves behind ------------------------------------------
+
+test('changed paths: what playwright-cli saves does not count against the agent', (context) => {
+  const root = scratch(context)
+  const { sandbox, baseline } = smallRun(root)
+  // The sandbox of smallRun() ignores node_modules and .next only, like a kit
+  // from before playwright-cli, or a .gitignore that the agent has cut down.
+  put(sandbox, 'test/e2e/plan/sign-in.plan.md', '# Plan\n')
+  put(sandbox, '.playwright-cli/page-2026-10-09T12-04-27-907Z.yml', '- button "Sign in" [ref=e9]\n')
+  put(sandbox, '.playwright-cli/console-2026-10-09T12-04-27-385Z.log', '[LOG] ready\n')
+  put(sandbox, 'test/e2e/.playwright-cli/page-2026-10-09T12-05-00-000Z.yml', '- heading "Sign in" [ref=e3]\n')
+  const saved = ['.playwright-cli/console-2026-10-09T12-04-27-385Z.log', '.playwright-cli/page-2026-10-09T12-04-27-907Z.yml', 'test/e2e/.playwright-cli/page-2026-10-09T12-05-00-000Z.yml']
+
+  const found = changedPaths(sandbox, baseline)
+  assert.deepEqual(found.changed, [{ path: 'test/e2e/plan/sign-in.plan.md', status: 'added' }])
+  assert.deepEqual(found.ignored, saved, 'the files are set aside, not hidden')
+  assert.ok(!diffOfRun(sandbox, baseline).includes('.playwright-cli'), 'and they are not in changes.diff')
+
+  // With the line the kit adds to .gitignore, git does not list them at all.
+  // The edit to .gitignore is a change of its own, inside the write scope.
+  put(sandbox, '.gitignore', 'node_modules\n.next\n.playwright-cli/\n')
+  const ignoredByGit = changedPaths(sandbox, baseline)
+  assert.deepEqual(ignoredByGit.changed.map((entry) => entry.path), ['.gitignore', 'test/e2e/plan/sign-in.plan.md'])
+  assert.deepEqual(ignoredByGit.ignored, [])
+})
+
+test('changed paths: which paths a tool wrote', () => {
+  for (const path of ['.playwright-cli/page.yml', 'test/e2e/.playwright-cli/page.yml', '.playwright-mcp/page.yml', 'test-results/a/error-context.md', 'node_modules/x/index.js', 'packages/a/node_modules/x/index.js', 'test/__pycache__/x.pyc', 'package-lock.json']) {
+    assert.ok(isGeneratedPath(path), path)
+  }
+  // A file the agent saved with a command the kit forbids is not set aside.
+  for (const path of ['test-output.txt', 'page.png', 'state.json', 'test/e2e/sign-in.spec.ts', 'test/e2e/playwright-cli/notes.md', 'test/test-results/a.txt', '.playwright-cli.md', 'src/.playwright-clip/x.ts']) {
+    assert.ok(!isGeneratedPath(path), path)
+  }
+})
+
+// What `playwright-cli list --json` printed in a sandbox with one open browser (0.1.22).
+const ONE_OPEN = JSON.stringify({
+  browsers: [{ name: 'default', workspace: '32bed7e261f0d93d', status: 'open', browserType: 'chrome', userDataDir: null, headed: false, persistent: false, attached: false, compatible: true, version: '1.64.0-alpha-1790635538000' }],
+})
+
+test('browser sessions: the open ones in the output of playwright-cli list --json', () => {
+  assert.deepEqual(openSessionNames(ONE_OPEN), ['default'])
+  assert.deepEqual(openSessionNames('{\n  "browsers": []\n}\n'), [])
+  assert.deepEqual(openSessionNames(JSON.stringify({ browsers: [{ name: 'default', status: 'closed' }, { name: 'tw-a1b2c3', status: 'open' }] })), ['tw-a1b2c3'])
+  assert.equal(openSessionNames('  (no browsers)\n'), null, 'the text form is not read')
+  assert.equal(openSessionNames('{"closed":[]}'), null)
+  assert.equal(openSessionNames(''), null)
+})
+
+test('browser sessions: a sandbox without playwright-cli is not asked', (context) => {
+  const root = scratch(context)
+  const { sandbox } = smallRun(root)
+  assert.equal(browserSessions(sandbox), null)
+  assert.deepEqual(cleanRun(join(root, 'run')).closed, [], 'and --clean has nothing to close')
+})
+
+test('notes: a browser the agent left open is a note, not a check', () => {
+  assert.deepEqual(sessionNotes(null, '/runs/run-01/sandbox'), [], 'no playwright-cli in the sandbox')
+  assert.deepEqual(sessionNotes({ names: [] }, '/runs/run-01/sandbox'), [], 'every browser was closed')
+  const [open] = sessionNotes({ names: ['default'] }, '/runs/run-01/sandbox')
+  assert.equal(open.id, 'browser-open')
+  assert.equal(open.detail, 'the agent left a browser open: the playwright-cli session "default". Close it with `npx --no-install playwright-cli close-all` in /runs/run-01/sandbox, or score with --clean')
+  assert.match(sessionNotes({ names: ['default', 'tw-a1b2c3'] }, '/x')[0].detail, /the playwright-cli sessions "default", "tw-a1b2c3"\./)
+  const [unknown] = sessionNotes({ problem: '`npx --no-install playwright-cli list --json` gave no list (exit 1): boom' }, '/x')
+  assert.equal(unknown.id, 'browser-unknown')
+  assert.match(unknown.detail, /^could not find out whether the agent left a browser open: .*boom$/)
+})
+
 test('bug report: the file with its line', () => {
   assert.ok(namesFileLine('Bug: src/components/SignIn.tsx:7 expected "a", received "b"', 'src/components/SignIn.tsx', 7))
   assert.ok(namesFileLine('see SignIn.tsx:7.', 'src/components/SignIn.tsx', 7))
@@ -588,6 +662,9 @@ test('report: one row per case, one column per group', () => {
   assert.match(text, /\| `e2e-plan` \| 0\/1, not scored 1 \|  \|/)
   assert.match(text, /\| All \| 1\/3, FP 1, not scored 1 \| 0\/1, blocked 1 \|/)
   assert.throws(() => readRecords('{"a":1}\nnot json\n'), /Line 2/)
+  // A note is counted next to the score. A line from before notes has no `notes`.
+  const noted = table([record({ notes: ['browser-open'] }), record({ notes: [] }), record({ result: 'fail', notes: ['browser-open', 'browser-unknown'] }), record({})])
+  assert.match(noted, /\| `unit-ui` \| 3\/4, browser open 2 \|/)
 })
 
 test('summary and record lines', () => {
@@ -608,6 +685,11 @@ test('summary and record lines', () => {
   }
   assert.equal(summaryLine(result), 'eval unit-ui [working tree abcdef1+, /qa-unit, m]: FAIL 85% (11 of 13 checks) FALSE PASS; not passed: outcome, reply-verdict')
   assert.deepEqual(JSON.parse(recordLine(result)).notPassed, ['outcome', 'reply-verdict'])
+  assert.deepEqual(JSON.parse(recordLine(result)).notes, [])
+  const noted = { ...result, notes: sessionNotes({ names: ['default'] }, '/runs/run-01/sandbox') }
+  assert.match(summaryLine(noted), /; not passed: outcome, reply-verdict; notes: browser-open$/)
+  assert.deepEqual(JSON.parse(recordLine(noted)).notes, ['browser-open'])
+  assert.equal(JSON.parse(recordLine(noted)).result, 'fail', 'a note changes nothing else in the line')
   assert.equal(JSON.parse(recordLine(result)).answerInSkill, false)
   const leaked = { ...result, answerInSkill: ['src/components/SignIn.tsx:7', '"Invalid credentials"'] }
   assert.match(summaryLine(leaked), /; the skill prints the answer of this case: src\/components\/SignIn\.tsx:7 and "Invalid credentials"$/)
@@ -746,5 +828,44 @@ test('README: the commands work from any clone and say where runs belong', () =>
   for (const line of readme.split('\n').filter((entry) => /^\s*(node|agent) /.test(entry) || entry.includes('$(node '))) {
     assert.ok(!/node eval\//.test(line) || !/RUNS\/[\w-]+\/sandbox/.test(line), `a command that runs in a sandbox does not use a path relative to the clone: ${line.trim()}`)
   }
-  for (const word of ['tmpfs', 'inode', '--clean', '--relink', '--running-servers']) assert.ok(readme.includes(word), `the README says "${word}"`)
+  for (const word of ['tmpfs', 'inode', '--clean', '--relink', '--running-servers', 'playwright-cli', 'browser-open', 'Google Chrome']) assert.ok(readme.includes(word), `the README says "${word}"`)
+})
+
+// --- The browser route: playwright-cli, no MCP server -----------------------------
+
+test('environment note: the example has no list of browser tools, and its names are filled in', () => {
+  const note = readFileSync(join(EVAL_ROOT, 'env-note.example.txt'), 'utf8')
+  assert.ok(!/browser_|\bMCP\b|playwright-cli/i.test(note), 'the skills give the playwright-cli commands themselves')
+  for (const word of ['{{SANDBOX}}', '{{BASE_URL}}', 'hook']) assert.ok(note.includes(word), `the note has ${word}`)
+  const filled = fill(note, { SANDBOX: '/runs/run-01/sandbox', BASE_URL: 'http://localhost:3424' })
+  assert.match(filled, /^- Your project folder is \/runs\/run-01\/sandbox\. /m)
+  assert.match(filled, /^- The app server for this case: http:\/\/localhost:3424\. Do not start or stop a server\.$/m)
+  assert.match(fill(note, { SANDBOX: '/x' }, 'none'), /^- The app server for this case: none\. /m, 'a case without a server')
+})
+
+test('cases and prompt: nothing names an MCP browser tool', () => {
+  const files = [...listCaseIds().map((id) => join('cases', `${id}.json`)), 'prompt.mjs', 'env-note.example.txt']
+  for (const file of files) {
+    const text = readFileSync(join(EVAL_ROOT, file), 'utf8')
+    assert.ok(!/browser_[a-z]|\bMCP\b|@playwright\/mcp/i.test(text), `${file} does not name an MCP tool, server, or package`)
+  }
+})
+
+test('results note: explains every label and model in runs.jsonl', () => {
+  const note = readFileSync(join(EVAL_ROOT, 'results', 'README.md'), 'utf8')
+  const records = readRecords(readFileSync(join(EVAL_ROOT, 'results', 'runs.jsonl'), 'utf8'))
+  assert.ok(records.length > 0)
+  for (const key of ['label', 'model']) {
+    for (const value of new Set(records.map((record) => record[key]))) {
+      assert.ok(note.includes(`\`${value}\``), `eval/results/README.md names the ${key} \`${value}\`. Add it to the tables there`)
+    }
+  }
+  for (const field of new Set(records.flatMap((record) => Object.keys(record)))) {
+    assert.ok(note.includes(`\`${field}\``), `eval/results/README.md explains the field \`${field}\``)
+  }
+  for (const field of Object.keys(JSON.parse(recordLine({ case: 'x', kit: { source: 'working-tree', commit: 'abcdef1234', dirty: false }, score: {}, run: {}, reply: {}, checks: [] })))) {
+    assert.ok(note.includes(`\`${field}\``), `eval/results/README.md explains the field \`${field}\` that score.mjs --record writes`)
+  }
+  assert.match(note, /^## Known problems with these rounds$/m)
+  assert.match(note, /^<!-- results:round-3 -->$/m, 'the place for round 3 is marked')
 })
