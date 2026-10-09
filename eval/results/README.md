@@ -10,14 +10,21 @@ node eval/report.mjs eval/results/runs.jsonl
 
 ## How the rounds were run
 
-No model ran inside Cursor in these rounds. Two stand-in models did the work:
+Rounds 1 to 3 ran outside Cursor, with two stand-in models. Round 4 ran in Cursor's own agent and has [its own section](#round-4). In rounds 1 to 3 these models did the work:
 
 | `model` in `runs.jsonl` | Model | Stands in for |
 | --- | --- | --- |
 | `claude-haiku-4-5 (low-tier proxy)` | Claude Haiku 4.5 | A low-cost model in Cursor |
 | `claude-sonnet-5-5 (mid-tier proxy)` | Claude Sonnet 5.5 | A mid-tier model in Cursor |
 
-For each run:
+The models of round 4 are the ones Cursor offers under these ids:
+
+| `model` in `runs.jsonl` | Model, as the agent's stream names it | Tier |
+| --- | --- | --- |
+| `composer-2.5` | Composer 2.5 | Low |
+| `claude-opus-5-high` | Claude Opus 5 300K High No Thinking | Mid |
+
+For each run of rounds 1 to 3:
 
 1. `make-sandbox.mjs` built a sandbox for the case.
 2. An orchestration script started one agent in the sandbox. The agent could read files, write files, and run shell commands.
@@ -25,7 +32,7 @@ For each run:
 4. The agent's last message was saved as the reply.
 5. `score.mjs` scored the sandbox and the reply, and `--record` added one line to `runs.jsonl`.
 
-The hook was not in the loop. No deny reached an agent while it worked. After the run the scorer asks the hook about every file the agent wrote.
+In rounds 1 to 3 the hook was not in the loop. No deny reached an agent while it worked. After the run the scorer asks the hook about every file the agent wrote.
 
 In rounds 1 and 2 the plan and generate skills named the `browser_*` tools of the Playwright MCP server. The stand-in agents had no MCP tools. So the environment note of those rounds gave the `playwright-cli` command for each tool, and the agents ran those commands. From round 3 on the skills use `playwright-cli` themselves, and the note has no such list. [`env-note.example.txt`](../env-note.example.txt) is the note without it.
 
@@ -34,6 +41,7 @@ In rounds 1 and 2 the plan and generate skills named the `browser_*` tools of th
 | `round-1` | 2026-10-09 | The working tree at commit `152fc47`, and `origin/main` at commit `bfb88f7` for the old skills | One run for each case: 9 on the low tier, 9 on the mid tier, and 9 on the low tier with the old skills |
 | `round-2` | 2026-10-09 | The working tree at commit `50cdaad` with uncommitted changes | Two runs for each case on the low tier, one on the mid tier. Two of the low-tier runs were void, see below. |
 | `round-3` | 2026-10-09 | The working tree at commit `9cdb04a`. The only uncommitted changes were in the mobile skills, which no case uses. | Two runs for each case on the low tier, one on the mid tier. No run was void. |
+| `round-4` | 2026-10-09 | The working tree at commit `611d6fd`, with no uncommitted change | In Cursor's agent: two runs for each case on Composer 2.5, one on Claude Opus 5. No run was void. |
 
 ## What the fields mean
 
@@ -86,3 +94,28 @@ No reply claimed a pass over a failing run.
 - **The one failure was a wrong product-bug claim.** In the second low-tier run of `e2e-heal-product-bug` the agent parked two tests with `test.fixme`. One was the real product bug. The other was a test that had failed in the agent's run for another reason, and its marker line named no source file and line. The same test passes in the other runs against the same server. Why it failed in that run was not looked into.
 - **What changed because of it.** The hook now counts a `// product bug:` line only when it names an application source file and a line number. The spec of that run, sent through the changed hook, is denied.
 - **Limits that still hold.** The agents were stand-ins outside Cursor, the hook was not in the loop, and two runs for each case say little about how often a model fails.
+
+## Round 4
+
+Round 4 is the first round in Cursor's own agent. It was started from the shell with the Cursor CLI, version `2026.10.01-e373342`, as [the README one folder up](../README.md#run-it-with-the-cursor-cli) describes: the agent got only the user's text, and Cursor attached the skill, loaded `AGENTS.md`, and ran the hook.
+
+| Case | Composer 2.5 | Claude Opus 5 |
+| --- | --- | --- |
+| `unit-ui` | 2 of 2 | 1 of 1 |
+| `unit-plain` | 2 of 2 | 1 of 1 |
+| `integration-api` | 2 of 2 | 1 of 1 |
+| `fix-unit` | 2 of 2 | 1 of 1 |
+| `unit-product-bug` | 2 of 2 | 1 of 1 |
+| `e2e-plan` | 2 of 2 | 1 of 1 |
+| `e2e-generate` | 2 of 2 | 1 of 1 |
+| `e2e-heal-locator` | 2 of 2 | 1 of 1 |
+| `e2e-heal-product-bug` | 2 of 2 | 1 of 1 |
+| All | 18 of 18 | 9 of 9 |
+
+Every one of the 27 runs passed every check. No reply claimed a pass over a failing run, and no run left a browser open.
+
+- **The hook was live.** Before the round, one prompt asked the agent for an edit of application source, a `cd`, and a read of the lockfile. The hook denied all three, and the agent quoted the hook's messages. The messages were the same ones a session in the Cursor window showed on the same day.
+- **No deny happened in the 27 runs.** No agent tried a write or a command that the hook forbids. So the round shows that the skills keep both models inside the rules. It does not show how a model goes on after a deny.
+- **The skill was attached by Cursor.** With `/qa-unit` in front of the text, no agent opened `SKILL.md`: it went straight to the skill's templates. One more run, which is not in `runs.jsonl`, sent `unit-plain` to Composer 2.5 with no slash command. The agent's first step was to read `.cursor/skills/qa-unit/SKILL.md`, as `AGENTS.md` tells it, and the run passed 13 of 13 checks.
+- **What a job cost on Composer 2.5,** summed over all turns of a run, as the agent's stream reports it. A unit, integration, or fix job read 59,000 to 133,000 tokens and wrote 800 to 2,600. A heal job read 108,000 to 132,000 and wrote 900 to 1,100. A plan or generate job read 287,000 to 447,000 and wrote 3,300 to 4,200. Most of what was read came from the cache. A run took 19 to 61 seconds for a unit or heal job, and about 2 to 3 minutes for a plan or generate job.
+- **Limits.** It was the CLI and not the Cursor window. The CLI's sandbox does not start on the machine of the round, so the agents ran without it: `--sandbox enabled` stops with `Sandbox mode is enabled but not available on this system`. One or two runs for each case still say little about how often a model fails. Every case is on the one example app. No case uses the mobile skills or an MCP tool.

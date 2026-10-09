@@ -59,7 +59,7 @@ This works with any agent that can read files, write files, and run shell comman
    node eval/prompt.mjs "$RUNS/run-01" > "$RUNS/run-01/prompt.txt"
    ```
 
-   The prompt is `AGENTS.md`, then the whole body of the case's `SKILL.md` in the wrapper Cursor puts around an attached skill, then the user's text. Cursor builds the same message when the user picks `/qa-unit` from the menu. The wrapper text was read from the Cursor 3.23.23 client. It was not seen in a live session.
+   The prompt is `AGENTS.md`, then the whole body of the case's `SKILL.md` in the wrapper Cursor puts around an attached skill, then the user's text. Cursor builds the same message when the user picks `/qa-unit` from the menu. The wrapper text was read from the Cursor 3.23.23 client. It was not seen in a live session. In round 4 Cursor built the message itself.
 
    | Option | What it does |
    | --- | --- |
@@ -328,7 +328,7 @@ A kit from before the switch to `playwright-cli` names the `browser_*` tools of 
 
 ## Run it with the Cursor CLI
 
-Not yet run. The Cursor CLI was not installed on the machine this was written on. The flags and the output format come from Cursor's documentation.
+Round 4 was run this way, with version `2026.10.01-e373342` of the CLI. Its command is `agent`, and `cursor-agent` is the same program. Sign in once with `agent login`.
 
 With the CLI, Cursor attaches the skill and loads `AGENTS.md` itself. Give it only the user's text. The agent runs in the sandbox, so the path to `prompt.mjs` comes from `KIT`, which you set in [Before you start](#before-you-start):
 
@@ -352,7 +352,7 @@ process.stdout.write(last.message.content.filter((part) => part.type === "text")
 ' "$RUNS/run-01/stream.jsonl" > "$RUNS/run-01/reply.txt"
 ```
 
-First prove that the hook runs under the CLI. Whether the CLI calls the hook for file writes is not confirmed, and the model cannot tell. Ask for a file in application source, in a sandbox you then throw away:
+First prove that the hook runs under the CLI, because the model cannot tell. With the version above it does: the hook denied an edit of application source and two shell commands, and the agent got the hook's messages. Check it again after an update of the CLI. Ask for a file in application source, in a sandbox you then throw away:
 
 ```bash
 node "$KIT/eval/make-sandbox.mjs" --case unit-plain --out "$RUNS/canary"

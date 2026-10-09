@@ -15,7 +15,7 @@ The hook applies to every Cursor agent in the folder. It denies an edit to appli
 - **Linux.** On macOS only the hook's tests were run. Windows is not expected to work as shipped: it cannot start the hook by its `.py` path.
 - **Google Chrome**, for the plan and generate jobs. `playwright-cli` starts it.
 
-Run so far: everything on Linux with Node 24, the hook's tests on Python 3.9 and 3.14, and seven prompts by hand in Cursor's agent with the Composer 2.5 model. [docs/evaluation.md](docs/evaluation.md#a-run-in-cursor-2026-10-09) has that run and what it does not show. The install notes have [the detail](docs/install-notes.md#requirements-in-detail), and say what to do [if every action is denied](docs/install-notes.md#if-every-action-is-denied). The mobile skills need more: see [Mobile](#mobile).
+Run so far: everything on Linux with Node 24, the hook's tests on Python 3.9 and 3.14, seven prompts by hand in the Cursor window with the Composer 2.5 model, and the nine evaluation cases in Cursor's agent, where Composer 2.5 passed 18 of 18 runs and Claude Opus 5 passed 9 of 9. [docs/evaluation.md](docs/evaluation.md#round-4-in-cursors-agent) has both and what they do not show. The install notes have [the detail](docs/install-notes.md#requirements-in-detail), and say what to do [if every action is denied](docs/install-notes.md#if-every-action-is-denied). The mobile skills need more: see [Mobile](#mobile).
 
 ## Add it to your app
 

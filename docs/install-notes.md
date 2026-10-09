@@ -26,6 +26,7 @@ What was run:
 - The hook's tests pass on Python 3.9 and 3.14.
 - The reporter tests, the installer tests, and the example app check also passed on Node 22.22.2 and Node 26.11.1, in a container, at an earlier state of this version. The last fixes to the installer and the reporters ran on Node 24 only.
 - This version ran in Cursor's agent with the Composer 2.5 model: seven prompts, by hand, on a copy of the example app. The hook denied what it must, and the four web jobs each ended with tests that pass. See [the evaluation results](evaluation.md#a-run-in-cursor-2026-10-09).
+- The nine evaluation cases ran in Cursor's agent, started with the Cursor CLI: Composer 2.5 passed 18 of 18 runs and Claude Opus 5 passed 9 of 9. See [round 4](evaluation.md#round-4-in-cursors-agent).
 - The CI workflow ran on GitHub, and every job passed. Its hook tests also ran on macOS. See [Checks and CI](../README.md#checks-and-ci) in the README.
 - An earlier version of the hook ran in Cursor 3.22. The hook's tests send payloads in the shapes that Cursor 3.22 logged and that the code of Cursor 3.23 builds.
 
@@ -33,7 +34,7 @@ What was not run:
 
 - macOS, apart from the hook's tests, and Windows.
 - An older Cursor.
-- The mobile skills, the hook's rules for MCP tools, and a mid-tier model, in a live Cursor session.
+- The mobile skills and the hook's rules for MCP tools, in a live Cursor session.
 
 ## What the installer does
 

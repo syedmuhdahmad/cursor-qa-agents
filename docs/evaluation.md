@@ -12,9 +12,9 @@ If you run a round yourself, keep the run folders on a disk and not in `/tmp`. O
 
 ## How the rounds were run
 
-Read the numbers below with these five facts in mind.
+Read the numbers of rounds 1 to 3 with these five facts in mind.
 
-- **The models are stand-ins.** Claude Haiku 4.5 stands in for a low-cost model, and Claude Sonnet 5.5 for a mid-tier model. The results file calls them the low-tier proxy and the mid-tier proxy. No model was run inside Cursor in these rounds. One run by hand in Cursor is under [A run in Cursor](#a-run-in-cursor-2026-10-09).
+- **The models are stand-ins.** Claude Haiku 4.5 stands in for a low-cost model, and Claude Sonnet 5.5 for a mid-tier model. The results file calls them the low-tier proxy and the mid-tier proxy. That holds for rounds 1 to 3. One run by hand in Cursor is under [A run in Cursor](#a-run-in-cursor-2026-10-09), and [round 4](#round-4-in-cursors-agent) ran every case in Cursor's own agent.
 - **The agent ran outside Cursor.** Each model worked in a sandbox copy of the example app with file and shell tools. Its prompt was the text that `eval/prompt.mjs` prints: `AGENTS.md`, then the skill, then the user's request. That is the message Cursor builds for a skill picked from the `/` menu, as read in the code of Cursor 3.23. It was not seen in a live session.
 - **The hook was not in the loop.** No deny reached a model while it worked. A note in front of the prompt said so and asked the model to follow the rules as if the hook ran. After the run, the scorer asks the hook about every file the agent wrote.
 - **The browser steps were not the ones the skills have now.** In rounds 1 and 2 the plan and generate skills still named the `browser_*` tools of the Playwright MCP server, and the agents had no MCP tools. The note gave the matching `playwright-cli` shell command for each tool, and the agents ran those commands. The skills now give the `playwright-cli` commands themselves, so from round 3 on the note has no such list.
@@ -119,7 +119,36 @@ What the run shows:
 
 What the run does not show:
 
-- **How often it works.** It is one run of each prompt, on one model. No mid-tier model was run.
-- **The cases with a planted bug, the fix of a failing unit test, and the `BLOCKED` exits.** No prompt asked for them.
+- **How often it works.** It is one run of each prompt, on one model. Round 4 has more runs, and a mid-tier model.
+- **The cases with a planted bug and the fix of a failing unit test.** No prompt asked for them. Round 4 has them.
+- **The `BLOCKED` exits.** No prompt led to one.
 - **The hook's rules for MCP tools, and the mobile skills.**
 - **Which Cursor version it was.** It was not written down.
+
+## Round 4, in Cursor's agent
+
+Scored on 2026-10-09, with the kit at commit `611d6fd`. Round 4 is the first round in which Cursor itself did the work: the Cursor CLI started Cursor's agent in each sandbox with only the user's text, and Cursor attached the skill, loaded `AGENTS.md`, and ran the hook. The low tier is Composer 2.5, and the mid tier is Claude Opus 5.
+
+| Case | Composer 2.5, runs passed | Claude Opus 5 |
+| --- | --- | --- |
+| `unit-ui` | 2 of 2 | pass |
+| `unit-plain` | 2 of 2 | pass |
+| `integration-api` | 2 of 2 | pass |
+| `fix-unit` | 2 of 2 | pass |
+| `unit-product-bug` | 2 of 2 | pass |
+| `e2e-plan` | 2 of 2 | pass |
+| `e2e-generate` | 2 of 2 | pass |
+| `e2e-heal-locator` | 2 of 2 | pass |
+| `e2e-heal-product-bug` | 2 of 2 | pass |
+| All | 18 of 18 | 9 of 9 |
+
+Every run passed every check, and no reply in the 27 runs was a false pass.
+
+What round 4 does not show:
+
+- **How a model goes on after a deny.** The hook was live, and a prompt before the round got three denies with the hook's messages. In the 27 runs no agent tried anything the hook forbids.
+- **The Cursor window with its sandbox.** The round used the CLI, and the CLI's sandbox does not start on that machine. The run by hand above is the only one in the window.
+- **How often a model fails.** Two runs for each case are few, and Claude Opus 5 had one.
+- **Another app, the mobile skills, and the hook's rules for MCP tools.**
+
+[`eval/results/README.md`](../eval/results/README.md#round-4) has the detail: the model ids, the check that the hook was live, a run with no slash command, and what a job cost in tokens.
