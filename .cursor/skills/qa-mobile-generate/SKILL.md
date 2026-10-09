@@ -56,21 +56,29 @@ Steps 3 and 4 use this list. Each comment is a plan line. The lines under it are
 # Expect: "Sign out" (id `home-sign-out`) is visible.
 - assertVisible:
     id: "home-sign-out"
+    text: "Sign out"
+# Expect: The element with id `order-number` is visible.
+- assertVisible:
+    id: "order-number"
 # Expect: The text "Wrong email or password" is not visible.
 - assertNotVisible: "Wrong email or password"
 ```
 
 | Rule | Write |
 | --- | --- |
-| The plan line has an id | `id:` with that id. Not the text. |
+| A `Type` or `Tap` line has an id | `id:` with that id. Not the text. |
+| An `Expect` line has an id and a quoted text | `id:` and `text:`, both, as in the `Sign out` lines |
+| An `Expect` line starts with `The element with id` | `id:` only, as in the `order-number` lines |
 | The plan line says `(no id)` | The whole text in quotes, as in line 5 |
-| A `Tap` line comes straight after a `Type` line | `- hideKeyboard` first, as in line 4 |
+| A `Tap` line comes straight after a `Type` line | `- hideKeyboard` first, as in line 4. Write `- hideKeyboard` nowhere else. |
 | `Do the start steps.` | `../subflows/` and the file name from the plan's `**Subflow:**` line |
 | No form fits the plan line | The commands of the closest form. Name the line under `Not checked:`. |
 
+Why: with the keyboard open, a tap can close the keyboard and miss the button. With no keyboard open, `- hideKeyboard` presses back on Android, which can close the app.
+
 - Put every id, text, and value in double quotes, letter for letter from the plan.
 - Never use `point:` or any other screen coordinates.
-- There is no command that waits a fixed time. `tapOn` and `assertVisible` wait for the element by themselves.
+- There is no command that waits a fixed time. `tapOn` and `assertVisible` wait up to 17 seconds for the element by themselves.
 - Indent with two spaces. A tab breaks the file.
 
 ## Android and iOS
@@ -80,9 +88,9 @@ One flow file serves both platforms. Never write a second file for the other pla
 | Topic | Android | iOS |
 | --- | --- | --- |
 | Stable id | `id:` takes the id from the plan. | `id:` takes the id from the plan. |
-| Back | `- back` presses the system back button. | `- back` does nothing. The flow taps the app's own back control. |
+| Back | `- back` presses the system back button. On the app's first screen that closes the app. | `- back` does nothing. The flow taps the app's own back control. |
 | Permission dialog | The dialog's texts differ from iOS. | The alert's texts differ from Android. |
-| Keyboard | `- hideKeyboard` closes it. | `- hideKeyboard` can fail. A tap on a text that is not a control closes it. |
+| Keyboard | `- hideKeyboard` closes it. With no keyboard open it presses back. | `- hideKeyboard` can fail. A tap on a text that is not a control closes it. |
 | Clean state | `clearState: true` clears the app's data. | `clearState: true` clears the app's data. `clearKeychain: true` clears the keychain. |
 | No row matches | Write the plan line as it is. Name it under `Not checked:`. | The same |
 
@@ -146,7 +154,7 @@ A step that must differ goes into the one file, in a `runFlow` block for each pl
    | One line such as `Invalid Command: tapOnn at /syntax-checker:13:9` | The line names the fault and, after the first `:`, about which line of your file. Correct the file and check it again. |
    | No row matches | Go to step 9 with `Verdict: FAIL` and the output under `Not checked:`. |
 
-7. **Run the feature's folder.** `RTK_DISABLED=1 maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/sign-in`. Change only the platform word, the app id, and the folder. The output has one line for each flow, `[Passed]` or `[Failed]` and the flow's name, then a summary line such as `2/2 Flows Passed in 48s`. Ignore any box drawn with lines.
+7. **Run the feature's folder.** `RTK_DISABLED=1 maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/sign-in`. Change only the platform word, the app id, and the folder. A flow takes 15 to 60 seconds. The output has one line for each flow, `[Passed]` or `[Failed]` and the flow's name, not in the order of the files. Then comes the summary line: `2/2 Flows Passed in 48s` when all passed, `1/2 Flow Failed` when one did not. Ignore the box drawn with lines after it.
 
    | The output contains | Do |
    | --- | --- |
@@ -159,7 +167,7 @@ A step that must differ goes into the one file, in a `runFlow` block for each pl
 
    Never start a device and never run on the other platform. The user starts the device and installs the app.
 
-8. **Not a pass.** Take the first `[Failed]` line, for example `[Failed] Wrong password shows an error (14s) (Element not found: Id matching regex: sign-in-submit)`. The error is the text in the last pair of brackets. Do what its row says, then go back to step 7. After the third run that is not a pass, go to step 9 with `Verdict: FAIL`.
+8. **Not a pass.** Take the first `[Failed]` line, for example `[Failed] Wrong password shows an error (23s) (Element not found: Id matching regex: sign-in-submit)`. The error is the text in the last pair of brackets. Another error is `Assertion is false: "Sign out", id: home-sign-out is visible`. Do what its row says, then go back to step 7. After the third run that is not a pass, go to step 9 with `Verdict: FAIL`.
 
    | The error contains | Do |
    | --- | --- |
@@ -183,7 +191,7 @@ A step that must differ goes into the one file, in a `runFlow` block for each pl
    Not checked: iOS
    ```
 
-   `Result:` is the summary line of the run, copied. `Failed:` is each `[Failed]` line, copied, or `none`. `Verdict:` is `PASS`, `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you. `Not checked:` always names the platform you did not run on.
+   `Result:` is the summary line of the run, copied: `2/2 Flows Passed in 48s` or `1/2 Flow Failed`. `Failed:` is each `[Failed]` line, copied, or `none`. `Verdict:` is `PASS`, `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you. `Not checked:` always names the platform you did not run on.
 
 ## Never
 

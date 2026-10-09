@@ -28,11 +28,24 @@ You use three tools of the maestro MCP server: `list_devices`, `run`, and `inspe
 }
 ```
 
-`inspect_screen` reads the screen. Give it the `device_id`. Do not take a screenshot. The reply is JSON. `txt` is the text the user sees. `rid` is the id of the element.
+`inspect_screen` reads the screen. Give it the `device_id`. Do not take a screenshot. The reply is JSON: a tree of objects under `"elements"`, and each object holds the objects inside it under `"c"`. Here are a button and a message, with the keys `b` and `cls` left out.
+
+```text
+{"a11y":"Sign in","rid":"sign-in-submit","clickable":true,"c":[{"txt":"Sign in"}]}
+{"txt":"Wrong email or password","rid":"sign-in-error"}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `txt` | The text the user sees. In a field it is the typed value. |
+| `rid` | The id of the element. An object with no `rid`, inside the `c` of an object that has one, belongs to that id. |
+| `a11y` | The name of a button or a field that has no `txt` |
+| `c` | The objects inside this one. Read them too. |
+| No row matches | Ignore the key. |
 
 Do not run `maestro test` in this job.
 
-Why: `maestro test` puts Maestro's helper app on the device again, and the MCP server can then lose the device.
+Why: `maestro test` removes Maestro's helper app from the device when it ends. The MCP server then cannot reach the device until it is turned off and on.
 
 ## Android and iOS
 
@@ -40,10 +53,11 @@ One flow file serves both platforms. Never copy a flow for the other platform.
 
 | Topic | Android | iOS |
 | --- | --- | --- |
-| Stable id | The `rid` value in `inspect_screen` | The `rid` value in `inspect_screen` |
-| Back | `- back` presses the system back button. | `- back` does nothing. The flow taps the app's own back control. Find it with `inspect_screen`. |
+| Stable id | The `rid` value in `inspect_screen`. A React Native `testID` shows there as it is written. | The `rid` value in `inspect_screen` |
+| Not the app | The reply also holds the status bar, the keyboard when it is open, and the device's home screen when the app is closed. Ignore every object whose `rid` starts with `com.android.systemui`, or has `inputmethod` or `launcher` in it. | Ignore the status bar, the keyboard, and the home screen. |
+| Back | `- back` presses the system back button. On the app's first screen that closes the app. | `- back` does nothing. The flow taps the app's own back control. Find it with `inspect_screen`. |
 | Permission dialog | A system dialog can cover the app. Copy its texts from `inspect_screen`. | A system alert can cover the app. Copy its texts from `inspect_screen`. They differ from Android. |
-| Keyboard | `- hideKeyboard` presses back. With no keyboard open it leaves the screen. | `- hideKeyboard` can fail with `Couldn't hide the keyboard`. A tap on a text that is not a control closes it. |
+| Keyboard | `- hideKeyboard` closes it. With no keyboard open it presses back, which can close the app. With the keyboard open, a tap can close the keyboard and miss the button. | `- hideKeyboard` can fail with `Couldn't hide the keyboard`. A tap on a text that is not a control closes it. |
 | Clean state | `clearState: true` clears the app's data. | `clearState: true` clears the app's data. `clearKeychain: true` clears the keychain. |
 | No row matches | Look with `inspect_screen`. Name what differs under `Not checked:`. | The same |
 
@@ -87,17 +101,31 @@ A line that must differ goes into the one file, in a `runFlow` block for each pl
 
    A device with `"connected":false` is off. Leave it off: never start a device. Never use a device of the other platform, and never the device `chromium`.
 
-4. **Run the flow.** Call `run` with the arguments from "Device calls". The flow stops at the first line that fails and leaves that screen open.
+4. **Run the flow.** Call `run` with the arguments from "Device calls". A run takes up to a minute: a line that fails waits 17 seconds first. The flow stops at the first line that fails and leaves that screen open.
 
    | The reply contains | Do |
    | --- | --- |
    | `Files not found` | Call `run` again with the full path of the flow file, from the root of the disk. |
    | `is not connected` | BLOCKED, with the sentence for your platform from step 3. |
+   | `Device server died` | BLOCKED: `the maestro MCP server cannot read the device. Turn the server off and on in Cursor settings, then ask again.` |
+   | `Package undefined is not installed` | The `env` argument was missing. Call `run` again with `env` and the app id. |
+   | `is not installed` | BLOCKED: `the app com.example.app is not installed on the device. Install it, then ask again.` |
    | `"success":true` | Nothing fails. Go to step 10. |
    | `"success":false` | The `error` value in the reply is the failure. Go to step 5. |
    | No row matches | BLOCKED: `the run did not finish.` Put the reply under `Not checked:`. |
 
-5. **Read the failure and the screen.** The error is, for example, `Assertion is false: "Wrong email or password" is visible` or `Element not found: Id matching regex: sign-in-submit`. Find the line of the flow that has the id or text from the error. That is the failing line. The flow does not have it: look in the subflow that the flow's `runFlow` line names. Then call `inspect_screen`.
+5. **Read the failure and the screen.** The error has one of these forms. In the reply, each `"` inside the error has a `\` in front of it. Leave the `\` out when you copy the error.
+
+   ```text
+   Element not found: Id matching regex: sign-in-submit
+   Element not found: Text matching regex: Forgot password?
+   Assertion is false: id: home-sign-out is visible
+   Assertion is false: "Wrong email or password" is visible
+   Assertion is false: "Sign out", id: home-sign-out is visible
+   Assertion is false: "Wrong email or password" is not visible
+   ```
+
+   Find the line of the flow that has the id or text from the error. That is the failing line. The flow does not have it: look in the subflow that the flow's `runFlow` line names. Then call `inspect_screen`.
 
 6. **Classify.** The plan line is the comment above the failing line. Check it against the plan file.
 
@@ -105,14 +133,17 @@ A line that must differ goes into the one file, in a `runFlow` block for each pl
    | --- | --- | --- |
    | `Invalid File Path` | | **Data or setup**. The `runFlow` line names a file that does not exist. |
    | `Couldn't hide the keyboard` | | **Data or setup** |
-   | `Element not found` or `Assertion is false` | The element of the failing line, with the same id or the same whole text | **Timing** |
+   | `is not visible` | The element that the failing line says must not show | **Product bug** when you can name the source line that shows it there. Otherwise **Data or setup**. |
+   | `Element not found` or `Assertion is false` | The element of the failing line, with every id and text that the line has, letter for letter | **Timing** |
    | The same | A system dialog on top of the app | **Data or setup** |
+   | The same | A screen of another app with no button to close it, such as a Google sign-in screen | BLOCKED: `another app covers the app on the device. Close it, then ask again.` |
    | The same | The element with another id | **Selector** |
+   | The same | Another text where the failing line has its text, and the part that differs is an order number, a date, or a time that changes from run to run | **Data or setup** |
    | The same | Another text where the failing line has its text, and the plan has the flow's text | **Product bug** |
    | The same | Another text where the failing line has its text, and the plan has the screen's text | **Data or setup** |
    | The same | Another screen than the plan line describes | **Data or setup** |
    | The same | The right screen without the element, and the source should show it there | **Product bug** |
-   | No row matches | | The error names no id and no text: BLOCKED: `the app com.example.app did not launch. Check that it is installed on the device.` Otherwise pick the closest class and name it under `Not checked:`. |
+   | No row matches | | The error names no id and no text: BLOCKED: `the app com.example.app did not launch. Check that it is installed on the device.` Put the error under `Not checked:`. Otherwise pick the closest class and name it under `Not checked:`. |
 
 7. **Write the cause before you edit.** One sentence that quotes two things: the error, and the `txt` or `rid` from the screen, the plan line, or the source line that proves it. A guess is not a cause. You cannot quote both: go to step 10 with `Verdict: FAIL` and `Cause: not found`.
 
@@ -121,11 +152,11 @@ A line that must differ goes into the one file, in a `runFlow` block for each pl
    | Ask | Yes: the one edit |
    | --- | --- |
    | 1. Is the class Product bug? | Leave every step and check as it is. Add two lines at the end of `tags:`, as shown below: the comment line, then `- fixme`. |
-   | 2. Is the class Timing? | Put the waiting check shown below in place of a failing `assertVisible`, or on the line above a failing `tapOn`. |
+   | 2. Is the class Timing? | Put the waiting check shown below on the line above the failing line. Keep the failing line. |
    | 3. Is the class Selector? | Change the id in the failing line to the `rid` from the screen, letter for letter. |
-   | 4. None of these | Change the one wrong line. The flow differs from the plan: write the plan's value or text. A system dialog: add the block shown below above the failing line. The keyboard: use the Keyboard row of "Android and iOS". A `runFlow` path: `../subflows/` and the file name. |
+   | 4. None of these | Change the one wrong line. The flow differs from the plan: write the plan's value or text. A system dialog: add the block shown below above the failing line. The keyboard: use the Keyboard row of "Android and iOS". A `runFlow` path: `../subflows/` and the file name. A text that changes from run to run: delete the `text:` line under the `id:` line, keep the `id:` line, and name the element under `Not checked:`. Nothing of this fits: go to step 10 with `Verdict: FAIL`. |
 
-   The product bug mark. `expected` is the flow's text and `got` is the text on the screen. `src/screens/SignIn.tsx:41` is the source line that holds the text on the screen. Search the source for that text.
+   The product bug mark. `expected` is the flow's text and `got` is the text on the screen. For an error with `is not visible`, write `expected no "Wrong email or password", got "Wrong email or password"`. `src/screens/SignIn.tsx:41` is the source line that holds the text on the screen. Search the source for that text.
 
    ```yaml
    appId: ${APP_ID}
@@ -137,16 +168,16 @@ A line that must differ goes into the one file, in a `runFlow` block for each pl
    ---
    ```
 
-   The waiting check. The first form is for a failing line with an id, the second for one with a text. Change only the id or the text. Keep `timeout: 20000`.
+   The waiting check. The first form is for a failing line with an id, the second for one with only a text. Change only the id or the text. Keep `timeout: 60000`: `tapOn` and `assertVisible` already wait 17 seconds by themselves.
 
    ```yaml
    - extendedWaitUntil:
        visible:
          id: "home-sign-out"
-       timeout: 20000
+       timeout: 60000
    - extendedWaitUntil:
        visible: "Welcome back, Ada"
-       timeout: 20000
+       timeout: 60000
    ```
 
    The block for a system dialog. Copy both texts from the screen.
@@ -195,7 +226,7 @@ A line that must differ goes into the one file, in a `runFlow` block for each pl
 
 ## Never
 
-- Delete a flow or a check, or weaken one: `optional: true`, or a text such as `".*"` that matches anything.
+- Delete a flow or a check, or weaken one: `optional: true`, or a text such as `".*"` that matches anything. The `text:` line of step 8, for a text that changes from run to run, is the one exception.
 - Tag a flow `fixme` for anything but a product bug you can point to in the source.
 - Use `point:` or other screen coordinates, or any wait but `extendedWaitUntil`.
 - Start, create, or change a device, or install the app. Run on the other platform when yours has no device.

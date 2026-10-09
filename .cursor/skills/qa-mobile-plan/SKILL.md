@@ -19,7 +19,7 @@ Do the steps in order. In every table, use the first row that matches. When a st
 
 You use three tools of the maestro MCP server: `list_devices`, `run`, and `inspect_screen`.
 
-`run` does actions on the device. Give it the `device_id` and a `yaml`. The `yaml` always starts with the two lines `appId: com.example.app` and `---`. Change only the app id, the ids, and the values.
+`run` does actions on the device. Give it the `device_id` and a `yaml`. The `yaml` always starts with the two lines `appId: com.example.app` and `---`, and always ends with the line `- waitForAnimationToEnd`. Change only the app id, the ids, and the values.
 
 ```yaml
 appId: com.example.app
@@ -33,7 +33,10 @@ appId: com.example.app
 - hideKeyboard
 - tapOn:
     id: "sign-in-submit"
+- waitForAnimationToEnd
 ```
+
+Why: `inspect_screen` does not wait. Without that last line it shows the screen from before the launch or the tap.
 
 | To do | Lines in the `yaml` |
 | --- | --- |
@@ -41,20 +44,28 @@ appId: com.example.app
 | Type into a field | `- tapOn:` with the field's `id`, then `- inputText: "ada@example.com"` |
 | Tap an element | `- tapOn:` with its `id` |
 | Tap an element that has no id | `- tapOn: "Forgot password?"`, with its whole text |
-| Close the keyboard after the last typed field | `- hideKeyboard` |
+| Tap straight after typing | `- hideKeyboard`, then the `- tapOn:`. Without it the tap can close the keyboard and miss the button. Write `- hideKeyboard` nowhere else. |
 | No row matches | Do not act. Name the step under `Not checked:`. |
 
-`inspect_screen` reads the screen. Give it the `device_id`. Do not take a screenshot. The reply is JSON. Each element is one object, for example `{"txt":"Sign in","rid":"sign-in-submit","clickable":true}`.
+A `run` that worked replies with `"success":true`. A `run` that failed replies with `Failed to run flow:` and the error. An error with `Device server died`, at any step: BLOCKED: `the maestro MCP server cannot read the device. Turn the server off and on in Cursor settings, then ask again.`
+
+`inspect_screen` reads the screen. Give it the `device_id`. Do not take a screenshot. The reply is JSON: a tree of objects under `"elements"`, and each object holds the objects inside it under `"c"`. Here are a button and a message, with the keys `b` and `cls` left out.
+
+```text
+{"a11y":"Sign in","rid":"sign-in-submit","clickable":true,"c":[{"txt":"Sign in"}]}
+{"txt":"Wrong email or password","rid":"sign-in-error"}
+```
 
 | Key | Meaning | In the plan |
 | --- | --- | --- |
-| `txt` | The text the user sees | Copy it letter for letter. Do not write a text from memory. |
-| `rid` | The id of the element | Copy it letter for letter. The element has no `rid`: write `(no id)`. |
-| `hint` | The grey text in an empty field | The name of a field that has no `txt` |
-| `a11y` | The text a screen reader says | The name of an element that has no `txt` and no `hint` |
+| `txt` | The text the user sees. In a field it is the typed value. | Copy it letter for letter. Do not write a text from memory. |
+| `rid` | The id of the element | Copy it letter for letter. An object with no `rid`, inside the `c` of an object that has one: use that `rid`, as for "Sign in" above. Neither has a `rid`: write `(no id)`. |
+| `hint` | The grey text in an empty field | The name of a field |
+| `a11y` | The text a screen reader says | The name of a button, and of a field that has no `hint` |
+| `c` | The objects inside this one | Read them too. |
 | No row matches | Any other key | Ignore it. |
 
-The quoted name of an element in a plan line, such as "Email", is its `txt`. With no `txt` it is its `hint`, and with no `hint` its `a11y`.
+The quoted name in a plan line, such as "Sign in" or "Email", comes from these keys. For a field it is the `hint`, and with no `hint` the `a11y`, never the `txt`. For any other element it is the `txt`, and with no `txt` the `a11y`.
 
 An id is only what `rid` shows. The source has a `testID` for the element: check that `rid` shows the same value before you write it down.
 
@@ -64,10 +75,11 @@ One plan serves both platforms. You walk it on the platform the prompt names.
 
 | Topic | Android | iOS |
 | --- | --- | --- |
-| Stable id | The `rid` value in `inspect_screen` | The `rid` value in `inspect_screen` |
-| Back | The device has a system back button. | The device has no system back button. |
+| Stable id | The `rid` value in `inspect_screen`. A React Native `testID` shows there as it is written. | The `rid` value in `inspect_screen` |
+| Not the app | The reply also holds the status bar, the keyboard when it is open, and the device's home screen when the app is closed. Ignore every object whose `rid` starts with `com.android.systemui`, or has `inputmethod` or `launcher` in it. | Ignore the status bar, the keyboard, and the home screen. |
+| Back | The device has a system back button. On the app's first screen it closes the app. | The device has no system back button. |
 | Permission dialog | A system dialog can cover the app. Its texts differ from iOS. | A system alert can cover the app. Its texts differ from Android. |
-| Keyboard | `- hideKeyboard` closes it. With no keyboard open it goes back one screen. | `- hideKeyboard` can fail with `Couldn't hide the keyboard`. Tap a text that is not a control in its place. |
+| Keyboard | `- hideKeyboard` closes it. With no keyboard open it presses back, which can close the app. | `- hideKeyboard` can fail with `Couldn't hide the keyboard`. Tap a text that is not a control in its place. |
 | Clean state | `clearState: true` clears the app's data. | `clearState: true` clears the app's data. `clearKeychain: true` clears the keychain. |
 | No row matches | Look with `inspect_screen`. Name what differs under `Not checked:`. | The same |
 
@@ -95,7 +107,7 @@ One plan serves both platforms. You walk it on the platform the prompt names.
 
    A device with `"connected":false` is off. Leave it off: never start a device. Never use a device of the other platform, and never the device `chromium`.
 
-3. **Launch the app.** Call `run` with a `yaml` that has the two first lines and the `launchApp` block from "Device calls".
+3. **Launch the app.** Call `run` with a `yaml` of these lines from "Device calls": the two first lines, the `launchApp` block, and `- waitForAnimationToEnd`.
 
    | The reply contains | Do |
    | --- | --- |
@@ -103,7 +115,7 @@ One plan serves both platforms. You walk it on the platform the prompt names.
    | `is not connected` | BLOCKED, with the sentence for your platform from step 2. |
    | No row matches | BLOCKED: `the app com.example.app did not launch. Check that it is installed on the device.` Put the error from the reply under `Not checked:`. |
 
-4. **Read the screen.** Call `inspect_screen`. Note the `txt` and `rid` of each field, button, and message.
+4. **Read the screen.** Call `inspect_screen`. Note the `txt` or `a11y`, and the `rid`, of each field, button, and message. The reply shows nothing of the app, only the status bar, the device's home screen, or a screen of another app: call `inspect_screen` again. Still nothing of the app after 3 calls: BLOCKED: `the app com.example.app is not on the screen of the device. Close what covers it, then ask again.`
 
 5. **Reach the feature's screen.**
 
@@ -143,14 +155,14 @@ One plan serves both platforms. You walk it on the platform the prompt names.
 
 9. **Walk one scenario, add it to the plan file, then take the next.**
 
-   1. Call `run` with one `yaml`: the two first lines, the `launchApp` block, the start steps, then the scenario's actions. End the `yaml` at an action that opens a new screen.
-   2. Call `inspect_screen`. Copy each text and id that the scenario names from `txt` and `rid`. More actions follow on the new screen: call `run` again without the `launchApp` block.
+   1. Call `run` with one `yaml`: the two first lines, the `launchApp` block, the start steps, then the scenario's actions. Stop at an action that opens a new screen or shows a message. The last line is `- waitForAnimationToEnd`.
+   2. Call `inspect_screen`. Copy each text and id that the scenario names from `txt`, `a11y`, and `rid`. More actions follow on the new screen: call `run` again without the `launchApp` block.
    3. Add the scenario to the plan file, in the template's form, with the sentence forms below.
 
    | The `run` reply contains | Do |
    | --- | --- |
    | `"success":true` | Go on. |
-   | `Element not found` | The id or text is not on the screen. Call `inspect_screen`, copy the right `rid` or `txt`, and call `run` again. After 2 tries, drop the scenario and name it under `Not checked:`. |
+   | `Element not found` | The id or text is not on the screen. The step waited 17 seconds for it. Call `inspect_screen`, copy the right `rid` or `txt`, and call `run` again. After 2 tries, drop the scenario and name it under `Not checked:`. |
    | `Couldn't hide the keyboard` | Use the Keyboard row of "Android and iOS". |
    | No row matches | Drop the scenario. Name it and the error under `Not checked:`. |
 
@@ -167,8 +179,16 @@ One plan serves both platforms. You walk it on the platform the prompt names.
 
    - The text "Welcome back, Ada" is visible.
    - "Sign out" (id `home-sign-out`) is visible.
+   - The element with id `order-number` is visible.
    - The text "Wrong email or password" is not visible.
    ```
+
+   | The element you expect | Expect line |
+   | --- | --- |
+   | Has an id, and its text is the same on every run | The `"Sign out" (id ...)` form. The flow checks the id and the text. |
+   | Has an id, and its text holds an order number, a date, a time, or another value that changes from run to run | The `The element with id` form, with no text |
+   | Has no id | The `The text` form |
+   | No row matches | The `The text` form. Name the line under `Not checked:`. |
 
    - The `**Flow:**` line of a scenario is `test/mobile/sign-in/01-valid-account.flow.yaml`: the feature's folder, the scenario's place in the plan as `01` to `08`, and two or three words of its name.
    - To go back, tap the app's own back control: it works on both platforms. Write `Press the system back button.` only when the screen has no back control, and name the scenario under `Not checked:` as Android only.
