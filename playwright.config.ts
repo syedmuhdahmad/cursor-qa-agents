@@ -8,10 +8,13 @@ export default defineConfig({
   // Page objects and test plans live under test/e2e but are not specs.
   testIgnore: ['**/pages/**', '**/plan/**'],
   fullyParallel: true,
-  // On CI, fail on a stray test.only and retry flaky tests.
-  forbidOnly: !!process.env.CI,
+  // A stray test.only fails the run. Without this, only that test runs and the run still passes.
+  forbidOnly: true,
+  // On CI, retry a failed test. A test that passes only on a retry is reported as flaky.
   retries: process.env.CI ? 2 : 0,
-  reporter: 'list',
+  // The list reporter, then one last line that starts with `QA-VERDICT:`.
+  // A --reporter flag on the command line replaces both.
+  reporter: [['list'], ['./.cursor/qa/playwright-verdict.mjs']],
   use: {
     baseURL,
     // Record a trace only when a test is retried, to keep runs fast.
