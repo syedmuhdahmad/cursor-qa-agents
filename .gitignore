@@ -18,11 +18,10 @@ __pycache__/
 /playwright-report/
 /test-results/
 /blob-report/
-.playwright-cli/
 .playwright/
 
-# Page snapshots and console logs that the Playwright MCP server saves
-.playwright-mcp/
+# Page snapshots and console logs that playwright-cli saves
+.playwright-cli/
 
 # Maestro. By default it writes to ~/.maestro/tests, outside the repository.
 # This folder appears only when a person passes --debug-output=.

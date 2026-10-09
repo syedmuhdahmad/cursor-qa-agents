@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "playwright": {
-      "command": "npx",
-      "args": ["--no-install", "@playwright/mcp", "--headless", "--isolated"]
-    },
     "maestro": {
       "command": "maestro",
       "args": ["mcp", "--no-viewer"]

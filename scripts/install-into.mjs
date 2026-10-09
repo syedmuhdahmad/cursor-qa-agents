@@ -36,7 +36,9 @@
 // the only place those lists are kept, so a path or package missing from the
 // README is also missing from every install this script performs.
 //
-// It never deletes anything in the app and never runs `npm install`.
+// It never deletes anything in the app and never runs `npm install`. When the
+// app still has the Playwright MCP server that earlier versions of the kit
+// installed, it says so in a NOTE and leaves the entries where they are.
 // Node built-ins only.
 
 import {
@@ -93,6 +95,11 @@ export const TEST_TSCONFIG_TEXT = `{
 }
 `
 
+// The package of the Playwright MCP server. Earlier versions of the kit listed
+// it as a dev dependency and started it from .cursor/mcp.json. This version
+// opens the browser with playwright-cli commands. See findNotes below.
+export const RETIRED_PACKAGE = '@playwright/mcp'
+
 // Generated files that may sit inside a copied folder. They are never copied.
 const NEVER_COPIED = new Set(['node_modules', '__pycache__', '.pytest_cache', '.DS_Store'])
 
@@ -105,7 +112,9 @@ const USAGE = `Usage: node scripts/install-into.mjs <app-dir> [--dry-run] [--for
              has with the kit's. Without it they are left alone and listed.
 
 .cursor/hooks.json and .cursor/mcp.json are merged into the app's own files.
-A symbolic link in the app is never written through, also with --force.`
+A symbolic link in the app is never written through, also with --force.
+Nothing in the app is deleted. A NOTE at the end names what an earlier
+version of the kit left in the app and this version no longer uses.`
 
 // A problem the user can fix. Printed without a stack trace.
 export class InstallError extends Error {}
@@ -569,8 +578,8 @@ function howToFix(entry, kitFile) {
 }
 
 // Which jobs need each of the kit's MCP servers. Used in the warning below.
+// The web jobs need none: they open the browser with playwright-cli commands.
 const SERVER_USERS = {
-  playwright: '/qa-plan and /qa-generate open the app in a browser through the playwright server.',
   maestro: '/qa-mobile-plan and /qa-mobile-heal read the device through the maestro server.',
 }
 
@@ -622,9 +631,10 @@ function findWarnings(kitRoot, appRoot, files) {
   if (mcpEntry) {
     const missing = missingServers(appRoot, readKitMcp(kitRoot))
     if (missing.length > 0) {
+      const one = missing.length === 1
       warnings.push({
         id: 'mcp',
-        title: `the kit's MCP servers are not registered: ${missing.join(', ')}.`,
+        title: `the kit's MCP ${one ? 'server is' : 'servers are'} not registered: ${missing.join(', ')}.`,
         lines: [
           `${MCP_FILE} was skipped: ${mcpEntry.note}.`,
           ...missing.flatMap((name) => (Object.hasOwn(SERVER_USERS, name) ? [SERVER_USERS[name]] : [])),
@@ -635,6 +645,53 @@ function findWarnings(kitRoot, appRoot, files) {
     }
   }
   return warnings
+}
+
+// True when an MCP server entry starts the retired package: the package name
+// is its command or one of its arguments, with or without a version.
+function startsRetiredPackage(server) {
+  if (!isRecord(server)) return false
+  const words = [server.command, ...(Array.isArray(server.args) ? server.args : [])]
+  return words.some((word) => typeof word === 'string' && (word === RETIRED_PACKAGE || word.startsWith(`${RETIRED_PACKAGE}@`)))
+}
+
+// What the app still has of the Playwright MCP server, which this kit no
+// longer uses. A note switches nothing off. It is there because the installer
+// never removes anything, so an app that installed an earlier version of the
+// kit keeps the server entry and the package until someone deletes them.
+// Empty for a kit that still uses the package itself.
+function findNotes(kitRoot, appRoot, lists, appPackage) {
+  const kitMcp = existsSync(join(kitRoot, MCP_FILE)) ? readKitMcp(kitRoot) : { mcpServers: {} }
+  const kitUsesIt = Object.hasOwn(lists.devDependencies, RETIRED_PACKAGE) || Object.values(kitMcp.mcpServers).some(startsRetiredPackage)
+  if (kitUsesIt) return []
+
+  let appServers
+  try {
+    appServers = JSON.parse(readFileSync(join(appRoot, MCP_FILE), 'utf8'))?.mcpServers
+  } catch {
+    appServers = undefined
+  }
+  const servers = isRecord(appServers) ? Object.keys(appServers).filter((name) => startsRetiredPackage(appServers[name])) : []
+  const sections = ['devDependencies', 'dependencies', 'optionalDependencies'].filter(
+    (section) => typeof appPackage[section]?.[RETIRED_PACKAGE] === 'string',
+  )
+  if (servers.length === 0 && sections.length === 0) return []
+
+  const lines = []
+  if (servers.length > 0) {
+    const names = servers.map((name) => `"${name}"`).join(', ')
+    lines.push(`${MCP_FILE} starts ${RETIRED_PACKAGE} as the server ${names}.`)
+  }
+  if (sections.length > 0) lines.push(`package.json lists ${RETIRED_PACKAGE} in ${sections.join(' and ')}.`)
+  lines.push(
+    '/qa-plan and /qa-generate now open the browser with playwright-cli commands. No job of the kit uses that server.',
+    'What to do: if you do not use it yourself, delete ' +
+      [servers.length > 0 ? `the server from ${MCP_FILE}` : null, sections.length > 0 ? 'the package from package.json' : null]
+        .filter(Boolean)
+        .join(' and ') +
+      '. The installer never removes anything.',
+  )
+  return [{ id: 'playwright-mcp', title: 'the kit no longer uses the Playwright MCP server, and your app still has it.', lines }]
 }
 
 function writeFile(kitRoot, appRoot, { file, action, text }) {
@@ -713,6 +770,7 @@ export function install(appDir, { dryRun = false, force = false, kitRoot = KIT_R
 
   const gitignore = planGitignore(kitRoot, appRoot)
   const warnings = findWarnings(kitRoot, appRoot, files)
+  const notes = findNotes(kitRoot, appRoot, lists, appPackage)
 
   if (!dryRun) {
     for (const entry of files) writeFile(kitRoot, appRoot, entry)
@@ -742,6 +800,7 @@ export function install(appDir, { dryRun = false, force = false, kitRoot = KIT_R
     gitignoreLines: gitignore.missing,
     gitignoreSkipped: gitignore.skipped,
     gitignoreNote: gitignore.note,
+    notes,
     warnings,
   }
 }
@@ -857,6 +916,10 @@ export function formatReport(report) {
   }
   if (!dryRun) {
     out.push('', 'Next, in the app folder:', '  npm install', '  npx playwright install chromium')
+  }
+  // Notes come before warnings, so that a warning is the last thing printed.
+  for (const note of report.notes) {
+    out.push('', `NOTE: ${note.title}`, ...note.lines.map((line) => `  ${line}`))
   }
   for (const warning of report.warnings) {
     out.push('', `WARNING: ${warning.title}`, ...warning.lines.map((line) => `  ${line}`))

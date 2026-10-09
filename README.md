@@ -53,7 +53,6 @@ Do not copy `package.json` over yours. Merge it instead:
 
 ```text
 @playwright/cli
-@playwright/mcp
 @playwright/test
 @testing-library/jest-dom
 @testing-library/react

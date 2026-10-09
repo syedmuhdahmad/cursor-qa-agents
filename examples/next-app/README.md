@@ -14,10 +14,13 @@ node scripts/test-example.mjs
 
 It copies this folder to a temporary folder and installs the kit there with `scripts/install-into.mjs`, which follows the install steps in the root README. Then it runs `npm install`, `npx playwright install chromium`, `npm run build`, and the three test commands. It also runs two throwaway tests that import with the `@/` alias, and type-checks the tests with `npx tsc --noEmit -p test`. It stops at the first failure.
 
+The last stage opens the sign-in page with `playwright-cli`, the way `/qa-plan` and `/qa-generate` do. It reads the page snapshot and closes the browser. Before that, the script asks the installed hook whether it allows those commands. `playwright-cli` starts Google Chrome, so this stage needs Chrome on the machine.
+
 | Option | What it does |
 | --- | --- |
 | `--port 3100` | Runs the app on port 3100 for the end-to-end tests. The default is 3000. |
 | `--keep` | Keeps the temporary folder so you can look at it. The path is printed. |
+| `--no-browse` | Leaves out the last stage, on a machine without Google Chrome. |
 
 `package.json` here lists only the app's own dependencies. The test tools come from the kit, so the reference tests do not run in this folder itself.
 

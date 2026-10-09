@@ -37,11 +37,10 @@ node_modules/
 playwright-report/
 blob-report/
 .vitest/
-.playwright-cli/
 .playwright/
 
-# Page snapshots and console logs that the Playwright MCP server saves.
-.playwright-mcp/
+# Page snapshots and console logs that playwright-cli saves.
+.playwright-cli/
 
 # Maestro debug output. It lands here when a person passes --debug-output=.
 # A device log can be about 300 KB per flow.

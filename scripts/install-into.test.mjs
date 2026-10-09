@@ -31,6 +31,7 @@ import {
   InstallError,
   KIT_ROOT,
   MCP_FILE,
+  RETIRED_PACKAGE,
   TEST_SCRIPTS,
   TEST_TSCONFIG,
   TEST_TSCONFIG_TEXT,
@@ -86,16 +87,20 @@ const KIT_PACKAGE = {
   devDependencies: { vitest: '^5.0.3', jsdom: '^30.1.1', typescript: '^7.0.2' },
 }
 
-// The stand-in kit's hook entry, hooks file, and MCP servers.
+// The stand-in kit's hook entry, hooks file, and MCP servers. The real kit has
+// one server, maestro. The second one here keeps the wording for two servers
+// under test.
 const KIT_HOOK = { command: '.cursor/hooks/guard.py', failClosed: true }
 const HOOK_EVENTS = ['preToolUse', 'beforeShellExecution', 'beforeMCPExecution']
 const KIT_HOOKS = { version: 1, hooks: Object.fromEntries(HOOK_EVENTS.map((event) => [event, [KIT_HOOK]])) }
 const KIT_MCP = {
   mcpServers: {
-    playwright: { command: 'npx', args: ['--no-install', '@playwright/mcp', '--headless'] },
     maestro: { command: 'maestro', args: ['mcp'] },
+    emulator: { command: 'kit-emulator', args: ['mcp'] },
   },
 }
+// The entry that earlier versions of the kit added to an app's .cursor/mcp.json.
+const OLD_PLAYWRIGHT_SERVER = { command: 'npx', args: ['--no-install', RETIRED_PACKAGE, '--headless', '--isolated'] }
 const WITH_CONFIGS = '.cursor/  .cursorignore  test/  AGENTS.md  vitest.config.ts  playwright.config.ts'
 
 let folder
@@ -657,12 +662,12 @@ describe('install: an app with its own .cursor/mcp.json', () => {
     const report = install(app, { kitRoot: kit })
     const result = readJsonFile(app, MCP_FILE)
     assert.deepEqual(result, { inputs: ['token'], mcpServers: { github: GITHUB, ...KIT_MCP.mcpServers } })
-    assert.deepEqual(Object.keys(result.mcpServers), ['github', 'playwright', 'maestro'])
+    assert.deepEqual(Object.keys(result.mcpServers), ['github', 'maestro', 'emulator'])
     assert.equal(entryFor(report, MCP_FILE).action, 'merge')
     assert.deepEqual(report.warnings, [])
     assert.match(
       formatReport(report),
-      /merged {8}\.cursor\/mcp\.json \(added the servers playwright, maestro\. Your own entries are kept\)/,
+      /merged {8}\.cursor\/mcp\.json \(added the servers maestro, emulator\. Your own entries are kept\)/,
     )
 
     const before = read(app, MCP_FILE)
@@ -677,12 +682,12 @@ describe('install: an app with its own .cursor/mcp.json', () => {
   })
 
   it("keeps the app's own server of the same name, and takes the kit's with --force", () => {
-    const mine = { command: 'npx', args: ['@playwright/mcp@latest'] }
-    write(app, MCP_FILE, JSON.stringify({ mcpServers: { playwright: mine } }))
+    const mine = { command: 'maestro', args: ['mcp', '--no-viewer'] }
+    write(app, MCP_FILE, JSON.stringify({ mcpServers: { maestro: mine } }))
     let report = install(app, { kitRoot: kit })
-    assert.deepEqual(readJsonFile(app, MCP_FILE).mcpServers, { playwright: mine, maestro: KIT_MCP.mcpServers.maestro })
+    assert.deepEqual(readJsonFile(app, MCP_FILE).mcpServers, { maestro: mine, emulator: KIT_MCP.mcpServers.emulator })
     assert.equal(entryFor(report, MCP_FILE).action, 'merge')
-    assert.match(formatReport(report), /added the server maestro; kept your own playwright, which differs from the kit's\)/)
+    assert.match(formatReport(report), /added the server emulator; kept your own maestro, which differs from the kit's\)/)
 
     report = install(app, { kitRoot: kit })
     assert.equal(entryFor(report, MCP_FILE).action, 'skip')
@@ -690,8 +695,8 @@ describe('install: an app with its own .cursor/mcp.json', () => {
     assert.deepEqual(report.warnings, [])
 
     report = install(app, { kitRoot: kit, force: true })
-    assert.deepEqual(readJsonFile(app, MCP_FILE).mcpServers.playwright, KIT_MCP.mcpServers.playwright)
-    assert.match(formatReport(report), /took the kit's playwright/)
+    assert.deepEqual(readJsonFile(app, MCP_FILE).mcpServers.maestro, KIT_MCP.mcpServers.maestro)
+    assert.match(formatReport(report), /took the kit's maestro/)
   })
 
   for (const [name, text, problem] of [
@@ -708,9 +713,10 @@ describe('install: an app with its own .cursor/mcp.json', () => {
       assert.match(entryFor(report, MCP_FILE).note, problem)
       assert.deepEqual(warningIds(report), ['mcp'])
       const output = formatReport(report)
-      assert.match(output, /^WARNING: the kit's MCP servers are not registered: playwright, maestro\.$/m)
+      assert.match(output, /^WARNING: the kit's MCP servers are not registered: maestro, emulator\.$/m)
       assert.match(output, /\.cursor\/mcp\.json was skipped: it could not be merged, because /)
-      assert.match(output, /\/qa-plan and \/qa-generate open the app in a browser through the playwright server/)
+      assert.match(output, /\/qa-mobile-plan and \/qa-mobile-heal read the device through the maestro server/)
+      assert.doesNotMatch(output, /\/qa-plan|\/qa-generate/, 'the web jobs need no MCP server')
       assert.match(output, /stop with BLOCKED/)
       assert.match(output, /What to do: /)
       assert.ok(output.includes(join(kit, MCP_FILE)))
@@ -718,13 +724,13 @@ describe('install: an app with its own .cursor/mcp.json', () => {
   }
 
   it('names only the servers that are missing', { skip: WINDOWS }, () => {
-    write(folder, 'outside/mcp.json', JSON.stringify({ mcpServers: { playwright: KIT_MCP.mcpServers.playwright } }))
+    write(folder, 'outside/mcp.json', JSON.stringify({ mcpServers: { emulator: KIT_MCP.mcpServers.emulator } }))
     mkdirSync(join(app, '.cursor'))
     symlinkSync('../../outside/mcp.json', join(app, MCP_FILE))
     const output = formatReport(install(app, { kitRoot: kit }))
-    assert.match(output, /^WARNING: the kit's MCP servers are not registered: maestro\.$/m)
+    assert.match(output, /^WARNING: the kit's MCP server is not registered: maestro\.$/m)
     assert.match(output, /\/qa-mobile-plan and \/qa-mobile-heal read the device through the maestro server/)
-    assert.doesNotMatch(output, /\/qa-plan and \/qa-generate/)
+    assert.doesNotMatch(output, /emulator server/, 'a server that is registered is not named')
   })
 
   it('replaces a file that cannot be merged with --force', () => {
@@ -732,6 +738,91 @@ describe('install: an app with its own .cursor/mcp.json', () => {
     const report = install(app, { kitRoot: kit, force: true })
     assert.deepEqual(readJsonFile(app, MCP_FILE), KIT_MCP)
     assert.deepEqual(report.warnings, [])
+  })
+})
+
+describe('install: an app that still has the Playwright MCP server of an earlier kit', () => {
+  const withPackage = (section = 'devDependencies') => ({ name: 'app', scripts: { dev: 'next dev' }, [section]: { [RETIRED_PACKAGE]: '^0.0.83' } })
+  const noteIds = (report) => report.notes.map((note) => note.id)
+
+  it('says so in a note, names both places, and removes nothing', () => {
+    write(app, MCP_FILE, `${JSON.stringify({ mcpServers: { playwright: OLD_PLAYWRIGHT_SERVER } }, null, 2)}\n`)
+    makeApp(withPackage())
+    const report = install(app, { kitRoot: kit })
+    assert.deepEqual(noteIds(report), ['playwright-mcp'])
+    assert.deepEqual(report.warnings, [])
+    assert.deepEqual(readJsonFile(app, MCP_FILE).mcpServers, { playwright: OLD_PLAYWRIGHT_SERVER, ...KIT_MCP.mcpServers }, 'the old server is still there')
+    assert.equal(readJsonFile(app, 'package.json').devDependencies[RETIRED_PACKAGE], '^0.0.83', 'the package is still listed')
+    const output = formatReport(report)
+    assert.match(output, /^NOTE: the kit no longer uses the Playwright MCP server, and your app still has it\.$/m)
+    assert.match(output, /^ {2}\.cursor\/mcp\.json starts @playwright\/mcp as the server "playwright"\.$/m)
+    assert.match(output, /^ {2}package\.json lists @playwright\/mcp in devDependencies\.$/m)
+    assert.match(output, /^ {2}\/qa-plan and \/qa-generate now open the browser with playwright-cli commands\. No job of the kit uses that server\.$/m)
+    assert.match(output, /^ {2}What to do: if you do not use it yourself, delete the server from \.cursor\/mcp\.json and the package from package\.json\. The installer never removes anything\.$/m)
+
+    // Still there on a second run, when nothing else is left to do.
+    const again = install(app, { kitRoot: kit })
+    assert.equal(entryFor(again, MCP_FILE).action, 'same')
+    assert.deepEqual(noteIds(again), ['playwright-mcp'])
+  })
+
+  it('keeps the note with --force and on a dry run', () => {
+    write(app, MCP_FILE, JSON.stringify({ mcpServers: { playwright: OLD_PLAYWRIGHT_SERVER } }))
+    const before = read(app, MCP_FILE)
+    const dry = install(app, { kitRoot: kit, dryRun: true })
+    assert.deepEqual(noteIds(dry), ['playwright-mcp'])
+    assert.equal(read(app, MCP_FILE), before)
+    const forced = install(app, { kitRoot: kit, force: true })
+    assert.deepEqual(noteIds(forced), ['playwright-mcp'])
+    assert.deepEqual(readJsonFile(app, MCP_FILE).mcpServers.playwright, OLD_PLAYWRIGHT_SERVER, '--force replaces only what the kit ships')
+  })
+
+  it('names only the package when no server starts it', () => {
+    makeApp(withPackage('dependencies'))
+    const output = formatReport(install(app, { kitRoot: kit }))
+    assert.match(output, /^ {2}package\.json lists @playwright\/mcp in dependencies\.$/m)
+    assert.doesNotMatch(output, /starts @playwright\/mcp/)
+    assert.match(output, /What to do: if you do not use it yourself, delete the package from package\.json\./)
+  })
+
+  it('finds the server under any name and with a version after the package name', () => {
+    write(app, MCP_FILE, JSON.stringify({ mcpServers: { browser: { command: 'npx', args: ['@playwright/mcp@latest'] }, direct: { command: RETIRED_PACKAGE } } }))
+    const output = formatReport(install(app, { kitRoot: kit }))
+    assert.match(output, /starts @playwright\/mcp as the server "browser", "direct"\./)
+    assert.match(output, /What to do: if you do not use it yourself, delete the server from \.cursor\/mcp\.json\./)
+  })
+
+  it('has no note for a new app, or for a server that is only named playwright', () => {
+    assert.deepEqual(install(app, { kitRoot: kit, dryRun: true }).notes, [])
+    write(app, MCP_FILE, JSON.stringify({ mcpServers: { playwright: { command: 'my-own-server', args: ['@playwright/mcp-like'] } } }))
+    const report = install(app, { kitRoot: kit })
+    assert.deepEqual(report.notes, [])
+    assert.doesNotMatch(formatReport(report), /^NOTE: /m)
+  })
+
+  it('reads a file it cannot merge without failing', () => {
+    write(app, MCP_FILE, '{ nope')
+    makeApp(withPackage())
+    const report = install(app, { kitRoot: kit })
+    assert.deepEqual(noteIds(report), ['playwright-mcp'])
+    assert.deepEqual(warningIds(report), ['mcp'])
+    const lines = formatReport(report).split('\n')
+    assert.ok(lines.findIndex((line) => line.startsWith('NOTE: ')) < lines.findIndex((line) => line.startsWith('WARNING: ')), 'the warning comes last')
+  })
+
+  it('has no note when the kit itself still uses the package', () => {
+    write(app, MCP_FILE, JSON.stringify({ mcpServers: { playwright: OLD_PLAYWRIGHT_SERVER } }))
+    makeApp(withPackage())
+
+    // As a dev dependency in the README list.
+    write(kit, 'package.json', JSON.stringify({ ...KIT_PACKAGE, devDependencies: { ...KIT_PACKAGE.devDependencies, [RETIRED_PACKAGE]: '^0.0.83' } }))
+    write(kit, 'README.md', readme('.cursor/  .cursorignore  test/  AGENTS.md', `vitest\njsdom\n${RETIRED_PACKAGE}`))
+    assert.deepEqual(install(app, { kitRoot: kit, dryRun: true }).notes, [])
+
+    // As a server in its .cursor/mcp.json.
+    makeKit()
+    write(kit, MCP_FILE, JSON.stringify({ mcpServers: { playwright: OLD_PLAYWRIGHT_SERVER } }))
+    assert.deepEqual(install(app, { kitRoot: kit, dryRun: true }).notes, [])
   })
 })
 
@@ -943,8 +1034,29 @@ describe('this repository', () => {
     assert.equal(entryFor(report, HOOKS_FILE).action, 'merge')
     assert.match(entryFor(report, HOOKS_FILE).note, /preToolUse, beforeShellExecution, beforeMCPExecution/)
     assert.equal(entryFor(report, MCP_FILE).action, 'merge')
-    assert.match(entryFor(report, MCP_FILE).note, /playwright, maestro/)
+    assert.match(entryFor(report, MCP_FILE).note, /^added the server maestro\. Your own entries are kept$/)
     assert.deepEqual(report.warnings, [])
+    assert.deepEqual(report.notes, [])
+  })
+
+  it('opens the browser with playwright-cli and ships no Playwright MCP server', () => {
+    const lists = readInstallLists(KIT_ROOT)
+    assert.ok(Object.hasOwn(lists.devDependencies, '@playwright/cli'), 'the README lists @playwright/cli as a dev dependency')
+    assert.ok(!Object.hasOwn(lists.devDependencies, RETIRED_PACKAGE), `the README does not list ${RETIRED_PACKAGE}`)
+    const kitPackage = readJsonFile(KIT_ROOT, 'package.json')
+    assert.ok(!Object.hasOwn(kitPackage.devDependencies, RETIRED_PACKAGE), `package.json does not list ${RETIRED_PACKAGE}`)
+    const servers = readJsonFile(KIT_ROOT, MCP_FILE).mcpServers
+    assert.deepEqual(Object.keys(servers), ['maestro'], 'the maestro server is the only one')
+    assert.ok(!JSON.stringify(servers).includes(RETIRED_PACKAGE), `no server starts ${RETIRED_PACKAGE}`)
+    assert.ok(existsSync(join(KIT_ROOT, '.cursor', 'skills', 'playwright-cli', 'SKILL.md')), 'the vendored playwright-cli skill is in the copy list through .cursor/')
+  })
+
+  it('tells an app that installed an earlier version what is left of the Playwright MCP server', () => {
+    write(app, MCP_FILE, JSON.stringify({ mcpServers: { playwright: OLD_PLAYWRIGHT_SERVER, maestro: { command: 'maestro', args: ['mcp', '--no-viewer'] } } }))
+    write(app, 'package.json', JSON.stringify({ name: 'app', devDependencies: { [RETIRED_PACKAGE]: '^0.0.83' } }))
+    const report = install(app, { dryRun: true })
+    assert.deepEqual(report.notes.map((note) => note.id), ['playwright-mcp'])
+    assert.match(formatReport(report), /^NOTE: the kit no longer uses the Playwright MCP server, and your app still has it\.$/m)
   })
 
   it("has an example app whose test/tsconfig.json is the file the installer writes", () => {
