@@ -8,15 +8,31 @@ Application code lives in places such as `app/` or `src/`. Tests live under `tes
 
 Copy these into the root of your React or Next.js app, next to `app/` or `src/`:
 
+<!-- install:copy -->
+
 ```text
-.cursor/  test/  AGENTS.md  vitest.config.ts  playwright.config.ts
+.cursor/  .cursorignore  test/  AGENTS.md  vitest.config.ts  playwright.config.ts
 ```
 
 Do not copy `package.json` over yours. Merge it instead:
 
-- Add the `devDependencies` from this repo's `package.json` to yours. React and React DOM come from your app.
+- Add the `devDependencies` listed below, with the version ranges from this repo's `package.json`. React and React DOM come from your app.
 - Add the four `test:*` scripts.
 - Add the `.gitignore` lines you don't already have.
+
+<!-- install:dev-dependencies -->
+
+```text
+@playwright/cli
+@playwright/mcp
+@playwright/test
+@testing-library/jest-dom
+@testing-library/react
+@types/node
+@vitest/coverage-v8
+jsdom
+vitest
+```
 
 Then install dependencies and the Chromium browser Playwright uses:
 
