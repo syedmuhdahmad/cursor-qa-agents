@@ -147,7 +147,7 @@ Earlier copies of the kit used the Playwright MCP server for this. The shell com
 
 [docs/jobs.md](docs/jobs.md#the-browser-for-plan-and-generate) has more on the browser steps and on each way they stop.
 
-[`.cursor/mcp.json`](.cursor/mcp.json) lists one MCP server: `maestro`, for reading the device screen in `/qa-mobile-plan` and `/qa-mobile-heal`. Turn it on in Cursor settings for those jobs only, because an enabled server adds its tool list to each request. If you installed an earlier copy of the kit, delete the `playwright` entry from your `.cursor/mcp.json` and run `npm uninstall @playwright/mcp`.
+[`.cursor/mcp.json`](.cursor/mcp.json) lists one MCP server: `maestro`, for reading the device screen in `/qa-mobile-plan`, `/qa-mobile-heal`, and the first part of `/qa-mobile-generate`. Turn it on in Cursor settings for those jobs only, because an enabled server adds its tool list to each request. If you installed an earlier copy of the kit, delete the `playwright` entry from your `.cursor/mcp.json` and run `npm uninstall @playwright/mcp`.
 
 The agent runs every test command with `RTK_DISABLED=1` in front. See [Using RTK](#using-rtk) for why.
 
@@ -219,7 +219,7 @@ test/e2e/pages/            Page classes
 test/e2e/seed.spec.ts      Checks that the app responds at /
 test/setup.ts              Runs before every Vitest test file
 test/tsconfig.json         Makes import aliases work in tests (added by the installer)
-test/mobile/               Maestro plans and flows, see Mobile
+test/mobile/               Maestro plans, element files, and flows, see Mobile
 
 AGENTS.md                  Write scope, the table from request to skill, and the test commands
 .cursor/                   The skills, the hook, the Maestro MCP server, and the verdict reporters
@@ -256,10 +256,13 @@ For a real boundary, run the agent in a container with application source mounte
 
 Three more skills plan, write, and fix [Maestro](https://maestro.dev) flows for an Android or iOS app: `/qa-mobile-plan`, `/qa-mobile-generate`, and `/qa-mobile-heal`. Treat them as a preview.
 
-- **Run:** on one Android emulator (Android 17, Maestro 2.10.0) with a React Native sample app: the `maestro test` command and its output, the three MCP tools the skills call, the `fixme` mark, and one small job for each skill, done by a maintainer who followed the skill text line by line.
-- **Not run:** anything on iOS, a sample app with a sign-in screen, CI, and the skills on a model. The skills were made shorter after the device run, and the shorter text was not followed on a device.
+The flows follow Maestro's [page object model recipe](https://docs.maestro.dev/examples/recipes/implementing-the-page-object-model-pom). One flow file serves both platforms and holds no id. The ids are in element files, which are separate for each platform: `test/mobile/elements/android/<screen>.js` and `test/mobile/elements/ios/<screen>.js`. A job that is told `This is Android.` never reads, creates, or edits the iOS files.
 
-You start the device and install the app, and every flow clears the app's data there. See [docs/mobile.md](docs/mobile.md).
+- **Run:** on one Android emulator (Android 17, Maestro 2.10.0) with a React Native sample app: the `maestro test` command and its output, the three MCP tools the skills call, the `fixme` mark, flows that take their ids from element files, and one generate job and one heal job with element files. No model ran: scripts applied the tables of the generate skill.
+- **Not run:** anything on iOS, the skills on a model, the plan skill since its sentence forms changed, a sample app with a sign-in screen, and CI. The skills were edited after the device run, and that text was not followed on a device.
+- **Open:** the mobile skills have 2,485 to 4,039 words, and the web skills 1,648 to 2,403. They have not been tried on a low-tier model. The hook does not check the JavaScript in an element file.
+
+You start the device and install the app, and every flow clears the app's data there. [docs/mobile.md](docs/mobile.md) has the layout, each job, what was run, and the [open points](docs/mobile.md#open-points).
 
 ## Example app and evaluation
 

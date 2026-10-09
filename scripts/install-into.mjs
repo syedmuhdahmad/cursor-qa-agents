@@ -580,7 +580,7 @@ function howToFix(entry, kitFile) {
 // Which jobs need each of the kit's MCP servers. Used in the warning below.
 // The web jobs need none: they open the browser with playwright-cli commands.
 const SERVER_USERS = {
-  maestro: '/qa-mobile-plan and /qa-mobile-heal read the device through the maestro server.',
+  maestro: 'The three mobile jobs read the device through the maestro server.',
 }
 
 // A skipped file can leave a part of the kit switched off. Each warning says

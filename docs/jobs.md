@@ -33,7 +33,7 @@ The examples inside the skills come from an imaginary app with a profile form, n
 | Tool | Used for |
 | --- | --- |
 | `playwright-cli` | Looking at the running app in `/qa-plan` and `/qa-generate`, and at the page of a paused spec in `/qa-heal` (a spec run with `--debug=cli`, then `playwright-cli attach`) |
-| `maestro` MCP | Reading the device screen in `/qa-mobile-plan` and `/qa-mobile-heal` |
+| `maestro` MCP | Reading the device screen in `/qa-mobile-plan`, `/qa-mobile-generate`, and `/qa-mobile-heal` |
 | `npx vitest` | Running unit and integration tests from the shell |
 
 Turn the `maestro` MCP server on in Cursor settings for the jobs that need it, and restart it if Cursor does not show it. The web jobs need no MCP server.

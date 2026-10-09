@@ -102,7 +102,7 @@ test/e2e/pages/            Page classes
 test/e2e/seed.spec.ts      Checks that the app responds at /
 test/setup.ts              Runs before every Vitest test file
 test/tsconfig.json         Makes import aliases work in tests (added by the installer)
-test/mobile/               Maestro plans, flows, and subflows
+test/mobile/               Maestro plans, flows, subflows, and element files
 
 AGENTS.md                  Write scope, the table from request to skill, and the test commands
 vitest.config.ts           The unit and integration projects, and the verdict reporter

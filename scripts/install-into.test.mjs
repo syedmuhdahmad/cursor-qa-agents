@@ -715,7 +715,7 @@ describe('install: an app with its own .cursor/mcp.json', () => {
       const output = formatReport(report)
       assert.match(output, /^WARNING: the kit's MCP servers are not registered: maestro, emulator\.$/m)
       assert.match(output, /\.cursor\/mcp\.json was skipped: it could not be merged, because /)
-      assert.match(output, /\/qa-mobile-plan and \/qa-mobile-heal read the device through the maestro server/)
+      assert.match(output, /The three mobile jobs read the device through the maestro server/)
       assert.doesNotMatch(output, /\/qa-plan|\/qa-generate/, 'the web jobs need no MCP server')
       assert.match(output, /stop with BLOCKED/)
       assert.match(output, /What to do: /)
@@ -729,7 +729,7 @@ describe('install: an app with its own .cursor/mcp.json', () => {
     symlinkSync('../../outside/mcp.json', join(app, MCP_FILE))
     const output = formatReport(install(app, { kitRoot: kit }))
     assert.match(output, /^WARNING: the kit's MCP server is not registered: maestro\.$/m)
-    assert.match(output, /\/qa-mobile-plan and \/qa-mobile-heal read the device through the maestro server/)
+    assert.match(output, /The three mobile jobs read the device through the maestro server/)
     assert.doesNotMatch(output, /emulator server/, 'a server that is registered is not named')
   })
 
