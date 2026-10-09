@@ -10,7 +10,7 @@ node eval/report.mjs eval/results/runs.jsonl
 
 ## How the rounds were run
 
-No model ran inside Cursor. Two stand-in models did the work:
+No model ran inside Cursor in these rounds. Two stand-in models did the work:
 
 | `model` in `runs.jsonl` | Model | Stands in for |
 | --- | --- | --- |

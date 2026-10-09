@@ -12,10 +12,10 @@ The hook applies to every Cursor agent in the folder. It denies an edit to appli
 - **npm.** The hook denies `pnpm`, `yarn`, and `bunx` to the agent.
 - **Python 3.9 or later**, started as `python3`, with no packages. The hook is a Python script.
 - **Cursor 2.4 or later**, by Cursor's changelog the first version with skills, subagents, and the `preToolUse` hook event.
-- **Linux.** macOS was not run. Windows is not expected to work as shipped: it cannot start the hook by its `.py` path.
+- **Linux.** On macOS only the hook's tests were run. Windows is not expected to work as shipped: it cannot start the hook by its `.py` path.
 - **Google Chrome**, for the plan and generate jobs. `playwright-cli` starts it.
 
-Run so far: everything on Linux with Node 24, and the hook's tests on Python 3.9 and 3.14. Not run: this version in a live Cursor session. The install notes have [the detail](docs/install-notes.md#requirements-in-detail), and say what to do [if every action is denied](docs/install-notes.md#if-every-action-is-denied). The mobile skills need more: see [Mobile](#mobile).
+Run so far: everything on Linux with Node 24, the hook's tests on Python 3.9 and 3.14, and seven prompts by hand in Cursor's agent with the Composer 2.5 model. [docs/evaluation.md](docs/evaluation.md#a-run-in-cursor-2026-10-09) has that run and what it does not show. The install notes have [the detail](docs/install-notes.md#requirements-in-detail), and say what to do [if every action is denied](docs/install-notes.md#if-every-action-is-denied). The mobile skills need more: see [Mobile](#mobile).
 
 ## Add it to your app
 
@@ -301,7 +301,7 @@ npx playwright test --list
 node scripts/test-example.mjs
 ```
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same commands on every pull request and on every push to `main`: the hook tests on Ubuntu and macOS with Python 3.9 and 3.14, the reporter, script, config, and example checks on Ubuntu with the lowest and the highest Node version that `engines` allows, and the Markdown lint, the type check, and the check of the copied `playwright-cli` skill on Ubuntu with one Node version. The workflow has not run on GitHub yet. Its commands were run on one Linux machine and in Linux containers. Whether the GitHub runner has the Google Chrome that the example check needs was not checked.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same commands on every pull request and on every push to `main`: the hook tests on Ubuntu and macOS with Python 3.9 and 3.14, the reporter, script, config, and example checks on Ubuntu with the lowest and the highest Node version that `engines` allows, and the Markdown lint, the type check, and the check of the copied `playwright-cli` skill on Ubuntu with one Node version. The workflow ran on the pull request that added it, and every job passed, the example check included. On macOS it runs the hook tests only.
 
 ## Upgrading
 

@@ -14,7 +14,7 @@ If you run a round yourself, keep the run folders on a disk and not in `/tmp`. O
 
 Read the numbers below with these five facts in mind.
 
-- **The models are stand-ins.** Claude Haiku 4.5 stands in for a low-cost model, and Claude Sonnet 5.5 for a mid-tier model. The results file calls them the low-tier proxy and the mid-tier proxy. No model was run inside Cursor.
+- **The models are stand-ins.** Claude Haiku 4.5 stands in for a low-cost model, and Claude Sonnet 5.5 for a mid-tier model. The results file calls them the low-tier proxy and the mid-tier proxy. No model was run inside Cursor in these rounds. One run by hand in Cursor is under [A run in Cursor](#a-run-in-cursor-2026-10-09).
 - **The agent ran outside Cursor.** Each model worked in a sandbox copy of the example app with file and shell tools. Its prompt was the text that `eval/prompt.mjs` prints: `AGENTS.md`, then the skill, then the user's request. That is the message Cursor builds for a skill picked from the `/` menu, as read in the code of Cursor 3.23. It was not seen in a live session.
 - **The hook was not in the loop.** No deny reached a model while it worked. A note in front of the prompt said so and asked the model to follow the rules as if the hook ran. After the run, the scorer asks the hook about every file the agent wrote.
 - **The browser steps were not the ones the skills have now.** In rounds 1 and 2 the plan and generate skills still named the `browser_*` tools of the Playwright MCP server, and the agents had no MCP tools. The note gave the matching `playwright-cli` shell command for each tool, and the agents ran those commands. The skills now give the `playwright-cli` commands themselves, so from round 3 on the note has no such list.
@@ -94,3 +94,32 @@ What round 2 does not show:
 <!-- eval:round-3 -->
 
 Round 3 is the first round on the skills that browse with `playwright-cli` themselves, and on the changed `/qa-plan`. The mid-tier model passed 9 of 9 runs and the low-tier model 17 of 18. The table by case, the one failure, and the hook change it led to are in [`eval/results/README.md`](../eval/results/README.md#round-3).
+
+## A run in Cursor, 2026-10-09
+
+One person pasted seven prompts by hand into Cursor's agent, each in a new chat, with the Composer 2.5 model. The folder was a copy of the example app with the kit of commit `8eca690` installed by `scripts/install-into.mjs` and the reference tests removed. The scorer did not score this run. A maintainer read the files it left and ran them again outside Cursor.
+
+| Prompt | What happened |
+| --- | --- |
+| Five actions for the hook to judge | The edit of `lib/validation.ts`, `cd lib`, and `cat package-lock.json` were denied, each with the hook's own message. `pwd` ran and printed the project root. `playwright-cli open` and `close` ran. |
+| `/qa-unit src/components/SignIn.tsx` | 6 tests, `Verdict: PASS` |
+| `/qa-unit Write an integration test for app/api/session/route.ts` | 6 tests, `Verdict: PASS` |
+| `/qa-plan sign-in` | A plan with 6 scenarios, the mocked server error among them, `Verdict: DONE` |
+| `/qa-generate test/e2e/plan/sign-in.plan.md` | Two page classes and a spec with 6 tests, `Verdict: PASS` |
+| `/qa-heal test/e2e/sign-in.spec.ts`, after a heading name in a page class was changed by hand | `Class: Locator`, one line fixed in the page class, `Verdict: PASS` |
+| `Write a unit test for lib/validation.ts.`, with no skill picked | The agent followed `/qa-unit`: 6 tests, `Verdict: PASS` |
+
+Afterwards `git status` showed new files under `test/` and no other change. Outside Cursor the 18 Vitest tests and the 7 Playwright tests passed, the seed spec included, and the type check of `test/` passed.
+
+What the run shows:
+
+- **Cursor loads the hook, and the model sees the hook's message.** For a shell command the message follows `Rejected: Command execution was blocked by a hook:`.
+- **A skill picked from the `/` menu is followed to its reply form,** and a plain request reaches the same skill through `AGENTS.md`.
+- **A spec can start a browser in the agent's shell.** A first run on the same day, at an earlier commit, failed there with `Executable doesn't exist`: the agent's shell looks for Playwright's Chromium in a folder of its own under `/tmp/cursor-sandbox-cache/`. `playwright.config.ts` now starts Google Chrome when that Chromium is missing.
+
+What the run does not show:
+
+- **How often it works.** It is one run of each prompt, on one model. No mid-tier model was run.
+- **The cases with a planted bug, the fix of a failing unit test, and the `BLOCKED` exits.** No prompt asked for them.
+- **The hook's rules for MCP tools, and the mobile skills.**
+- **Which Cursor version it was.** It was not written down.
