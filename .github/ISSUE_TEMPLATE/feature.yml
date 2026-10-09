@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose a change to a skill, the hook, a config file, or the documents.
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What goes wrong today, or what you cannot do. If a model did something wrong, say which model and paste what it did.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The proposed change
+      description: What should change. If it is wording in a skill, write the new wording.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part does it touch?
+      description: Pick every part that applies.
+      multiple: true
+      options:
+        - "qa-unit skill"
+        - "qa-plan skill"
+        - "qa-generate skill"
+        - "qa-heal skill"
+        - "qa-mobile-plan, qa-mobile-generate, or qa-mobile-heal skill"
+        - "AGENTS.md or the qa role in .cursor/agents/qa.md"
+        - "The hook in .cursor/hooks/"
+        - "vitest.config.ts, playwright.config.ts, or the verdict reporters in .cursor/qa/"
+        - "The install steps, scripts/, or the example app"
+        - "README or other documents"
+        - "Something else"
+    validations:
+      required: true
+  - type: input
+    id: files
+    attributes:
+      label: Files
+      description: The files you expect to change, if you know them.
+      placeholder: ".cursor/skills/qa-heal/SKILL.md"
