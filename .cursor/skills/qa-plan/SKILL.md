@@ -38,7 +38,7 @@ Do the steps in order. In every table, use the first row that matches. When a st
    | `Page URL` in the reply is not the URL you asked for | The app redirected you, most often to its sign-in page. No account in the prompt: BLOCKED: `this page needs a signed-in user. Ask again with a test account.` With an account: sign in with it in the browser, go to step 4, and start every scenario with those sign-in steps. |
    | No row matches | The page is open. Go to step 4. |
 
-4. **Read the page.** Call `browser_snapshot`. Do not take a screenshot. Each line is one element, for example `- button "Sign in" [ref=e9]`. The words in quotes are what the user sees. `e9` is the `ref` the other browser tools take. Ignore `button "Open Next.js Dev Tools"` and an `alert` line that is empty or only repeats the page heading. Next.js adds both to every page.
+4. **Read the page.** Call `browser_snapshot`. Do not take a screenshot. Each line is one element, for example `- button "Sign in" [ref=e9]`. The words in quotes are what the user sees. `e9` is the `ref`. `browser_type` and `browser_click` take it as `target`. Ignore `button "Open Next.js Dev Tools"` and an `alert` line that is empty or only repeats the page heading. Next.js adds both to every page.
 
 5. **Read the source for this page only.** Search the source for one text from the snapshot, for example `Sign in`. Read the page files the search finds, the app files they import, and the route handler the page calls. At most 6 files. Note each validation message, each error message, the request (`POST /api/session`), and any test account the source creates.
 
@@ -84,7 +84,7 @@ Do the steps in order. In every table, use the first row that matches. When a st
 
    No form fits: write one short sentence in the same style and name it under `Not checked:`.
 
-9. **Reply** with this form and nothing else. The values shown are examples.
+9. **Reply** with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
 
    ```text
    Plan file: test/e2e/plan/sign-in.plan.md

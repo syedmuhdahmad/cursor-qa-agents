@@ -11,7 +11,7 @@ Part 1 writes the page classes while you walk the plan in the browser. Part 2 wr
 Read application source (`app/`, `src/`, and similar). Never edit it.
 
 - Plan, the input: `test/e2e/plan/sign-in.plan.md`
-- Page class, one for each screen: `test/e2e/pages/sign-in-page.ts`
+- Page class, one for each screen: `test/e2e/pages/sign-in-page.ts`. A page class holds one field for each element and one `goto` method, nothing else.
 - Spec, named after the plan: `test/e2e/sign-in.spec.ts`
 - Templates: `.cursor/skills/qa-generate/templates/page-class.ts` and `spec.ts` in the same folder
 
@@ -34,11 +34,11 @@ Steps 5 and 6 use this table. `signIn` and `dashboard` are page objects. Name ea
 | ``The URL is `/dashboard`.`` | None | `await expect(page).toHaveURL('/dashboard')` |
 | No row matches | A field for each element the line names | The closest row's code. Name the line under `Not checked:`. |
 
-Why: the alert has `getByRole('main')` in front because Next.js adds its own `alert` to every page, outside `main`. `page.getByRole('alert')` alone matches both and fails with `strict mode violation`. If the snapshot shows the alert under another parent, such as `dialog`, use that role.
+Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByRole('alert')` alone matches both and fails with `strict mode violation`. If the snapshot shows the alert under another parent, such as `dialog`, use that role.
 
 ## Steps
 
-1. **Plan.** Take the plan path from the prompt and read the plan. No path in the prompt: run `ls test/e2e/plan`, reply with the names and `Which plan?`, and stop.
+1. **Plan.** Take the plan path from the prompt and read the plan. No path in the prompt, or no file at that path: run `ls test/e2e/plan`, reply with the names and `Which plan?`, and stop.
 
 2. **Part.** Part 1 is steps 3 to 5. Part 2 is steps 6 to 8.
 
@@ -71,8 +71,8 @@ Why: the alert has `getByRole('main')` in front because Next.js adds its own `al
    | Plan line | Browser call | Write now, before the next call |
    | --- | --- | --- |
    | `Go to` | `browser_navigate` with the full URL, then `browser_snapshot` | Nothing |
-   | `Fill` | `browser_type` with the `ref` of the element from the latest snapshot | The field, with the locator from the reply |
-   | `Click` | `browser_click` with the `ref`, then `browser_snapshot` | The field, with the locator from the reply |
+   | `Fill` | `browser_type`. Its `target` is the `ref` of the element in the latest snapshot, such as `e9`. | The field, with the locator from the reply |
+   | `Click` | `browser_click` with the `ref` as `target`, then `browser_snapshot` | The field, with the locator from the reply |
    | An Expect line that names an element | None. Find the element in the latest snapshot. | The field from "Plan line to code" |
    | `The URL is` or `Mock` | None | Nothing |
    | The last line of the scenario is done | `browser_close`. It also signs the browser out. | Nothing |
@@ -109,7 +109,7 @@ Why: the alert has `getByRole('main')` in front because Next.js adds its own `al
    | The output contains | Do |
    | --- | --- |
    | No `QA-VERDICT:` line | BLOCKED: `the test command did not finish.` Put the last output line under `Not checked:`. |
-   | `QA-VERDICT: PASS-WITH-FIXME` | The spec already had a marked product bug. Go to step 9 with `Verdict: PASS`. |
+   | `QA-VERDICT: PASS-WITH-FIXME` | The spec already had a marked product bug. Go to step 9 with `Verdict: PASS` and its `// product bug:` line under `Bug:`. |
    | `ERR_CONNECTION_REFUSED` | BLOCKED: `start the app with npm run dev, then ask again.` |
    | `Cannot find module` | Make the import match the file name of the page class: `./pages/sign-in-page`. |
    | `strict mode violation` | The field matches two elements. Put the role of its parent in front: `page.getByRole('main').getByRole('alert')`. |
@@ -133,7 +133,7 @@ Why: the alert has `getByRole('main')` in front because Next.js adds its own `al
    Not checked: none
    ```
 
-   `Verdict:` is `PASS`, `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you. After `page classes only` it is `DONE`. `Bug:` is `none`, or the plan line, the source `file:line`, the expected value, and the received value.
+   `Result:` is the `QA-VERDICT:` line of the last run, copied exactly. `Verdict:` is `PASS` only when that line says `PASS` or `PASS-WITH-FIXME`. Otherwise it is `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you. A `page classes only` job runs no test: unless it was BLOCKED, its `Verdict:` is `DONE`. `Bug:` is `none`, or the plan line, the source `file:line`, the expected value, and the received value.
 
 ## Never
 

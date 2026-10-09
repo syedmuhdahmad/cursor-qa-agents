@@ -16,7 +16,7 @@ Do the steps in order. In every table, use the first row that matches. When a st
 
 ## Steps
 
-1. **Spec.** Take the spec path from the prompt. No path in the prompt: reply `Which spec?` and stop.
+1. **Spec.** Take the spec path from the prompt. No path in the prompt, or no file at that path: reply `Which spec?` and stop.
 
 2. **Run it.** `RTK_DISABLED=1 npx playwright test test/e2e/sign-in.spec.ts`. Change only the path. If the prompt gave a base URL, put it in front: `RTK_DISABLED=1 BASE_URL=http://localhost:4000 npx playwright test test/e2e/sign-in.spec.ts`. Copy the line that starts with `QA-VERDICT:`.
 
@@ -24,7 +24,7 @@ Do the steps in order. In every table, use the first row that matches. When a st
    | --- | --- |
    | `PASS` or `PASS-WITH-FIXME` | Nothing fails. Go to step 9. |
    | `FAIL` | Go to step 3. |
-   | No row matches | BLOCKED: `the test command did not finish.` Put the last output line under `Not checked:`. |
+   | No `QA-VERDICT:` line | BLOCKED: `the test command did not finish.` Put the last output line under `Not checked:`. |
 
 3. **Read the first failure.** The output numbers the failures `1)`, `2)`. Work on `1)` only: later failures often have the same cause. Note four things.
 
@@ -81,11 +81,12 @@ Do the steps in order. In every table, use the first row that matches. When a st
    | `PASS` or `PASS-WITH-FIXME` | Go to step 8. |
    | `FAIL`, and failure `1)` is the same test with the same error | The fix was wrong. Put the old line back by editing the file. Do not use `git restore` or `git checkout`: they also remove your earlier fixes. Then go to step 4. |
    | `FAIL`, and failure `1)` is another test or another error | The fix worked. Keep it. Go to step 3. |
+   | No `QA-VERDICT:` line | BLOCKED: `the test command did not finish.` Put the last output line under `Not checked:`. |
    | No row matches | Go to step 9 with `Verdict: FAIL`. |
 
-   After round 3, do not go back to step 3 or 4. Go to step 9 with `Verdict: FAIL`.
+   Round 3 ended with `FAIL`: do not go back to step 3 or 4. Go to step 9 with `Verdict: FAIL`.
 
-8. **Check the fix.**
+8. **Check the fix.** Keep `BASE_URL=` in front if step 2 had it.
 
    | You made | Run |
    | --- | --- |
@@ -93,9 +94,9 @@ Do the steps in order. In every table, use the first row that matches. When a st
    | An edit to a page class | Each other spec that `grep` printed, one command for each: `RTK_DISABLED=1 npx playwright test test/e2e/profile.spec.ts` |
    | No row matches | Nothing. Go to step 9. |
 
-   A run here that is not a pass: go to step 9 with `Verdict: FAIL` and that `QA-VERDICT:` line under `After:`.
+   A run here that says `FAIL`: go to step 9 with `Verdict: FAIL` and that `QA-VERDICT:` line under `After:`. No `QA-VERDICT:` line: BLOCKED, as in step 7.
 
-9. **Reply** with this form and nothing else. The values shown are examples. Write the first six lines once for each failure you worked on, or `Test: none` when nothing failed.
+9. **Reply** with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`. Write the first six lines once for each failure you worked on. Nothing failed: write them once, with `none` on the first five.
 
    ```text
    Test: Wrong password shows an error, test/e2e/sign-in.spec.ts:63
@@ -108,7 +109,7 @@ Do the steps in order. In every table, use the first row that matches. When a st
    Not checked: other browsers
    ```
 
-   `Class:` is `Locator`, `Timing`, `Data or setup`, or `Product bug`. `Fix:` is the file and line you changed. `Before:` is one error line of the first run and `After:` is the `QA-VERDICT:` line of the last run, both copied exactly. `Verdict:` is `PASS` when that line says `PASS` or `PASS-WITH-FIXME`. Otherwise it is `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you.
+   `Class:` is `Locator`, `Timing`, `Data or setup`, or `Product bug`. `Fix:` is the file and line you changed. For a product bug it also names the source `file:line`, as the example does. `Before:` is one error line of the first run and `After:` is the `QA-VERDICT:` line of the last run of the whole spec, both copied exactly. `Verdict:` is `PASS` only when that line says `PASS` or `PASS-WITH-FIXME`. Otherwise it is `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you. Never write `Verdict: PASS-WITH-FIXME`: a spec that passes apart from a marked product bug is `Verdict: PASS`.
 
 ## Never
 
@@ -124,8 +125,8 @@ Enter only from step 5, and only once.
 
 - **A1.** Start this command in the background. It stays paused until A6, so in the foreground it never returns. `RTK_DISABLED=1 npx playwright test test/e2e/sign-in.spec.ts:63 --debug=cli`. `63` is the line of the `test(` call from step 3. Keep `BASE_URL=` in front if step 2 had it.
 - **A2.** Run `sleep 5`. Read the output of the background command. Find the line `- Run "playwright-cli attach tw-XXXXXX" to attach to this test`. `tw-XXXXXX` stands for the session name: `tw-` and six letters or digits that change on every run. In every command below, replace `tw-XXXXXX` with the name you read. The line is not there: run `sleep 5` and read again, up to 3 times. Still not there: go to step 9 with `Verdict: FAIL` and `Cause: not found`.
-- **A3.** `npx --no-install playwright-cli attach tw-XXXXXX`. The output has `### Paused`. If it has `ENOENT`, you did not replace `tw-XXXXXX`.
+- **A3.** `npx --no-install playwright-cli attach tw-XXXXXX`. The output has `### Paused`.
 - **A4.** Run the test up to the failing line from step 3: `npx --no-install playwright-cli -s=tw-XXXXXX pause-at pages/sign-in-page.ts:25`. Use the page-class file and line the error printed. Use a spec line only when the error printed none: `pause-at test/e2e/sign-in.spec.ts:70`. The output has `### Paused`: go to A5. It has not: the test ran to its end. Go to step 9 with `Verdict: FAIL` and `Cause: not found`.
 - **A5.** Look at the page. `npx --no-install playwright-cli -s=tw-XXXXXX snapshot` prints it. `npx --no-install playwright-cli -s=tw-XXXXXX find "Sign in"` searches it for a text. `npx --no-install playwright-cli -s=tw-XXXXXX generate-locator e9` prints the locator for the element with that `ref`.
-- **A6.** Always end with `npx --no-install playwright-cli -s=tw-XXXXXX resume`. It prints nothing and can take 30 seconds. The background run then ends by itself. Never use `detach`: it leaves the run paused and you have no command to stop it.
+- **A6.** Always end with `npx --no-install playwright-cli -s=tw-XXXXXX resume`. It prints nothing and can take 30 seconds. The background run then ends by itself. Never use `detach`. The hook denies it.
 - **A7.** Go back to step 5.

@@ -40,14 +40,14 @@ When a step says BLOCKED, stop work, go to step 10, and put the sentence after `
    | `app/api/session/route.ts` | `test/integration/api/session/route.test.ts` | `../../../../app/api/session/route` |
    | No row has your folders | Apply the two rules above | |
 
-4. **Template.** Read one file in `.cursor/skills/qa-unit/templates/`.
+4. **Template.** Read one of the two test templates in `.cursor/skills/qa-unit/templates/`.
 
    | Check | Template |
    | --- | --- |
    | The prompt says `UI`, or the source file ends in `.tsx` or `.jsx` | `ui.test.ts` |
    | No row matches | `node.test.ts` |
 
-5. **Mocks.** Do every row that matches the source file. The blocks are in `.cursor/skills/qa-unit/templates/mocks.ts`.
+5. **Mocks.** Do every row that matches the source file. A row names a block: read `.cursor/skills/qa-unit/templates/mocks.ts` and copy that block only.
 
    | The source file | Do in the test file |
    | --- | --- |
@@ -58,7 +58,7 @@ When a step says BLOCKED, stop work, go to step 10, and put the sentence after `
    | imports no such module | `node.test.ts`: delete the two lines that contain `DATA_IMPORT`. `ui.test.ts`: nothing. |
    | has no `import` line | `node.test.ts`: also delete the `server-only` line. |
 
-   Mock nothing else. Child components, helper modules, and the file under test stay real. If you use `vi.stubGlobal`, add `vi.unstubAllGlobals()` as the last line of `afterEach`.
+   Mock nothing else. Child components, helper modules, and the file under test stay real.
 
 6. **Write the test file.** New file: start from the template. Existing file: read it, keep everything in it, and add to it. Replace every token (a word in capitals with an underscore) with a value from the source. `SOURCE_IMPORT` is the import from step 3. Import each export you test, a default export without braces. `DATA_IMPORT` is the same `../` prefix, then the path of the data module. For `DATA_FUNCTION` write one `name: vi.fn()` for each function the source imports from that module. Replace the example `it` with one `it` per behavior from step 2.
    - Set every mock return value inside the `it`, never in a `vi.mock` factory.
@@ -80,7 +80,7 @@ When a step says BLOCKED, stop work, go to step 10, and put the sentence after `
    | No `QA-VERDICT:` line | BLOCKED: `the test command did not finish.` Put the last output line under `Not checked:`. |
 
 9. **Fix one failure.** You have 3 rounds. One edit and one rerun is one round. After round 3, go to step 10 with `Verdict: FAIL`.
-   1. Take the first failing test. Copy the first line under its `FAIL` line, and its `Expected` and `Received` lines if it has them. In round 1 this is `Before:` in the reply.
+   1. Take the first failing test. Copy the first line under its `FAIL` line, and its `Expected` and `Received` lines if it has them. In round 1 this is `Before:` in the reply. In round 2 or 3, the same error as before means the last fix was wrong: put the old line back by editing the file. Do not use `git restore` or `git checkout`: they also remove your earlier fixes.
    2. Fix job, round 1: read the test file and the source file it imports.
    3. Find the error in "Errors" and do what the row says. Do not edit until you can point to the cause in the error or the source. A guess is not a cause.
    4. Make the smallest fix. Take the first option that fully fixes the failure:
@@ -90,7 +90,7 @@ When a step says BLOCKED, stop work, go to step 10, and put the sentence after `
       - Otherwise change the one line that is wrong.
 
       Change only the lines that caused the failure. Do not rewrite, rename, reorder, or reformat anything else. Do not add helpers, wrappers, retries, longer timeouts, or config options. Keep every existing assertion and mock.
-   5. Go to step 7. If the rerun shows the same error, the fix was wrong. Put the old line back by editing the file before you try another. Do not use `git restore` or `git checkout`: they also remove your earlier fixes.
+   5. Go to step 7.
 
 10. **Reply** with the form in "Reply".
 
@@ -146,14 +146,14 @@ Read at most one file in `.cursor/skills/qa-unit/references/`.
 ## Never
 
 - Edit application source, `test/setup.ts`, or `vitest.config.ts`.
-- Delete a failing test, or mark it `.skip`, `.only`, `.todo`, or `.fails`. The hook rejects these.
+- Delete a failing test, or mark it `.skip`, `.only`, `.todo`, or `.fails`. The hook denies the marks.
 - Weaken an assertion to go green: `toBeTruthy()`, `expect.anything()`, a removed check, or a snapshot as the only assertion.
 - Change an expected value to the received value, unless section A says the test is wrong.
 - Install a package, or run a test command other than the one in step 7.
 
 ## Reply
 
-Reply with this form and nothing else. The values shown are examples.
+Reply with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
 
 ```text
 Job: write

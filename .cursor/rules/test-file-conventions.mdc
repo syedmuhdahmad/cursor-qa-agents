@@ -16,10 +16,12 @@ alwaysApply: false
 | E2e seed | `test/e2e/seed.spec.ts` | `test/e2e/seed.spec.ts` |
 | Mobile flow | `test/mobile/<feature>/<nn>-<scenario>.flow.yaml` | `test/mobile/sign-in/01-valid-account.flow.yaml` |
 | Mobile plan | `test/mobile/plan/<feature>.plan.md` | `test/mobile/plan/sign-in.plan.md` |
-| Mobile subflow | `test/mobile/subflows/<name>.yaml` | `test/mobile/subflows/sign-in.yaml` |
-| Mobile config, optional | `test/mobile/config.yaml` | `test/mobile/config.yaml` |
+| Mobile subflow | `test/mobile/subflows/<name>.yaml` | `test/mobile/subflows/open-sign-in.yaml` |
+| Mobile suite file, optional | `test/mobile/config.yaml` | `test/mobile/config.yaml` |
 
-A unit or integration test mirrors the source path. Drop a leading `src/` or `app/`.
+A page class holds one field for each element and one `goto` method, nothing else.
+
+A unit or integration test mirrors the source path. Drop a leading `src/` or `app/` (the first folder only).
 
 | Source file | Test file |
 | --- | --- |
