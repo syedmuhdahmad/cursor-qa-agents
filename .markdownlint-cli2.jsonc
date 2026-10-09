@@ -13,9 +13,12 @@
   // Skip everything a .gitignore file names: node_modules/, test-results/, and so on.
   "gitignore": true,
   "ignores": [
-    // Copied from another project and kept byte for byte.
+    // Copied from other projects and kept byte for byte.
     // A lint fix here would turn an unmodified copy into a modified one.
     ".cursor/skills/qa-unit/references/**",
+    // The whole folder, SKILL.md included. Only its frontmatter is written here,
+    // and `npm run check:playwright-cli-skill` fails when the rest changes.
+    ".cursor/skills/playwright-cli/**",
     // License texts, whatever their file extension.
     "**/LICENSE*",
     // Installed packages, also where no .gitignore file names them.

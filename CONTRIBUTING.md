@@ -23,7 +23,7 @@ npm ci
 
 ## Checks
 
-Run all nine from the repository root, after `npm ci`, before you open a pull request.
+Run all ten from the repository root, after `npm ci`, before you open a pull request.
 
 | Command | What it checks |
 | --- | --- |
@@ -32,12 +32,13 @@ Run all nine from the repository root, after `npm ci`, before you open a pull re
 | `node --test "scripts/*.test.mjs"` | The tests of the installer, `scripts/install-into.mjs`. They also read the two marked blocks in `README.md`. |
 | `node --test "eval/*.test.mjs"` | The tests of the evaluation scripts in `eval/`, and that every case still fits `examples/next-app` and the skills. |
 | `npm run lint:md` | Markdown lint over the `.md` and `.mdc` files. The settings and the skipped folders are in `.markdownlint-cli2.jsonc`. |
+| `npm run check:playwright-cli-skill` | That `.cursor/skills/playwright-cli/` is still the skill inside the installed `@playwright/cli` package. See [The copied playwright-cli skill](#the-copied-playwright-cli-skill). |
 | `npm run typecheck` | The types in `vitest.config.ts`, `playwright.config.ts`, and the files under `test/`. The settings are in `tsconfig.json`. |
 | `npx vitest run --passWithNoTests` | That `vitest.config.ts` loads. This repository has no unit or integration tests of its own, so the last line is `QA-VERDICT: FAIL (passed 0, failed 0, skipped 0, files 0) reason: no tests ran` and the exit code is 0. That is the expected result. |
 | `npx playwright test --list` | That `playwright.config.ts` loads. It prints `Total: 1 test in 1 file` and needs no browser. |
 | `node scripts/test-example.mjs` | The whole kit, the way a new user sets it up. See below. |
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same nine commands on every pull request and on every push to `main`. [Checks and CI](README.md#checks-and-ci) in the README says on which systems and versions, and what has run so far. When you add a check to the workflow, add it to this table, to the pull request template, and to that section of the README.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same ten commands on every pull request and on every push to `main`. [Checks and CI](README.md#checks-and-ci) in the README says on which systems and versions, and what has run so far. When you add a check to the workflow, add it to this table, to the pull request template, and to that section of the README.
 
 `node scripts/test-example.mjs` copies `examples/next-app` to a temporary folder and installs the kit into the copy with `scripts/install-into.mjs`. Then it runs `npm install`, downloads Chromium, builds the app, and runs the unit, integration, and end-to-end tests there. It also runs two throwaway tests that use the `@/` import alias, and type-checks the tests with `npx tsc --noEmit -p test`. It stops at the first failure. It needs a network connection. It takes about a minute when npm's cache and Chromium are already on the machine, and longer the first time. It uses port 3000. Pass `--port 3210` when port 3000 is busy, and `--keep` to keep the temporary folder.
 
@@ -53,13 +54,14 @@ One fact is often written in more than one file. Change every copy in the same p
 | An install step, or what the installer does with a file the app already has | "Add it to your app" in `README.md`, and `docs/install-notes.md` |
 | A file or folder that users must copy | The block after `<!-- install:copy -->` in `README.md` |
 | A dev dependency that users need | `package.json`, and the block after `<!-- install:dev-dependencies -->` in `README.md` |
+| The version of `@playwright/cli` | The copy in `.cursor/skills/playwright-cli/`, and the version in `THIRD_PARTY_NOTICES.md`. See [The copied playwright-cli skill](#the-copied-playwright-cli-skill). |
 | The Node range | `engines` in `package.json`, and the requirements in `README.md` |
 | Something a user must do after an upgrade | `CHANGELOG.md`, under `Unreleased` |
 | A skill's reply form, the example app, or a reference test | The cases in `eval/cases/`. `node --test "eval/*.test.mjs"` names the case that no longer fits. |
 | The prompt a skill takes, a reply form, or the verdict line | "Start a job" in `README.md`, and `docs/jobs.md` |
 | A mobile skill, or what was run on a device | `docs/mobile.md` |
 
-Three things to know about these files:
+Five things to know about these files:
 
 - `scripts/install-into.mjs` reads the two marked blocks in `README.md`. A path or a package that is missing from a block is missing from every install.
 - `typescript` and `markdownlint-cli2` are tools for this repository only. Keep them out of the README block, so they do not reach users' apps.
@@ -81,6 +83,8 @@ Each job has one skill. The user starts it by name.
 - `SKILL.md` is complete on its own: the paths, the rule never to edit application source, the commands, and the reply form. It never tells the model to read another skill.
 - Files the model copies from sit in `templates/` inside the skill folder.
 
+One folder under `.cursor/skills/` is not a job, and these rules do not apply to it: `.cursor/skills/playwright-cli/` is a copy of another project's manual. See [The copied playwright-cli skill](#the-copied-playwright-cli-skill).
+
 Rules for the text of a skill:
 
 1. Use numbered steps, one action each, in the order they are done. Keep to about ten. End each step with what to look at or do next.
@@ -90,7 +94,7 @@ Rules for the text of a skill:
 5. Put optional depth in a lettered section at the end. Only a step that names the section sends the model there.
 6. A rule that is not obvious may have one line under it that starts with `Why:`.
 7. Write limits as numbers: 2 to 6 tests, 3 fix rounds.
-8. Describe actions, such as "read the file", and not tool names. The MCP `browser_*` tools and shell commands are the exceptions.
+8. Describe actions, such as "read the file", and not tool names. Shell commands and the tools of the Maestro MCP server, such as `inspect_screen`, are the exceptions.
 9. Word the same fact the same way in every file.
 10. Keep `RTK_DISABLED=1` in front of every test command.
 11. End the skill with a reply form to fill in. It has a `Verdict:` line with a closed set of words (`PASS`, `FAIL`, `BLOCKED`, and `DONE` for a job that runs no test: a plan, and `/qa-generate` with `page classes only`), and its last line is `Not checked:`.
@@ -105,6 +109,28 @@ After you change a skill, run the evaluation. See [The evaluation](#the-evaluati
 - Do not edit them. They are kept byte for byte, so that they stay unmodified copies.
 - Markdown lint skips the folder for the same reason.
 - When Vitest moves to a new major version, refresh the three files from upstream. The steps are in `GENERATION.md` in that folder. Then update [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+### The copied playwright-cli skill
+
+`.cursor/skills/playwright-cli/` is a copy of the skill that ships inside the `@playwright/cli` package, in `node_modules/@playwright/cli/skills/playwright-cli/`. It is the manual of the `playwright-cli` commands. It is not a job, so the tables in `AGENTS.md` and `.cursor/agents/qa.md` have no row for it.
+
+- Only the frontmatter of `SKILL.md` is written here. The text after the frontmatter, the files in `references/`, and `LICENSE` are the package's, byte for byte. Do not edit them, and do not let an editor or a tool reformat them. Markdown lint skips the folder.
+- `npm run check:playwright-cli-skill` compares the folder with the installed package. It fails when a file differs, is missing, or is not in the package. It also fails when `version` in the frontmatter is not the installed version.
+- Nothing else keeps the copy current. The package's own `playwright-cli install --skills` writes to `.claude/skills/` or `.agents/skills/`, and its warning about an old skill looks only there.
+
+When `@playwright/cli` moves to a new version, do this in the same pull request:
+
+1. Run `npm ci`, so that `node_modules/` holds the new version.
+2. Copy the skill again:
+
+   ```bash
+   node scripts/ci/playwright-cli-skill.mjs --write
+   ```
+
+   It deletes the folder and copies the skill and `LICENSE` from the package. It keeps the frontmatter of `SKILL.md` and puts the new version number into it.
+3. Run `npm run check:playwright-cli-skill`. It must pass.
+4. In [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), change the version in the entry for this folder, in the text and in the link. If the copyright line in the new `LICENSE` changed, change it there and in the frontmatter of `SKILL.md`.
+5. Run `npx --no-install playwright-cli --help`. Every `playwright-cli` command that a skill names must still be in the list. Then check that the hook still allows each one. See [The hook](#the-hook).
 
 ## The hook
 
@@ -172,7 +198,7 @@ The version of the kit is the one line in `.cursor/qa/VERSION`. Users copy that 
 1. Pick the new version, for example `0.2.0`.
 2. Write it into `.cursor/qa/VERSION`.
 3. In `CHANGELOG.md`, move the entries under `Unreleased` to a new heading with the version and the date. Leave the `Unreleased` heading in place, with nothing under it.
-4. Run the nine checks. Open a pull request with these two changes and merge it.
+4. Run the ten checks. Open a pull request with these two changes and merge it.
 5. Tag the merge commit on `main` and push the tag:
 
    ```bash

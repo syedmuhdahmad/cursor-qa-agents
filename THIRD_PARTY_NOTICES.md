@@ -24,6 +24,23 @@ Three copied files: `core-expect.md`, `core-test-api.md`, and `features-mocking.
 
 Do not edit the three files. Markdown lint skips the folder so that they stay unmodified copies. [`GENERATION.md`](.cursor/skills/qa-unit/references/GENERATION.md) in that folder says how to check the copies and how to refresh them.
 
+### `.cursor/skills/playwright-cli/`
+
+The whole folder is a copy: `SKILL.md`, the ten files in `references/`, and `LICENSE`.
+
+- **Source:** the `skills/playwright-cli/` folder of the npm package [`@playwright/cli`](https://www.npmjs.com/package/@playwright/cli), version 0.1.22. The same files are at <https://github.com/microsoft/playwright-cli/tree/v0.1.22/skills/playwright-cli>.
+- **License:** Apache License 2.0. The full text is in [`.cursor/skills/playwright-cli/LICENSE`](.cursor/skills/playwright-cli/LICENSE). That file is the `LICENSE` file of the package, byte for byte, with its Windows line endings.
+- **Copyright:** Copyright (c) Microsoft Corporation.
+- **NOTICE file:** the package has none.
+- **Changed here:** the frontmatter of `SKILL.md`, and nothing else.
+  - `description` was rewritten for the `/` menu of Cursor.
+  - `allowed-tools` was removed. It is not a frontmatter field of Cursor skills.
+  - `disable-model-invocation: true` and a `metadata` block were added. The `metadata` block names the source, the version, and the license, and says that the frontmatter was changed.
+  - The text of `SKILL.md` after the frontmatter and the ten files in `references/` are the same, byte for byte, as in the package.
+  - `LICENSE` was added to the folder. In the package it sits at the top, next to the `skills/` folder.
+
+Do not edit the folder by hand. Markdown lint skips it. `npm run check:playwright-cli-skill` compares it with the installed package and fails on any difference, and CI runs that check. When `@playwright/cli` moves to a new version, [copy the skill again](CONTRIBUTING.md#the-copied-playwright-cli-skill) and change the version in this entry.
+
 ## Adapted skills
 
 ### `qa-plan`, `qa-generate`, and `qa-heal`
@@ -69,10 +86,10 @@ These projects are named to give credit for ideas. The skills state the ideas in
 
 ## Copies that earlier commits held
 
-Earlier commits of this repository held two larger copies. They are no longer in the tree. They remain in the git history, so their sources are recorded here.
+Earlier commits of this repository held two copies in another form. Those versions remain in the git history, so they are recorded here.
 
-- `.cursor/skills/playwright-cli/` was a copy of the `skills/playwright-cli/` folder of the npm package [`@playwright/cli`](https://www.npmjs.com/package/@playwright/cli), version 0.1.22. Apache License 2.0, Copyright (c) Microsoft Corporation. This project changed the frontmatter of `SKILL.md` and, in commit `eaa9b42`, the Markdown formatting of `SKILL.md` and of eight of the ten reference files.
-- `.cursor/skills/vitest-unit-integration/` was a copy of the whole `skills/vitest/` folder of antfu/skills at the commit named above, with all nineteen reference files. MIT License, with the two copyright lines named above. This project added a section of its own to `SKILL.md` and to `GENERATION.md`, changed the frontmatter of `SKILL.md`, and, in commit `eaa9b42`, changed the Markdown formatting of `SKILL.md` and of seven reference files.
+- `.cursor/skills/playwright-cli/` was in the tree from commit `4e4a85f` until commit `c805793` removed it. That copy came from the same package and the same version, 0.1.22, as the copy listed above. Apache License 2.0, Copyright (c) Microsoft Corporation. It had no `LICENSE` file next to it. This project had changed the frontmatter of `SKILL.md` and, in commit `eaa9b42`, the Markdown formatting of `SKILL.md` and of eight of the ten reference files. The copy listed above was made from the package again and has none of the formatting changes.
+- `.cursor/skills/vitest-unit-integration/` was a copy of the whole `skills/vitest/` folder of antfu/skills at the commit named above, with all nineteen reference files. It is no longer in the tree. MIT License, with the two copyright lines named above. This project added a section of its own to `SKILL.md` and to `GENERATION.md`, changed the frontmatter of `SKILL.md`, and, in commit `eaa9b42`, changed the Markdown formatting of `SKILL.md` and of seven reference files.
 
 ## License texts
 
@@ -110,6 +127,8 @@ SOFTWARE.
 ### Apache License 2.0
 
 This is the text of the `LICENSE` file of the `playwright` package. Only the line endings were changed, from Windows to Unix. The license is also published at <https://www.apache.org/licenses/LICENSE-2.0>.
+
+The `LICENSE` file of `@playwright/cli`, which sits in `.cursor/skills/playwright-cli/`, has the same terms. Its text differs in one place: in the appendix, its one copyright line reads "Copyright (c) Microsoft Corporation."
 
 ```text
                                  Apache License

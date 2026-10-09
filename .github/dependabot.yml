@@ -13,6 +13,11 @@ updates:
       interval: weekly
     groups:
       # Packages that must move together arrive in one pull request.
+      #
+      # A pull request that moves @playwright/cli fails the CI job "Copied
+      # playwright-cli skill" until the copy in .cursor/skills/playwright-cli/
+      # is made again. On its branch, run `npm ci`, then
+      # `node scripts/ci/playwright-cli-skill.mjs --write`, and commit the result.
       playwright:
         patterns:
           - "@playwright/*"

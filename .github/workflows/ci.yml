@@ -99,6 +99,26 @@ jobs:
       - run: npm ci
       - run: npm run lint:md
 
+  playwright-cli-skill:
+    name: Copied playwright-cli skill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Any Node that "engines" in package.json allows.
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
+      # Compares .cursor/skills/playwright-cli/ with the skill inside the
+      # installed @playwright/cli package. It fails when a pull request moves
+      # that package to a new version and leaves the copy as it was. The
+      # message names the command that copies the skill again.
+      - run: npm run check:playwright-cli-skill
+
   typecheck:
     name: Type check
     runs-on: ubuntu-24.04
