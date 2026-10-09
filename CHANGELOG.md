@@ -8,7 +8,9 @@ The version of your copy is the one line in `.cursor/qa/VERSION`.
 
 ## Unreleased
 
-These entries become version 0.1.0, the first tagged version. `.cursor/qa/VERSION` already says `0.1.0`. No changes were recorded before it. A copy with no `.cursor/qa/VERSION` file is an earlier version.
+## 0.1.0 - 2026-10-09
+
+The first tagged version: the tag is `v0.1.0`, and `.cursor/qa/VERSION` says `0.1.0`. No changes were recorded before it. A copy with no `.cursor/qa/VERSION` file is an earlier version.
 
 ### Action needed if you copied an earlier version
 
