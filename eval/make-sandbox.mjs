@@ -259,6 +259,11 @@ function ensureBase(baseRoot, packagePath, { browser }) {
       if (existsSync(done)) return { dir, fresh: false }
     }
   }
+  // Another run may have finished between the first look and the lock.
+  if (existsSync(done)) {
+    rmdirSync(lock)
+    return { dir, fresh: false }
+  }
   try {
     rmSync(dir, { recursive: true, force: true })
     mkdirSync(dir, { recursive: true })

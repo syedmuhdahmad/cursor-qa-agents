@@ -81,6 +81,7 @@ Each comment is a plan line. The lines under it are its commands.
 # Expect: On the Account screen, a text that starts with "Saved at" is visible.
 - assertVisible:
     id: ${output.account.savedAt}
+    text: "Saved at.*"
 # Expect: On the Profile screen, "That name is taken" is not visible.
 - assertNotVisible: "That name is taken"
 ```
@@ -96,8 +97,8 @@ Look the name of the line up in the element file of its screen.
 | `type` or `tap` | The name with `Text` at the end | The name alone, as in line 5 |
 | `type` or `tap` | Neither | BLOCKED: `an element name is missing. Ask again with element files only.` Put the plan line under `Not checked:`. |
 | `is not visible` | | `assertNotVisible` and the quoted text |
-| `a text that starts with` | The name | `id:` and the name, with no `text:` line |
-| `a text that starts with` | No name | Nothing. Name the line under `Not checked:`. |
+| `a text that starts with` | The name | `id:` and the name, then `text:` with the quoted start and `.*` after it, as in the `Saved at` lines |
+| `a text that starts with` | No name | `assertVisible` with the quoted start and `.*` after it: `- assertVisible: "Saved at.*"` |
 | `"..." is visible` | The name | `id:` and the name, then `text:` and the quoted text |
 | `"..." is visible` | No name | The quoted text alone, as for "Profile saved" |
 | No row matches | | The commands of the closest form. Name the line under `Not checked:`. |

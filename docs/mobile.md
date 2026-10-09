@@ -164,6 +164,7 @@ Jobs run on that emulator:
 
 Not run:
 
+- A check with `id:` and a `text:` that ends in `.*`, which the skills write for a text that changes from run to run. A `.*` text alone was run, and `id:` with a whole text was run. The two together were not.
 - Anything on iOS: an iOS element file, the iOS block of the loader on an iOS device, the ids there, and every iOS line of the three skills. Those lines are from Maestro's documentation and source.
 - The skills on a model, in Cursor or outside it. The evaluation has no mobile case. The two scripts show that the tables of the generate skill can be applied to one feature. They do not show that a model can apply them.
 - The skills as they are now. After the run with element files, a review added and changed rows and rules in the three skills, for example how a name is made from a text that starts with a digit, and what the walk does at a system dialog. One more rule came after the review: a scenario with no flow makes the verdict `FAIL`. Checked without a device, on the text as it is now: every `yaml` block and template passes `maestro check-syntax`, the element template parses in Node, and the hook allows every command and file of the skills. The new text was not followed on a device.

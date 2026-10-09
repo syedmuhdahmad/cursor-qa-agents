@@ -587,12 +587,14 @@ test('changed paths: what playwright-cli saves does not count against the agent'
   assert.deepEqual(found.ignored, saved, 'the files are set aside, not hidden')
   assert.ok(!diffOfRun(sandbox, baseline).includes('.playwright-cli'), 'and they are not in changes.diff')
 
-  // With the line the kit adds to .gitignore, git does not list them at all.
-  // The edit to .gitignore is a change of its own, inside the write scope.
-  put(sandbox, '.gitignore', 'node_modules\n.next\n.playwright-cli/\n')
+  // The sandbox's .gitignore does not decide what is listed, because the
+  // agent may edit it. The edit is a change of its own, inside the write
+  // scope, and a file hidden behind a new line is still found.
+  put(sandbox, '.gitignore', 'node_modules\n.next\n.playwright-cli/\nsrc/extra.ts\n')
+  put(sandbox, 'src/extra.ts', 'export const extra = 1\n')
   const ignoredByGit = changedPaths(sandbox, baseline)
-  assert.deepEqual(ignoredByGit.changed.map((entry) => entry.path), ['.gitignore', 'test/e2e/plan/sign-in.plan.md'])
-  assert.deepEqual(ignoredByGit.ignored, [])
+  assert.deepEqual(ignoredByGit.changed.map((entry) => entry.path), ['.gitignore', 'src/extra.ts', 'test/e2e/plan/sign-in.plan.md'])
+  assert.deepEqual(ignoredByGit.ignored, saved)
 })
 
 test('changed paths: which paths a tool wrote', () => {

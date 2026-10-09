@@ -693,10 +693,13 @@ function cleanUp() {
   }
 }
 
-for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.on(signal, () => {
-    cleanUp()
-    process.exit(130)
+for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+  process.once(signal, () => {
+    try {
+      cleanUp()
+    } finally {
+      process.exit(code)
+    }
   })
 }
 

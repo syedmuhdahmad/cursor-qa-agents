@@ -122,7 +122,7 @@ Why: `maestro test` removes Maestro's helper app from the device when it ends. T
    | A system dialog on top of the app | **Data or setup** | Section A, the dialog |
    | A screen of another app with no button to close it, such as a Google sign-in screen | None | BLOCKED: `another app covers the app on the device. Close it, then ask again.` |
    | The element with another id | **Selector** | In the element file of your platform, change the selector of that name to the `rid` from the screen, letter for letter. Change no flow. |
-   | Another text where the flow has an expected text, and only an order number, a date, or a time that changes from run to run differs | **Data or setup** | Delete the `text:` line under the `id:` line. Keep the `id:` line, and name the element under `Not checked:`. |
+   | Another text where the flow has an expected text, and only an order number, a date, or a time that changes from run to run differs | **Data or setup** | In the `text:` line, keep the start that stays the same and put `.*` in place of the rest: `text: "Order .*"`. Nothing at the start stays the same: delete the `text:` line, keep the `id:` line, and name the element under `Not checked:`. |
    | Another text than the flow or the element file has, and the plan has that old text | **Product bug** | The product bug mark |
    | Another text than the flow or the element file has, and the plan has the screen's text | **Data or setup** | Write the plan's text: in the flow for an expected text, in the element file for a name that ends in `Text`. |
    | Another screen than the plan line describes | **Data or setup** | A line of the flow differs from its plan line: write the plan's value. Otherwise section A, the keyboard or going back. |

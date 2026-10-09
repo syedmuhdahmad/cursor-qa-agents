@@ -107,7 +107,7 @@ Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByR
    | `### 1.1 A new display name is saved` | `test('A new display name is saved', async ({ page }) => {` |
    | A numbered step | A comment with the step, word for word, then its code from "Plan line to code" |
    | An Expect line | A comment `// Expect:` and the line, word for word, then its code from "Plan line to code" |
-   | No row matches | Leave that plan line out and name it under `Not checked:` |
+   | No row matches | Write the comment with the line and no code under it. Name the line under `Not checked:`. The job then ends with `Verdict: FAIL`. |
 
    - One comment and one line of code for each plan line. Do not merge lines.
    - Import each page class the tests use. Each test creates its page objects first: `const profile = new ProfilePage(page)`.
@@ -146,7 +146,7 @@ Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByR
    Not checked: none
    ```
 
-   `Result:` is the `QA-VERDICT:` line of the last run, copied exactly. `Verdict:` is `PASS` only when that line says `PASS` or `PASS-WITH-FIXME`. Otherwise it is `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you. A `page classes only` job runs no test: unless it was BLOCKED, its `Verdict:` is `DONE`. `Bug:` is `none`, or the plan line, the source `file:line`, the expected value, and the received value.
+   `Result:` is the `QA-VERDICT:` line of the last run, copied exactly. `Verdict:` is `PASS` only when that line says `PASS` or `PASS-WITH-FIXME` and every plan line has its code in the spec. A plan line with no code makes it `FAIL`, even when the run passed. Otherwise it is `FAIL`, or `BLOCKED:` and the sentence from the step that stopped you. A `page classes only` job runs no test: unless it was BLOCKED, its `Verdict:` is `DONE`. `Bug:` is `none`, or the plan line, the source `file:line`, the expected value, and the received value.
 
 ## Never
 

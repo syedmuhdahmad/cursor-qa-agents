@@ -95,7 +95,10 @@ export function isGeneratedPath(path) {
 
 // Every path that differs from the baseline commit, tracked or not. Paths that
 // tools write (test-results/, .playwright-cli/, and so on) are set aside. That
-// does not rest on the sandbox's .gitignore, which the agent may edit.
+// does not rest on the sandbox's .gitignore, which the agent may edit: git is
+// told to skip only the two large folders named here, so a file the agent
+// hides behind a new .gitignore line is still listed.
+const NEVER_LISTED = ['node_modules', '.next']
 export function changedPaths(sandbox, baseline) {
   const changed = []
   const fields = git(sandbox, [...QUIET, 'diff', '--name-status', '--no-renames', '-z', baseline]).split('\0')
@@ -103,7 +106,7 @@ export function changedPaths(sandbox, baseline) {
     const status = { A: 'added', D: 'deleted' }[fields[at][0]] ?? 'modified'
     changed.push({ path: fields[at + 1], status })
   }
-  for (const path of git(sandbox, [...QUIET, 'ls-files', '--others', '--exclude-standard', '-z']).split('\0')) {
+  for (const path of git(sandbox, [...QUIET, 'ls-files', '--others', ...NEVER_LISTED.map((name) => `--exclude=${name}`), '-z']).split('\0')) {
     if (path !== '' && !changed.some((entry) => entry.path === path)) changed.push({ path, status: 'added' })
   }
   changed.sort((a, b) => (a.path < b.path ? -1 : 1))

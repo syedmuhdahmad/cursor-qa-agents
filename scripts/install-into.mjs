@@ -800,6 +800,7 @@ export function install(appDir, { dryRun = false, force = false, kitRoot = KIT_R
     gitignoreLines: gitignore.missing,
     gitignoreSkipped: gitignore.skipped,
     gitignoreNote: gitignore.note,
+    gitignoreReason: gitignore.reason,
     notes,
     warnings,
   }
@@ -882,7 +883,7 @@ export function formatReport(report) {
   const reasons = [...report.files, tsconfig, ...report.devDependencies, ...report.scripts]
     .filter((entry) => entry.action === 'skip')
     .map((entry) => entry.reason)
-  if (report.gitignoreSkipped.length > 0) reasons.push('link')
+  if (report.gitignoreSkipped.length > 0) reasons.push(report.gitignoreReason ?? 'link')
   if (reasons.length > 0) {
     const because = (reason) => reasons.filter((value) => value === reason).length
     out.push('', `${reasons.length} skipped.`)
