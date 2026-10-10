@@ -23,6 +23,7 @@
     "outcome": "pass",
     "file": "test/e2e/sign-in.spec.ts",
     "mayWrite": ["test/e2e/sign-in.spec.ts", "test/e2e/pages/*-page.ts"],
+    "maxChangedLines": 4,
     "minTests": 6,
     "tests": [
       "Valid account reaches the dashboard",

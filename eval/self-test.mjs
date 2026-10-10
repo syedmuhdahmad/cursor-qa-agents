@@ -194,7 +194,8 @@ function browserRun(root, makeArgs) {
   const reply = formReply(made.sandbox, testCase, testCase.reference.reply, { BASE_URL: made.meta.server.url })
   const result = scoreRun(made.out, reply)
   const notes = (result.notes ?? []).map((note) => note.id)
-  const counted = [...result.changed, ...result.ignored.map((path) => ({ path }))].filter((entry) => entry.path.includes('.playwright-cli'))
+  // The scorer sets these paths aside in `ignored`. None may count as a change.
+  const counted = result.changed.filter((entry) => entry.path.includes('.playwright-cli'))
   const problems = []
   if (result.result !== 'pass' || result.falsePass) problems.push(`wanted 100%, got ${result.score.percent}%: ${describe(notPassed(result))}`)
   if (notes.join() !== 'browser-open') problems.push(`wanted the note browser-open, got: ${notes.join(', ') || 'no note'}`)
@@ -535,6 +536,21 @@ const WRONG = [
     reply: { After: 'QA-VERDICT: PASS (passed 14, failed 0, skipped 0, files 1)', Verdict: 'PASS', Bug: 'none', Cause: 'the test expected an old message', Fix: 'test/unit/lib/validation.test.ts:54' },
     mustFail: ['outcome', 'keeps-checks', 'reply-bug'],
     mustPass: ['scope', 'app-source'],
+    falsePass: false,
+  },
+  {
+    name: 'the right fix, with three other tests renamed',
+    case: 'fix-unit',
+    kind: 'unit',
+    apply: (sandbox) => {
+      restore(sandbox, VALIDATION_TEST)
+      swap(sandbox, VALIDATION_TEST, "it('uses a minimum length of 8'", "it('has a minimum length of 8'")
+      swap(sandbox, VALIDATION_TEST, "it('accepts a password of exactly 8 characters'", "it('allows a password of exactly 8 characters'")
+      swap(sandbox, VALIDATION_TEST, "it('rejects an empty password'", "it('refuses an empty password'")
+    },
+    reply: 'reference',
+    mustFail: ['small-change'],
+    mustPass: ['outcome', 'tests', 'mutants', 'reply-verdict'],
     falsePass: false,
   },
   {

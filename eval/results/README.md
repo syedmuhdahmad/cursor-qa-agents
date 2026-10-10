@@ -42,6 +42,7 @@ In rounds 1 and 2 the plan and generate skills named the `browser_*` tools of th
 | `round-2` | 2026-10-09 | The working tree at commit `50cdaad` with uncommitted changes | Two runs for each case on the low tier, one on the mid tier. Two of the low-tier runs were void, see below. |
 | `round-3` | 2026-10-09 | The working tree at commit `9cdb04a`. The only uncommitted changes were in the mobile skills, which no case uses. | Two runs for each case on the low tier, one on the mid tier. No run was void. |
 | `round-4` | 2026-10-09 | The working tree at commit `611d6fd`, with no uncommitted change | In Cursor's agent: two runs for each case on Composer 2.5, one on Claude Opus 5. No run was void. |
+| `round-4-old-kit` | 2026-10-10 | The old skills, at commit `bfb88f7` | In Cursor's agent: two runs on Composer 2.5 for each of `fix-unit`, `e2e-heal-locator`, and `e2e-heal-product-bug`. No run was void. |
 
 ## What the fields mean
 
@@ -119,3 +120,22 @@ Every one of the 27 runs passed every check. No reply claimed a pass over a fail
 - **The skill was attached by Cursor.** With `/qa-unit` in front of the text, no agent opened `SKILL.md`: it went straight to the skill's templates. One more run, which is not in `runs.jsonl`, sent `unit-plain` to Composer 2.5 with no slash command. The agent's first step was to read `.cursor/skills/qa-unit/SKILL.md`, as `AGENTS.md` tells it, and the run passed 13 of 13 checks.
 - **What a job cost on Composer 2.5,** summed over all turns of a run, as the agent's stream reports it. A unit, integration, or fix job read 59,000 to 133,000 tokens and wrote 800 to 2,600. A heal job read 108,000 to 132,000 and wrote 900 to 1,100. A plan or generate job read 287,000 to 447,000 and wrote 3,300 to 4,200. Most of what was read came from the cache. A run took 19 to 61 seconds for a unit or heal job, and about 2 to 3 minutes for a plan or generate job.
 - **Limits.** It was the CLI and not the Cursor window. The CLI's sandbox does not start on the machine of the round, so the agents ran without it: `--sandbox enabled` stops with `Sandbox mode is enabled but not available on this system`. One or two runs for each case still say little about how often a model fails. Every case is on the one example app. No case uses the mobile skills or an MCP tool.
+
+### The old skills on the fix cases
+
+The label `round-4-old-kit` holds six runs of 2026-10-10. They ran the same way as round 4, on Composer 2.5, with the kit at commit `bfb88f7`. That kit has the old `/qa` route and the old healer skill, from before the skills had the "smallest fix" steps. The question was whether those steps changed how often a fix works and how much of a file a fix changes.
+
+| Case | Old skills, runs passed | Lines changed | New skills in round 4, runs passed | Lines changed |
+| --- | --- | --- | --- | --- |
+| `fix-unit` | 2 of 2 | 2 and 2 | 2 of 2 | 2 and 2 |
+| `e2e-heal-locator` | 2 of 2 | 2 and 2 | 2 of 2 | 2 and 2 |
+| `e2e-heal-product-bug` | 1 of 2 | 3 and 3 | 2 of 2 | 3 and 3 |
+| `unit-product-bug` | not run | | 2 of 2 | 0 and 0 |
+
+"Lines changed" is the lines added plus the lines removed, the number the check `small-change` uses. 2 is one line replaced. 3 is the `test(` line replaced by `test.fixme(` with the comment above it.
+
+- **The fix rate did not drop.** The new skills passed 6 of 6 runs of the three cases, and the old skills 5 of 6.
+- **No run rewrote anything, with either kit.** Every run changed the smallest number of lines that fixes the case. So on these cases the old skills were as sparing as the new ones, and the runs do not show the "smallest fix" steps doing any work. The three cases each have a fix of one line, which leaves a model little room to do more.
+- **The one failure of the old skills** was in `e2e-heal-product-bug`. The comment above `test.fixme(` named `src/components/SignIn.tsx:38`, the line that uses the wrong text, and not line 7, which sets it. The old skill does not give the comment a form.
+- **The agent followed the old route.** It read `.cursor/agents/qa.md`, then the old healer skill and the page-object skill, and did the work itself. It did not start a subagent.
+- **Round 4's lines were scored before `small-change` existed,** so its records in `runs.jsonl` do not have that check. The numbers above for round 4 were counted afterwards in the kept sandboxes, with the function the check uses, for the two Composer 2.5 runs. The Claude Opus 5 run of each case gave the same number.
