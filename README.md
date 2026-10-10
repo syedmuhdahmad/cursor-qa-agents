@@ -124,11 +124,7 @@ QA-VERDICT: PASS (passed 3, failed 0, skipped 0, files 1)
 
 `PASS` means that at least one test ran and every test passed on its first attempt. A skipped test, a retried test, a stray `.only`, and a run with no tests are `FAIL`. No line is never a pass.
 
-[docs/jobs.md](docs/jobs.md) has more on each job, a whole reply, every case of the line, [the browser steps](docs/jobs.md#the-browser-for-plan-and-generate), and [the app under test](docs/jobs.md#the-app-under-test).
-
-## Using RTK
-
-[RTK](https://github.com/rtk-ai/rtk) is a token-saving tool whose Cursor hook rewrites shell commands so their output is shorter. For the test runners it hides or changes the lines the agent depends on, so every test command in the skills starts with `RTK_DISABLED=1`. RTK skips any command that starts with it, and without RTK the variable does nothing. Keep the prefix. [docs/rtk.md](docs/rtk.md) says what goes wrong without it, which upstream issues track it, and how to exclude the commands in your RTK config instead.
+[docs/jobs.md](docs/jobs.md) has more on each job, a whole reply, every case of the line, [the browser steps](docs/jobs.md#the-browser-for-plan-and-generate), and [the app under test](docs/jobs.md#the-app-under-test). Every test command of the agent starts with `RTK_DISABLED=1`. That matters only if you use RTK: see [docs/rtk.md](docs/rtk.md).
 
 ## Layout
 

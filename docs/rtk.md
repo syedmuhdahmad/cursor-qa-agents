@@ -1,6 +1,6 @@
 # Using RTK
 
-This file holds the detail behind [Using RTK](../README.md#using-rtk) in the README: why every test command in the skills starts with `RTK_DISABLED=1`.
+This file says why every test command in the skills starts with `RTK_DISABLED=1`. Skip it if you do not use RTK: without RTK the prefix does nothing.
 
 [RTK](https://github.com/rtk-ai/rtk) is a token-saving tool. Its Cursor hook rewrites shell commands so their output is shorter. For most commands that helps. For the test runners it hides or changes the lines the `qa` agent depends on, so every test command in the skills starts with `RTK_DISABLED=1`. RTK skips any command that starts with it. Without RTK the variable does nothing.
 
