@@ -15,7 +15,7 @@ The version of your copy is the one line in `.cursor/qa/VERSION`.
 
 ### Changed
 
-- The README is about half as long. The text on RTK moved to `docs/rtk.md`, word for word, and the README has no section "Using RTK" any more. `AGENTS.md` no longer points to that section, which is its only change. The address of the app under test moved to `docs/jobs.md`, and the systems that CI runs on moved to `CONTRIBUTING.md`. The results of rounds 1 to 3 are in `docs/evaluation.md` only. `AGENTS.md` is the only file that you copy into an app that changed.
+- The README is about half as long. The text on RTK moved to `docs/rtk.md`, word for word, and the README has no section "Using RTK" any more. `AGENTS.md` no longer points to that section, which is its only change. The address of the app under test moved to `docs/jobs.md`, and the systems that CI runs on moved to `CONTRIBUTING.md`. The results of rounds 1 to 3 are described in `docs/evaluation.md`. `AGENTS.md` is the only file that you copy into an app that changed.
 
 ## 0.1.0 - 2026-10-09
 

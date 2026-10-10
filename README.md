@@ -150,7 +150,7 @@ To run the tests yourself, use `npm run test:unit`, `npm run test:integration`, 
 Cursor starts [`.cursor/hooks/guard-test-writes.py`](.cursor/hooks/guard-test-writes.py) before a tool call or a shell command of any agent in the folder. The hook answers allow or deny, and every deny says what to do instead.
 
 - **File edits.** The agent may write in `test/**`, `vitest.config.ts`, `playwright.config.ts`, the root `README.md`, `.gitignore`, `AGENTS.md`, `.cursor/skills/**`, and `.cursor/agents/**`, and nowhere else in the project.
-- **Test files.** A file under `test/` ends in `.ts`, and a write may not add text that hides a failing test, such as `.only(`, `.skip(`, or `waitForTimeout(`. `test.fixme(` needs a `// product bug:` line above it.
+- **Test files.** A new file under `test/` must fit the layout: a test ends in `.ts` and never `.tsx`, no `__tests__/` folder, and a page class is `test/e2e/pages/<name>-page.ts` in lower case. The hook rules [list the names](docs/hook-rules.md#rules-for-files-under-test). A write may not add text that hides a failing test, such as `.only(`, `.skip(`, or `waitForTimeout(`. `test.fixme(` needs a `// product bug:` line above it.
 - **Shell.** Allowed: a test run that names a path under `test/`, the four `npm run test:*` scripts, reads such as `ls`, `cat`, and `grep`, `git` and `gh` within limits, and `playwright-cli` on `http://localhost` and `http://127.0.0.1`. Denied: everything else, such as `npm install`, `npm run dev`, `curl`, and `cd`.
 - **MCP tools and reads.** A file that an MCP tool writes must be inside the paths above. A shell read of a path in [`.cursorignore`](.cursorignore) is denied.
 
