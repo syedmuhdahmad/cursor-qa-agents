@@ -654,8 +654,10 @@ export function changedLineCount(sandbox, baseline, changed) {
       const [added, removed] = stat.split('\t')
       total += added === '-' ? 1 : Number(added) + Number(removed)
     } else if (existsSync(join(sandbox, path))) {
-      // Not tracked at the baseline, so git has no diff for it.
-      total += readFileSync(join(sandbox, path), 'utf8').replace(/\r?\n$/, '').split('\n').length
+      // Not tracked at the baseline, so git has no diff for it. Like git, take
+      // a file with a NUL byte in its first 8,000 bytes as binary.
+      const bytes = readFileSync(join(sandbox, path))
+      total += bytes.subarray(0, 8000).includes(0) ? 1 : bytes.toString('utf8').replace(/\r?\n$/, '').split('\n').length
     }
   }
   return total

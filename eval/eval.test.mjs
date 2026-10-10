@@ -537,8 +537,10 @@ test('changedLineCount: lines added plus lines removed, and every line of a new 
   assert.equal(count(), 2, 'one line replaced is one removed and one added')
   put(sandbox, 'test/unit/more.test.ts', 'one\ntwo\nthree\n')
   assert.equal(count(), 5, 'a new file counts with its three lines')
+  put(sandbox, 'test/unit/shot.png', '\u0000\n\u0000\n\u0000\n')
+  assert.equal(count(), 6, 'a new binary file counts as one line')
   put(sandbox, 'test-results/.last-run.json', '{}\n')
-  assert.equal(count(), 5, 'what tools write is not counted')
+  assert.equal(count(), 6, 'what tools write is not counted')
 })
 
 test('clean: keeps the diff, the reply, and the score, and removes node_modules', (context) => {
