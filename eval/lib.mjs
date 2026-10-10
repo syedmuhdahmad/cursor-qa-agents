@@ -112,6 +112,9 @@ export function loadCase(id) {
     if (!OUTCOMES.includes(expect.outcome)) problems.push(`"expect.outcome" must be one of ${OUTCOMES.join(', ')}`)
     if (typeof expect.file !== 'string') problems.push('"expect.file" must be a path')
     if (!Array.isArray(expect.mayWrite)) problems.push('"expect.mayWrite" must be a list of globs')
+    if (expect.maxChangedLines !== undefined && !(Number.isInteger(expect.maxChangedLines) && expect.maxChangedLines >= 0)) {
+      problems.push('"expect.maxChangedLines" must be a whole number, 0 or more')
+    }
     if (expect.outcome === 'plan' && (expect.plan === null || typeof expect.plan !== 'object')) {
       problems.push('a plan case needs "expect.plan"')
     }

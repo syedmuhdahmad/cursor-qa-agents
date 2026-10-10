@@ -23,6 +23,7 @@
     "outcome": "pass",
     "file": "test/unit/lib/validation.test.ts",
     "mayWrite": ["test/unit/lib/validation.test.ts"],
+    "maxChangedLines": 4,
     "minTests": 14,
     "content": [
       {

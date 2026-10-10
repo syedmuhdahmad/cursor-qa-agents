@@ -644,6 +644,30 @@ function checkKeeps({ testCase, read, baselineRead }) {
   return pass('every check that was in the test is still there')
 }
 
+// The lines the agent added plus the lines it removed, over every changed file.
+// A new file counts with all of its lines. A binary file counts as one line.
+export function changedLineCount(sandbox, baseline, changed) {
+  let total = 0
+  for (const { path } of changed) {
+    const stat = git(sandbox, [...QUIET, 'diff', '--numstat', '--no-renames', baseline, '--', path]).trim()
+    if (stat !== '') {
+      const [added, removed] = stat.split('\t')
+      total += added === '-' ? 1 : Number(added) + Number(removed)
+    } else if (existsSync(join(sandbox, path))) {
+      // Not tracked at the baseline, so git has no diff for it.
+      total += readFileSync(join(sandbox, path), 'utf8').replace(/\r?\n$/, '').split('\n').length
+    }
+  }
+  return total
+}
+
+function checkSmallChange({ testCase, sandbox, meta, changed }) {
+  const limit = testCase.expect.maxChangedLines
+  const lines = changedLineCount(sandbox, meta.baseline, changed)
+  const detail = `${plural(lines, 'line')} added or removed, the case allows ${limit}`
+  return lines > limit ? fail(`${detail}. A fix changes the lines that caused the failure and no others`) : pass(detail)
+}
+
 // Code without its comments: lines that are only a `//` comment, and `/* */`
 // blocks that start a line. A text that is only in a comment is not checked
 // by anything.
@@ -1034,6 +1058,7 @@ export async function score(runDir, { reply, model = null, label = null, skipMut
     if (expect.outcome === 'fixme') add('fixme-marker', checkFixmeMarker(context))
   }
   if (expect.keeps) add('keeps-checks', checkKeeps(context))
+  if (typeof expect.maxChangedLines === 'number') add('small-change', checkSmallChange(context))
   if (expect.content) add('content', checkContent(context))
   if (expect.mutants) add('mutants', await checkMutants(context))
   if (expect.bugServer) add('mutants', await checkBugServer(context))

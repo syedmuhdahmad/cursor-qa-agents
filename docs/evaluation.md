@@ -152,3 +152,15 @@ What round 4 does not show:
 - **Another app, the mobile skills, and the hook's rules for MCP tools.**
 
 [`eval/results/README.md`](../eval/results/README.md#round-4) has the detail: the model ids, the check that the hook was live, a run with no slash command, and what a job cost in tokens.
+
+### The old skills against the new ones on the fix cases
+
+On 2026-10-10 the three cases that repair a test ran again on Composer 2.5, with the old skills of commit `bfb88f7`, two runs each. The old skills have no "smallest fix" steps.
+
+| Case | Old skills | New skills, in round 4 |
+| --- | --- | --- |
+| `fix-unit` | 2 of 2 | 2 of 2 |
+| `e2e-heal-locator` | 2 of 2 | 2 of 2 |
+| `e2e-heal-product-bug` | 1 of 2 | 2 of 2 |
+
+The fix rate did not drop with the new skills. Every run, with either kit, changed only the lines that caused the failure: two or three lines in each case. So these cases do not show the "smallest fix" steps making a difference, because each case has a fix of one line. The scorer now has the check `small-change`, which fails a fix that changes more lines than the case allows. [`eval/results/README.md`](../eval/results/README.md#the-old-skills-on-the-fix-cases) has the numbers.

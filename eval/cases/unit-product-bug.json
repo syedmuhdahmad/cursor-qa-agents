@@ -23,6 +23,7 @@
     "outcome": "fail-kept",
     "file": "test/unit/lib/validation.test.ts",
     "mayWrite": ["test/unit/lib/validation.test.ts"],
+    "maxChangedLines": 0,
     "minTests": 14,
     "stillFailing": [
       "rejects a password of 7 characters",

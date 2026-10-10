@@ -222,6 +222,7 @@ A check is `pass`, `fail`, `na` (it does not apply to this case or this kit), or
 | `tests` | Enough tests ran, and for a spec every scenario of the plan is a passing test |
 | `fixme-marker` | The line above `test.fixme(` starts with `// product bug:` and names the source file and line |
 | `keeps-checks` | No assertion that was in the test at the start is gone |
+| `small-change` | In a fix or heal case, the agent added and removed no more lines than the case allows in `expect.maxChangedLines`. The limit is twice the lines of the smallest fix, and 0 where the right answer changes nothing. A new file counts with all of its lines. |
 | `content` | Case rules hold, for example line 1 is `// @vitest-environment jsdom`, no locator in the spec, no `expect` in a page class, no call that reads a file in a unit test. For a generated spec: every test has an `expect`, and each message the plan expects is in the code, not only in a comment. |
 | `mutants` | The test fails when the app is broken on purpose. See [Mutants](#mutants). |
 | `plan-scenarios` | The plan has 3 to 8 scenarios |
@@ -403,6 +404,7 @@ The second command builds a sandbox for every case, puts the reference solution 
 - A passing test one folder above the expected path, with a true reply.
 - A test that reads the source file as text, and one that renders the component and checks only its text.
 - A spec of six tests with no `expect`.
+- The right fix of a unit test, with three other tests renamed.
 
 With the end-to-end cases it also scores one reference solution in a sandbox where `playwright-cli` has opened the app and was not closed. The score must stay at 100 percent, with the note `browser-open` and with nothing from `.playwright-cli/` among the changed paths. `--clean` must then close the browser. This part needs Google Chrome.
 

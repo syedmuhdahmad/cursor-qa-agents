@@ -8,6 +8,11 @@ The version of your copy is the one line in `.cursor/qa/VERSION`.
 
 ## Unreleased
 
+### Added
+
+- For maintainers, and not copied into an app: the scorer's check `small-change`. It fails a fix or heal run that adds and removes more lines than the case allows in `expect.maxChangedLines`. The four fix and heal cases have a limit.
+- Six runs of the old skills on Composer 2.5, in Cursor's agent, for the three cases that repair a test. They passed 5 of 6, the new skills passed 6 of 6, and no run with either kit changed a line outside the failing ones. [The evaluation](docs/evaluation.md#the-old-skills-against-the-new-ones-on-the-fix-cases) has the table.
+
 ## 0.1.0 - 2026-10-09
 
 The first tagged version: the tag is `v0.1.0`, and `.cursor/qa/VERSION` says `0.1.0`. No changes were recorded before it. A copy with no `.cursor/qa/VERSION` file is an earlier version.

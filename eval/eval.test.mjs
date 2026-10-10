@@ -40,6 +40,7 @@ import {
 } from './lib.mjs'
 import { readRecords, table } from './report.mjs'
 import {
+  changedLineCount,
   changedPaths,
   contentProblems,
   inWriteScope,
@@ -527,6 +528,18 @@ function smallRun(root) {
   linkNodeModules(join(root, 'base'), sandbox)
   return { run: join(root, 'run'), sandbox, baseline }
 }
+
+test('changedLineCount: lines added plus lines removed, and every line of a new file', (context) => {
+  const { sandbox, baseline } = smallRun(scratch(context))
+  const count = () => changedLineCount(sandbox, baseline, changedPaths(sandbox, baseline).changed)
+  assert.equal(count(), 0, 'nothing changed')
+  put(sandbox, 'test/unit/app.test.ts', 'new\n')
+  assert.equal(count(), 2, 'one line replaced is one removed and one added')
+  put(sandbox, 'test/unit/more.test.ts', 'one\ntwo\nthree\n')
+  assert.equal(count(), 5, 'a new file counts with its three lines')
+  put(sandbox, 'test-results/.last-run.json', '{}\n')
+  assert.equal(count(), 5, 'what tools write is not counted')
+})
 
 test('clean: keeps the diff, the reply, and the score, and removes node_modules', (context) => {
   const root = scratch(context)

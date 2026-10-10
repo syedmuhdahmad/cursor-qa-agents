@@ -23,6 +23,7 @@
     "outcome": "fixme",
     "file": "test/e2e/sign-in.spec.ts",
     "mayWrite": ["test/e2e/sign-in.spec.ts"],
+    "maxChangedLines": 6,
     "minTests": 5,
     "fixmeTest": "Wrong password shows an error",
     "keeps": [
