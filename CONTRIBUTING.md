@@ -38,9 +38,9 @@ Run all ten from the repository root, after `npm ci`, before you open a pull req
 | `npx playwright test --list` | That `playwright.config.ts` loads. It prints `Total: 1 test in 1 file` and needs no browser. |
 | `node scripts/test-example.mjs` | The whole kit, the way a new user sets it up. See below. |
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same ten commands on every pull request and on every push to `main`. [Checks and CI](README.md#checks-and-ci) in the README says on which systems and versions, and what has run so far. When you add a check to the workflow, add it to this table, to the pull request template, and to that section of the README.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same ten commands on every pull request and on every push to `main`. It runs the hook tests on Ubuntu and macOS with Python 3.9 and 3.14. It runs the reporter, script, config, and example checks on Ubuntu with the lowest and the highest Node version that `engines` allows. It runs the Markdown lint, the type check, and the check of the copied `playwright-cli` skill on Ubuntu with one Node version. On macOS it runs the hook tests only. The workflow ran on the pull request that added it, and every job passed. When you add a check to the workflow, add it to this table and to the pull request template.
 
-`node scripts/test-example.mjs` copies `examples/next-app` to a temporary folder and installs the kit into the copy with `scripts/install-into.mjs`. Then it runs `npm install`, downloads Chromium, builds the app, and runs the unit, integration, and end-to-end tests there. It also runs two throwaway tests that use the `@/` import alias, and type-checks the tests with `npx tsc --noEmit -p test`. It stops at the first failure. It needs a network connection. It takes about a minute when npm's cache and Chromium are already on the machine, and longer the first time. It uses port 3000. Pass `--port 3210` when port 3000 is busy, and `--keep` to keep the temporary folder.
+`node scripts/test-example.mjs` copies `examples/next-app` to a temporary folder and installs the kit into the copy with `scripts/install-into.mjs`. Then it runs `npm install`, downloads Chromium, builds the app, and runs the unit, integration, and end-to-end tests there. It also runs two throwaway tests that use the `@/` import alias, and type-checks the tests with `npx tsc --noEmit -p test`. It stops at the first failure. It needs a network connection. It takes about a minute when npm's cache and Chromium are already on the machine, and longer the first time. It uses port 3000. Pass `--port 3210` when port 3000 is busy, `--keep` to keep the temporary folder, and `--no-browse` on a machine without Google Chrome: the last stage opens the app with `playwright-cli`, as the plan and generate jobs do.
 
 ## What must stay in step
 
@@ -67,7 +67,7 @@ Five things to know about these files:
 - `typescript` and `markdownlint-cli2` are tools for this repository only. Keep them out of the README block, so they do not reach users' apps.
 - The installer adds every line of `.gitignore` that the user's `.gitignore` lacks, and users copy `.cursorignore` as it is. Put a path in those two files only when it belongs in a user's app.
 - In those two files, start a folder name with a slash when an app could have a folder of that name in its source, such as `/coverage/` or `/build/`. Without the slash the line also matches `app/coverage/`. Then git hides the user's own files, and the hook denies the agent a read of application source.
-- `README.md` holds what a new user needs, in about 3,000 words. Detail goes into a file under `docs/`, with a short paragraph and a link in the README. The two marked blocks stay in `README.md`.
+- `README.md` holds what a new user needs, in about 2,300 words. Detail goes into a file under `docs/`, with a short paragraph and a link in the README. The two marked blocks stay in `README.md`. The [wiki](https://github.com/syedmuhdahmad/cursor-qa-agents/wiki) is a short guide that links to both, and it is a repository of its own: update it when a page there goes out of date.
 
 ## Skills
 

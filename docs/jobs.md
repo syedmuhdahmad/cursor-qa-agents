@@ -75,6 +75,20 @@ The browser steps can stop a job in these ways:
 
 [`.cursor/skills/playwright-cli/`](../.cursor/skills/playwright-cli/) is the manual of `playwright-cli` and not a job. It is the skill that ships inside the `@playwright/cli` package, under Apache-2.0, with only the frontmatter of `SKILL.md` changed. Its name in the `/` menu is `/playwright-cli`, for looking a command up. No job reads it: each job skill lists the commands it needs, and the hook denies many of the others.
 
+## The app under test
+
+End-to-end tests open the app at `http://localhost:3000`. When you run `npm run test:e2e` yourself, Playwright starts the app with `npm run dev` if nothing answers there.
+
+The agent cannot do that: `playwright-cli` starts nothing but its browser, and the hook denies `npm run dev` to the agent. So start the app yourself before a plan or generate job. Otherwise the reply is `BLOCKED: start the app with npm run dev, then ask again.`
+
+If your app runs somewhere else, start it yourself and set `BASE_URL` for your own runs:
+
+```bash
+BASE_URL=http://localhost:4000 npm run test:e2e
+```
+
+In a prompt, name the address in words: `/qa-plan sign-in. Base URL http://localhost:4000.` The agent's own test commands and browser commands accept only `localhost` and `127.0.0.1`.
+
 ## The reply form
 
 This is a reply to `/qa-unit src/components/SignIn.tsx`:
