@@ -11,7 +11,7 @@ Use a high-tier model, such as Claude Opus 5. The skill is about 25,000 words in
 A full run starts many subagents. The skill counts them as its budget. Ask for a small run first, and give it a budget:
 
 ```text
-/security-audit Run a quick audit of this codebase (quick profile), with a budget of 12 agent invocations.
+/security-audit Run a quick audit of this codebase (quick profile), with a budget of 20 agent invocations.
 /security-audit Audit src/api/ only, standard profile, budget 20.
 /security-audit Is the session cookie in src/lib/session.ts safe?
 ```
@@ -49,7 +49,17 @@ What the hook still denies matters to the audit:
 
 ## What was run
 
-Not run: the skill on a model other than Claude Opus 5, a full or `deep` run, a second run that goes on from a first, and the Cursor window. The audit's subagents in the Cursor CLI were not compared with those in the window.
+One quick run, on 2026-10-25, on a copy of `examples/next-app` with the kit installed and the hook live. The model was Claude Opus 5 (`claude-opus-5-high`) in the Cursor CLI, version `2026.10.01-e373342`. The prompt was `/security-audit Run a quick audit of this codebase (quick profile), with a budget of 12 agent invocations. Use the default output folder.`
+
+- **It took about 86 minutes.** The first session stopped at a time limit of one hour while its last subagent ran. The same session, resumed with `agent --resume`, finished in 26 minutes. The second session alone wrote 78,830 tokens and read 6.6 million from the cache.
+- **It worked inside the hook.** It wrote all seven files of a run to `~/security-audit-skill/sandbox/run-1/`, ran both validators several times, and fixed its ledger once after the validator rejected it. The copy of the app had no change afterwards. The hook denied two commands: `find` with `-exec`, which it then ran without, and `unshare`, the skill's check for an OS sandbox.
+- **It started 12 subagents**: four for reconnaissance, four hunters, three verifiers, and the final coverage critic.
+- **It ended as `incomplete`**, with the reason `validation_budget_exhausted`. The hunters raised 8 candidates and the budget left 3 verifier calls. The skill validates in a fixed order, so the 5 candidates it did not validate, the strongest among them, are listed at the top of `REPORT.md` and not in `findings.json`. Halfway through it asked how to spend the budget. The CLI skipped the question, and the skill's own rule decided.
+- **It confirmed nothing.** With no OS sandbox it ran none of the app's code, and a finding needs a run to be confirmed. Of the 3 candidates it validated, 2 stay as leads in `NEEDS-VALIDATION.md`, and 1 was rejected with the reason.
+
+So give a quick run of a small app a budget of at least 20, and expect more than an hour.
+
+Not run: the skill on a model other than Claude Opus 5, a `standard` or `deep` run, a second run that goes on from a first, a run with an OS sandbox, and the Cursor window.
 
 ## Update the copy
 
