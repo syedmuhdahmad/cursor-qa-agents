@@ -17,12 +17,13 @@ Rounds 1 to 3 ran outside Cursor, with two stand-in models. Round 4 ran in Curso
 | `claude-haiku-4-5 (low-tier proxy)` | Claude Haiku 4.5 | A low-cost model in Cursor |
 | `claude-sonnet-5-5 (mid-tier proxy)` | Claude Sonnet 5.5 | A mid-tier model in Cursor |
 
-The models of round 4 are the ones Cursor offers under these ids. The tier column uses the tiers set on 2026-10-10 in [issue 39](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/39). Round 4 was written before that, and called Composer 2.5 the low tier and Claude Opus 5 the mid tier.
+The models of rounds 4 and 5 are the ones Cursor offers under these ids. The tier column uses the tiers set on 2026-10-10 in [issue 39](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/39). Round 4 was written before that, and called Composer 2.5 the low tier and Claude Opus 5 the mid tier.
 
 | `model` in `runs.jsonl` | Model, as the agent's stream names it | Tier |
 | --- | --- | --- |
 | `composer-2.5` | Composer 2.5 | Mid |
 | `claude-opus-5-high` | Claude Opus 5 300K High No Thinking | High |
+| `gemini-3.8-flash-low` | Gemini 3.8 Flash Low | Low |
 
 For each run of rounds 1 to 3:
 
@@ -43,6 +44,7 @@ In rounds 1 and 2 the plan and generate skills named the `browser_*` tools of th
 | `round-3` | 2026-10-09 | The working tree at commit `9cdb04a`. The only uncommitted changes were in the mobile skills, which no case uses. | Two runs for each case on the low tier, one on the mid tier. No run was void. |
 | `round-4` | 2026-10-09 | The working tree at commit `611d6fd`, with no uncommitted change | In Cursor's agent: two runs for each case on Composer 2.5, one on Claude Opus 5. No run was void. |
 | `round-4-old-kit` | 2026-10-10 | The old skills, at commit `bfb88f7` | In Cursor's agent: two runs on Composer 2.5 for each of `fix-unit`, `e2e-heal-locator`, and `e2e-heal-product-bug`. No run was void. |
+| `round-5` | 2026-10-25 | Commit `090c6d1`, from a worktree with no uncommitted change | In Cursor's agent, the 13 cases: two runs for each case on Composer 2.5, and one run of 6 cases each on Gemini 3.8 Flash and Claude Opus 5, which then stopped at the account's usage limit. One run was void, see below. |
 
 ## What the fields mean
 
@@ -70,6 +72,9 @@ In rounds 1 and 2 the plan and generate skills named the `browser_*` tools of th
 - **Round 2: two low-tier runs were void.** They are the first run of `fix-unit` and the first run of `unit-product-bug`. Each agent started before its prompt file existed. Their two lines are not in `runs.jsonl`. So the low tier has one run of these two cases in round 2, and two runs of every other case.
 - **Round 2: the two `e2e-plan` failures were real.** Both plans left out the scenario with the mocked server error, and neither named a visible text for the main flow. That led to a fix in the plan skill.
 - **Round 2: the `e2e-generate` failure was a file in the project root.** The agent saved test output to a file there. In Cursor the hook denies that write.
+
+- **Round 5: Gemini 3.8 Flash and Claude Opus 5 did not finish.** Each model ran 6 cases once, and then every run stopped with the CLI's `ActionRequiredError: You've hit your usage limit`. The limit is for the whole Cursor account: on the same day a long security audit and the mobile runs used Claude Opus 5 too. The 20 missing runs of each model are listed in the round's queue, outside this repository.
+- **Round 5: one Gemini run was void.** The first run of `integration-api` ended after 8 seconds with that usage error and no agent work. Its line is not in `runs.jsonl`.
 
 ## Round 3
 
@@ -139,3 +144,35 @@ The label `round-4-old-kit` holds six runs of 2026-10-10. They ran the same way 
 - **The one failure of the old skills** was in `e2e-heal-product-bug`. The comment above `test.fixme(` named `src/components/SignIn.tsx:38`, the line that uses the wrong text, and not line 7, which sets it. The old skill does not give the comment a form.
 - **The agent followed the old route.** It read `.cursor/agents/qa.md`, then the old healer skill and the page-object skill, and did the work itself. It did not start a subagent.
 - **Round 4's lines were scored before `small-change` existed,** so its records in `runs.jsonl` do not have that check. The numbers above for round 4 were counted afterwards in the kept sandboxes, with the function the check uses, for the two Composer 2.5 runs. The Claude Opus 5 run of each case gave the same number.
+
+## Round 5
+
+<!-- results:round-5 -->
+
+Round 5 is the first round with the three tiers that [issue 39](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/39) set, and the first with the four React Native cases on `examples/expo-app`. It ran from a git worktree of commit `090c6d1`, with the Cursor CLI version `2026.10.22-27dcf5f`, in the way round 4 did, with one change: `ECC_HOOKS_ENABLED=false` in front of every `agent` command. On the machine of the round, the CLI also ran the hooks of a Claude Code plugin from `~/.claude/plugins`, and one of them denied the first write of every run. The variable turns that plugin off for one process and changes no file. The kit's hook ran as before.
+
+| Case | Composer 2.5 | Gemini 3.8 Flash | Claude Opus 5 |
+| --- | --- | --- | --- |
+| `unit-ui` | 2 of 2 | 1 of 1 | 1 of 1 |
+| `unit-plain` | 2 of 2 | 1 of 1 | 1 of 1 |
+| `integration-api` | 2 of 2 | not run | not run |
+| `fix-unit` | 2 of 2 | not run | not run |
+| `unit-product-bug` | 2 of 2 | not run | not run |
+| `e2e-plan` | 2 of 2 | 1 of 1 | 1 of 1 |
+| `e2e-generate` | 2 of 2 | 1 of 1 | 1 of 1 |
+| `e2e-heal-locator` | 2 of 2 | not run | not run |
+| `e2e-heal-product-bug` | 2 of 2 | not run | not run |
+| `rn-unit-ui` | 2 of 2 | 1 of 1 | 1 of 1 |
+| `rn-unit-plain` | 2 of 2 | 1 of 1 | 1 of 1 |
+| `rn-fix-unit` | 2 of 2 | not run | not run |
+| `rn-unit-product-bug` | 2 of 2 | not run | not run |
+| All | 26 of 26 | 6 of 6 | 6 of 6 |
+
+Every one of the 38 runs passed every check. No reply claimed a pass over a failing run, no run left a browser open, and no run used a forbidden shortcut.
+
+- **The agreed rate.** For each tier, at least 17 of the 18 runs of the nine web cases must pass, with two runs for each case, and no false pass. Composer 2.5 met it with 18 of 18, and passed 8 of 8 runs of the React Native cases. Gemini 3.8 Flash and Claude Opus 5 cannot be judged on this round alone.
+- **An earlier round on Gemini 3.8 Flash.** On the same day, before the changes of commit `090c6d1`, the nine web cases ran twice each on Gemini 3.8 Flash with the kit at commit `3ff2a0b`, in the same way. All 18 runs passed every check. That round was a first look, so its lines are not in `runs.jsonl`. It led to the changes in the reply form and in step 2 of `/qa-unit`.
+- **The hook was live for every model.** The canary of [the README one folder up](../README.md#run-it-with-the-cursor-cli) did not reach a write for Gemini 3.8 Flash and Claude Opus 5: both refused to edit application source because of `AGENTS.md`. A second prompt, which asked for one write call and left the decision to the hook, got a deny from the kit's hook for all three models. The CLI adds its own line to every deny: `Agent note: Do not suggest workarounds to the blocked tool.`
+- **No deny happened in the 38 runs.** So this round, like round 4, does not show how a model goes on after a deny in the middle of a job.
+- **Two runs fixed their own test in one round,** and passed: a Composer 2.5 test that checked `fetch` with no spy on it, and a Gemini 3.8 Flash import with one `../` too few.
+- **What a job cost,** summed over all turns of a run as the agent's stream reports it. On Composer 2.5 a unit, integration, or fix job read 71,000 to 285,000 tokens and wrote 900 to 3,800, in 31 to 98 seconds. A plan or generate job read 348,000 to 424,000 and wrote about 3,100 to 3,800, in about 2 to 2.5 minutes. Gemini 3.8 Flash and Claude Opus 5 read about twice as much as Composer 2.5 in their plan and generate runs, 760,000 to 891,000 tokens, and took 2.5 to 3.5 minutes.

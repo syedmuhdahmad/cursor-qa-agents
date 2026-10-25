@@ -192,18 +192,19 @@ Three more skills plan, write, and fix [Maestro](https://maestro.dev) flows for 
 
 ## Evaluation
 
-[`examples/next-app/`](examples/next-app/) is a small Next.js app with reference tests, and [`eval/`](eval/) holds nine fixed test jobs on it with a scorer that needs no model. The scorer runs the tests itself, and marks a reply that says the work passed over a failing run as `FALSE PASS`. Neither is part of the files you copy.
+[`examples/next-app/`](examples/next-app/) and [`examples/expo-app/`](examples/expo-app/) are two small apps with reference tests, and [`eval/`](eval/) holds 13 fixed test jobs on them, nine web jobs and four React Native ones, with a scorer that needs no model. The scorer runs the tests itself, and marks a reply that says the work passed over a failing run as `FALSE PASS`. None of it is part of the files you copy.
 
-In round 4, Cursor's own agent did the work, with the skill attached and the hook live:
+The kit is tested on three models in Cursor's own agent, one for each tier: Claude Opus 5 (high), Composer 2.5 (mid), and Gemini 3.8 Flash (low). In round 5 the agent did the work with the skill attached and the hook live:
 
 | Model | Runs passed |
 | --- | --- |
-| Composer 2.5 | 18 of 18, two runs for each case |
-| Claude Opus 5 | 9 of 9, one run for each case |
+| Composer 2.5 | 26 of 26: two runs of each of the 13 cases |
+| Gemini 3.8 Flash | 6 of 6: one run of 6 cases, before the account's usage limit stopped the round |
+| Claude Opus 5 | 6 of 6: the same 6 cases, before the same limit |
 
-Every run passed every check, and no reply claimed a pass over a failing run. Read the numbers as a good sign and not as proof:
+An earlier round on Gemini 3.8 Flash, on the same day and before two small changes to the skill text, passed 18 of 18 runs of the nine web cases. Every run of both rounds passed every check, and no reply claimed a pass over a failing run. Read the numbers as a good sign and not as proof:
 
-- Each case had one or two runs, and every case is on the one example app.
+- Each case had one or two runs on each model, on two small example apps.
 - No agent tried anything the hook forbids, so the round does not show how a model goes on after a deny.
 - The mobile skills were not run on any model, and nothing was run on iOS or Windows.
 
