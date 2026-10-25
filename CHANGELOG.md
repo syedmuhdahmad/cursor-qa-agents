@@ -29,6 +29,7 @@ The version of your copy is the one line in `.cursor/qa/VERSION`.
 
 ### Changed
 
+- For maintainers, and not copied into an app: the lockfile of this repository moves `vite` to 8.3.5 and `undici` to 8.12.3, and `package.json` pins `markdown-it`, which only the Markdown lint tool uses, to 15.0.3 with `overrides`. The three had nine open Dependabot alerts between them, three of them high. `npm audit` now reports none. Your app resolves these packages in its own lockfile.
 - For maintainers, and not copied into an app: `examples/next-app` uses Next.js 16.4.2. Version 16.4.0 has three security advisories, two of them critical, and its `next build` now stops with an error that says so.
 - The reply form of every job skill says to write it as plain lines, with no code fence around it. In the evaluation, Gemini 3.8 Flash put the reply of `/qa-unit` in a fence in 5 of 10 runs. `/qa-unit` and `/qa-rn-unit` also say how to find the file of an `@/` import and to test the value one step past a limit.
 - `/qa-unit` stops in a React Native or Expo app, and names `/qa-rn-unit`.
