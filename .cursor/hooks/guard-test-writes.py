@@ -6,7 +6,9 @@ command (beforeShellExecution); see .cursor/hooks.json. It reads one JSON
 payload on stdin and prints {"permission": "allow" | "deny", ...} on stdout.
 
 Write tools are allowed only when every target path is inside the write scope,
-or is one of the files Cursor writes for itself (see is_cursor_file). A tool
+is one of the files Cursor writes for itself (see is_cursor_file), or is in a
+run folder of the security audit skill, outside the project (see
+is_audit_output). A tool
 the hook does not know is treated as a write tool when its input carries a
 path together with content.
 
@@ -20,7 +22,7 @@ must be a test runner, a known read-only program, an allowed git or gh
 command, or a file operation whose targets are all inside the write scope.
 Every command must start in the project root and leave the shell there.
 Test runs must name a file under test/ and may not watch, open a window,
-retry, or update snapshots. playwright-cli may open the app on this machine,
+retry, or update snapshots. Jest runs only with the kit's config. playwright-cli may open the app on this machine,
 read the page, and act on it, and may drive a test paused by --debug=cli; it
 may not run code, write a file, or load another site (see
 playwright_cli_allowed). The shell may not write file content under test/,
@@ -76,6 +78,12 @@ ALLOWED_DIRS = (
 )
 # Root README, matched case-insensitively.
 ROOT_README_NAMES = {"readme", "readme.md"}
+# The security audit skill writes its run folders in this folder of the home
+# directory, outside the project, and checks two of its files with the two
+# validators named below. See is_audit_output() and audit_validator_allowed().
+AUDIT_OUTPUT = "security-audit-skill"
+AUDIT_SKILL = REPO / ".cursor" / "skills" / "security-audit"
+AUDIT_VALIDATORS = {"validate-findings.cjs", "validate-coverage-ledger.cjs"}
 # Human-readable write scope used in deny messages.
 WRITE_SCOPE = (
     "test/, vitest.config.ts, playwright.config.ts, README.md, .gitignore, "
@@ -154,6 +162,11 @@ def call_pattern(method):
     return re.compile(TEST_FUNCTION + re.escape("." + method + "("))
 
 
+def global_pattern(name):
+    """A pattern for a call of Jest's global `name(`, such as `xit(`, but not `benefit(` or `form.fit(`."""
+    return re.compile(r"(?<![\w.$])" + re.escape(name + "("))
+
+
 # The line that must sit directly above test.fixme( in a spec.
 FIXME_MARKER = "// product bug:"
 # What must follow the marker: the source file and line that are wrong, as in
@@ -182,6 +195,9 @@ FORCE_TRUE = re.compile(
 # three are Playwright calls, checked under test/e2e/ only. `waitForTimeout(`
 # and `networkidle` are plain text; `force: true` is matched only as an option
 # of a locator action, so a fixture's fs.rm({ force: true }) is allowed.
+# xit(, xtest(, xdescribe(, fit(, and fdescribe( are Jest's skip and only
+# calls. The snapshot matchers of Jest and Vitest are denied with them, in any
+# test file: a snapshot passes for whatever is rendered once it is written.
 # test.fixme( has its own rule, see content_problem().
 ADVICE_ONLY = "To run one test, pass its file to the test command."
 ADVICE_REPORT = "If the product is wrong, leave the test failing and report the bug."
@@ -192,6 +208,10 @@ ADVICE_FORCE = (
     "It acts on an element a user cannot reach. Fix the locator, or wait until the element is ready, as in "
     "`await expect(locator).toBeEnabled()`."
 )
+ADVICE_SNAPSHOT = (
+    "A snapshot passes for whatever the code renders once it is written. Check what the user sees, as in "
+    "`expect(screen.getByText('Profile saved')).toBeOnTheScreen()`."
+)
 FORBIDDEN_TEXT = (
     (".only(", ".only(", call_pattern("only"), False, ADVICE_ONLY),
     (".skip(", ".skip(", call_pattern("skip"), False, ADVICE_SKIP),
@@ -200,6 +220,15 @@ FORBIDDEN_TEXT = (
     ("runIf(", "runIf(", re.compile(re.escape("runIf(")), False, ADVICE_SKIP),
     (".fails(", ".fails(", call_pattern("fails"), False, ADVICE_FAILS),
     ("test.fail(", "test.fail(", re.compile(re.escape("test.fail(")), False, ADVICE_FAILS),
+    ("xit(", "xit(", global_pattern("xit"), False, ADVICE_SKIP),
+    ("xtest(", "xtest(", global_pattern("xtest"), False, ADVICE_SKIP),
+    ("xdescribe(", "xdescribe(", global_pattern("xdescribe"), False, ADVICE_SKIP),
+    ("fit(", "fit(", global_pattern("fit"), False, ADVICE_ONLY),
+    ("fdescribe(", "fdescribe(", global_pattern("fdescribe"), False, ADVICE_ONLY),
+    ("toMatchSnapshot(", "toMatchSnapshot(", re.compile(re.escape(".toMatchSnapshot(")), False, ADVICE_SNAPSHOT),
+    ("toMatchInlineSnapshot(", "toMatchInlineSnapshot(", re.compile(re.escape(".toMatchInlineSnapshot(")), False, ADVICE_SNAPSHOT),
+    ("toThrowErrorMatchingSnapshot(", "toThrowErrorMatchingSnapshot(", re.compile(re.escape(".toThrowErrorMatchingSnapshot(")), False, ADVICE_SNAPSHOT),
+    ("toThrowErrorMatchingInlineSnapshot(", "toThrowErrorMatchingInlineSnapshot(", re.compile(re.escape(".toThrowErrorMatchingInlineSnapshot(")), False, ADVICE_SNAPSHOT),
     ("waitForTimeout(", "waitForTimeout(", re.compile(re.escape("waitForTimeout(")), True, ADVICE_WAIT),
     ("networkidle", "networkidle", re.compile("networkidle"), True, ADVICE_WAIT),
     ("force: true", "force", FORCE_TRUE, True, ADVICE_FORCE),
@@ -254,18 +283,19 @@ READ_ONLY = {
     ":",
 }
 # The test runners, by the name of their program in node_modules/.bin.
-RUNNERS = {"vitest", "playwright", "playwright-cli"}
+RUNNERS = {"vitest", "playwright", "playwright-cli", "jest"}
 # package.json scripts the agent may run.
 NPM_TEST_SCRIPTS = {
     "test:unit",
     "test:integration",
     "test:e2e",
     "test:e2e:list",
+    "test:rn-unit",
 }
 # npx options that only control installation and output.
 NPX_FLAGS = {"--no-install", "--yes", "-y", "--no", "--quiet", "-q"}
 # Packages `npx --package` may name.
-RUNNER_PACKAGES = {"vitest", "playwright", "@playwright/test", "@playwright/cli"}
+RUNNER_PACKAGES = {"vitest", "playwright", "@playwright/test", "@playwright/cli", "jest"}
 # vitest options whose value is a path the runner writes to or loads from,
 # lower-cased with dashes removed. `--outputFile.<reporter>` matches by prefix.
 VITEST_PATH_OPTIONS = {
@@ -282,6 +312,13 @@ VITEST_PATH_OPTIONS = {
 VITEST_PATH_SHORTS = "rc"
 # vitest subcommands that never end.
 VITEST_WATCH_COMMANDS = {"watch", "dev"}
+# The Jest config of the kit, the only one jest may run with. It loads the
+# app's own Jest config and adds the reporter that prints the QA-VERDICT line.
+JEST_CONFIG = REPO / ".cursor" / "qa" / "jest.config.cjs"
+# Jest options a run may add, by the name jest_option_name() gives them. None
+# of them waits, writes a file, or changes which tests run or how they count.
+# `--ci` is more than allowed: every run must have it, see jest_allowed().
+JEST_FLAGS = {"ci", "runinband", "i", "verbose"}
 # `playwright test` options whose value is a path the runner writes to or loads from.
 PLAYWRIGHT_PATH_OPTIONS = {"--config", "--output", "--last-failed-file"}
 # `playwright test` short options that take a value. A `c` after one of these
@@ -596,6 +633,7 @@ MCP_WRITE_WORDS = {
 # brackets: a small model copies those as they are. A command or path to copy
 # is set in backticks, so the full stop after it is not copied with it.
 VITEST_COMMAND = "`RTK_DISABLED=1 npx vitest run test/unit/components/SignIn.test.ts`"
+JEST_COMMAND = "`RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/components/SignIn.test.ts`"
 PLAYWRIGHT_COMMAND = "`RTK_DISABLED=1 npx playwright test test/e2e/sign-in.spec.ts`"
 RESUME_COMMAND = "`npx --no-install playwright-cli -s=" + SESSION_PLACEHOLDER + " resume`"
 # Last resort, for a stage no check gave a reason for. The tests fail when a
@@ -658,6 +696,18 @@ HINT_PROCESS = (
     + " with the session name that run printed."
 )
 HINT_SCRIPT = "To run code, write it in a test file under test/ and run that file with the test command."
+AUDIT_VALIDATOR_COMMAND = (
+    "`node .cursor/skills/security-audit/validate-findings.cjs ~/security-audit-skill/my-app/run-1/findings.json`"
+)
+DENY_NODE = (
+    DENY_UNKNOWN_PROGRAM.format(program="node") + " " + HINT_SCRIPT + " The one exception is the security audit: "
+    "it may run `validate-findings.cjs` or `validate-coverage-ledger.cjs` from .cursor/skills/security-audit/ "
+    "on one file inside ~/security-audit-skill/, with no option, as in " + AUDIT_VALIDATOR_COMMAND + "."
+)
+HINT_AUDIT = (
+    "The security audit writes its run folder inside ~/security-audit-skill/, such as "
+    "`~/security-audit-skill/my-app/run-1/`, and nowhere in the project."
+)
 HINT_WRAPPER = "It runs another command, which the hook cannot check. Run that command on its own."
 HINT_EDIT = "To create or change a file under test/, use the file edit tool."
 HINT_LINK = (
@@ -743,7 +793,7 @@ DENY_ENV = (
     "A command may set only these variables, to plain values: " + ", ".join(sorted(ALLOWED_ENV)) + "."
 )
 DENY_PROGRAM_PATH = (
-    "Run programs by name, not by path. Only node_modules/.bin/vitest, playwright, and playwright-cli "
+    "Run programs by name, not by path. Only node_modules/.bin/vitest, playwright, playwright-cli, and jest "
     "may be run by path."
 )
 DENY_RTK = (
@@ -752,7 +802,42 @@ DENY_RTK = (
 )
 DENY_NPM = "npm may only run these scripts: " + ", ".join(sorted(NPM_TEST_SCRIPTS)) + ". Put runner arguments after `--`."
 DENY_NPX = (
-    "npx may only run vitest, playwright, or playwright-cli. It cannot use -c, and --package must name one of them."
+    "npx may only run vitest, playwright, playwright-cli, or jest. It cannot use -c, and --package must name one "
+    "of them."
+)
+DENY_JEST_CONFIG = (
+    "jest must run with the kit's config, `--config .cursor/qa/jest.config.cjs`, which prints the `QA-VERDICT:` "
+    "line. Run " + JEST_COMMAND + ", with the path of your test file."
+)
+DENY_JEST_NO_CI = (
+    "jest must run with `--ci`. Without it Jest writes a new snapshot, so a wrong result would pass. Run "
+    + JEST_COMMAND + ", with the path of your test file."
+)
+DENY_JEST_PATH = (
+    "Give the full path of each test file, under test/, as in " + JEST_COMMAND + ". A name alone, or no path, "
+    "runs other files too."
+)
+DENY_JEST_WATCH = "Watch mode never ends, so `{option}` is not allowed. Run the file once, as in " + JEST_COMMAND + "."
+DENY_JEST_UPDATE = (
+    "`{option}` writes snapshots, so a wrong result would pass. The tests use no snapshots: check what the user "
+    "sees instead. Run " + JEST_COMMAND + "."
+)
+DENY_JEST_PASS = (
+    "`{option}` lets an empty run pass, which the kit's `QA-VERDICT:` line counts as a failure. Run without it, "
+    "as in " + JEST_COMMAND + "."
+)
+DENY_JEST_NAME = (
+    "`{option}` runs some tests of a file and skips the rest. Run the whole file, as in " + JEST_COMMAND + "."
+)
+DENY_JEST_REPORTER = (
+    "`{option}` replaces the output of Jest or writes it to a file, which removes the `QA-VERDICT:` line the kit "
+    "reads. Run without it, as in " + JEST_COMMAND + "."
+)
+DENY_JEST_CI = (
+    "`{option}` turns off ci mode, in which Jest writes no new snapshot. Leave it out, as in " + JEST_COMMAND + "."
+)
+DENY_JEST_OPTION = (
+    "`{option}` is not allowed with jest. Run " + JEST_COMMAND + ". It may add --runInBand or --verbose."
 )
 DENY_VITEST_RUN = (
     "A Vitest run is `vitest run` and then the test file, as in " + VITEST_COMMAND + ". "
@@ -1749,6 +1834,67 @@ def is_cursor_file(path_text, cwd):
     return len(parts) == 4 and parts[0] == "projects" and parts[2] == "agent-tools"
 
 
+def audit_root():
+    """~/security-audit-skill/ with symlinks resolved, or None when it is not a safe place to write.
+
+    The security audit skill writes its run folders there, outside the
+    project. A link that puts the folder inside the project, or the project
+    inside it, would make it a way around the write scope, so either case
+    gives None.
+    """
+    home = os.path.expanduser("~")
+    if not os.path.isabs(home):
+        return None
+    root = resolve_path(os.path.join(home, AUDIT_OUTPUT))
+    if root is None:
+        return None
+    for inner, outer in ((root, REPO), (REPO, root)):
+        try:
+            inner.relative_to(outer)
+        except ValueError:
+            continue
+        return None
+    return root
+
+
+def is_audit_output(path_text, cwd):
+    """True for a path inside ~/security-audit-skill/, where the security audit skill writes its run folders.
+
+    Only write tools may write there. The folder itself does not count, so
+    the agent cannot delete it whole. Symlinks are resolved first, as in
+    is_cursor_file().
+    """
+    root = audit_root()
+    resolved = resolve_path(path_text, cwd)
+    if root is None or resolved is None or resolved == root:
+        return False
+    try:
+        resolved.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def audit_validator_allowed(args, cwd):
+    """`node .cursor/skills/security-audit/validate-findings.cjs ~/security-audit-skill/app/run-1/findings.json`.
+
+    The security audit skill checks its findings.json and coverage-ledger.json
+    with two scripts of its own. They read the one file they are given and
+    print what is wrong with it. node may run one of them on a file inside
+    ~/security-audit-skill/, with no option, and nothing else.
+    """
+    if len(args) == 2 and not any(arg.startswith("-") for arg in args):
+        script = resolve_path(args[0], cwd)
+        if (
+            script is not None
+            and script.parent == real(AUDIT_SKILL)
+            and script.name in AUDIT_VALIDATORS
+            and is_audit_output(args[1], cwd)
+        ):
+            return True
+    raise Denied(DENY_NODE)
+
+
 def parts_under_test(path_text, cwd):
     """The parts of a path below test/, after resolving symlinks, or None when it is not under test/.
 
@@ -1984,6 +2130,8 @@ def content_problem(paths, tool_input, cwd):
 def outside_scope_message(path_text):
     """The deny message for a write tool whose target is outside the write scope."""
     message = f"Edit blocked for {path_text}. Writes are limited to {WRITE_SCOPE}."
+    if "security-audit" in path_text:
+        return f"{message} {HINT_AUDIT}"
     name = os.path.basename(path_text)
     test_name = ".test." in name or ".spec." in name
     test_folder = FOREIGN_TEST_FOLDER in path_text or "tests/" in path_text
@@ -2832,6 +2980,94 @@ def playwright_allowed(args, cwd):
     return True
 
 
+def jest_option_name(arg):
+    """The name of a jest option word, and its value after `=` or None.
+
+    Jest's parser reads `--runInBand` and `--run-in-band` as one option, so a
+    long name is given in lower case without dashes: "runinband". `--no-ci`
+    gives "noci". A short word such as `-i` gives "i", and a group such as
+    `-iu` gives "iu", which is no option on the list.
+    """
+    name, has_value, value = arg.partition("=")
+    key = name[2:].replace("-", "").lower() if name.startswith("--") else name[1:]
+    return key, (value if has_value else None)
+
+
+def jest_words(args):
+    """Split jest arguments into (option words with their values, test paths).
+
+    `--config` and `-c` take the next word as their value unless the word
+    holds `=`. Every word after `--` is a test path.
+    """
+    options = []
+    paths = []
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        index += 1
+        if arg == "--":
+            paths.extend(args[index:])
+            break
+        if not arg.startswith("-") or arg == "-":
+            paths.append(arg)
+            continue
+        key, value = jest_option_name(arg)
+        if key in {"config", "c"} and value is None and arg in {"--config", "-c"}:
+            value = args[index] if index < len(args) else ""
+            index += 1
+        options.append((arg, key, value))
+    return options, paths
+
+
+def check_jest_options(options, config_allowed):
+    """Raise Denied for a jest option that is not on the short list in JEST_FLAGS.
+
+    The option that sets the config is checked by jest_allowed(). In an npm
+    script the config is already set, so config_allowed is False there.
+    """
+    for arg, key, value in options:
+        shown = arg.partition("=")[0]
+        if key in {"config", "c"} and config_allowed:
+            continue
+        if key in {"u", "updatesnapshot"}:
+            raise Denied(DENY_JEST_UPDATE.format(option=shown))
+        if key in {"watch", "watchall"}:
+            raise Denied(DENY_JEST_WATCH.format(option=shown))
+        if key == "passwithnotests":
+            raise Denied(DENY_JEST_PASS.format(option=shown))
+        if key in {"t", "testnamepattern"}:
+            raise Denied(DENY_JEST_NAME.format(option=shown))
+        if key in {"reporters", "json", "outputfile", "testresultsprocessor"}:
+            raise Denied(DENY_JEST_REPORTER.format(option=shown))
+        if key == "noci" or (key == "ci" and value not in (None, "true")):
+            raise Denied(DENY_JEST_CI.format(option=arg))
+        if key in JEST_FLAGS and (value is None or key == "ci"):
+            continue
+        raise Denied(DENY_JEST_OPTION.format(option=arg if key in JEST_FLAGS else shown))
+
+
+def jest_allowed(args, cwd):
+    """`jest --config .cursor/qa/jest.config.cjs <test file>`: one run, of files the command names under test/.
+
+    The kit's config loads the app's own Jest config and adds the reporter
+    that prints the QA-VERDICT line, so it must be the config, given once.
+    `--ci` must be there too: without it Jest writes a new snapshot, and Jest
+    30.5 ignores `ci` in a config file. jest reads each path as a pattern for
+    the files to run. Every path must
+    name a file or folder under test/, so a pattern cannot pick up other files.
+    """
+    options, paths = jest_words(args)
+    configs = [value for _, key, value in options if key in {"config", "c"}]
+    if len(configs) != 1 or resolve_path(configs[0] or "", cwd) != real(JEST_CONFIG):
+        raise Denied(DENY_JEST_CONFIG)
+    check_jest_options(options, config_allowed=True)
+    if not any(key == "ci" for _, key, _ in options):
+        raise Denied(DENY_JEST_NO_CI)
+    if not paths or not all(under_test(path, cwd) for path in paths):
+        raise Denied(DENY_JEST_PATH)
+    return True
+
+
 def npm_run_allowed(args, cwd):
     """`npm run <test script>`, with runner arguments only after `--`.
 
@@ -2847,6 +3083,12 @@ def npm_run_allowed(args, cwd):
     if any(arg.startswith("-") for arg in rest[:split]):
         raise Denied(DENY_NPM)
     script_args = rest[split + 1:]
+    if args[1] == "test:rn-unit":
+        options, paths = jest_words(script_args)
+        check_jest_options(options, config_allowed=False)
+        if not all(under_test(path, cwd) for path in paths):
+            raise Denied(DENY_JEST_PATH)
+        return True
     if args[1].startswith("test:e2e"):
         check_playwright_options(playwright_words(script_args)[0], script_args)
         return runner_paths_allowed(playwright_path_values(script_args), cwd)
@@ -3114,8 +3356,9 @@ def maestro_allowed(args, cwd):
 def runner_allowed(program, args, cwd):
     """True for an allowed test runner command, or None when the program is not a test runner.
 
-    Covers `npm run <test script>`, and `vitest run`, `playwright test`, and
-    playwright-cli run directly or through npx, and maestro. Raises Denied otherwise.
+    Covers `npm run <test script>`, and `vitest run`, `playwright test`,
+    playwright-cli, and jest run directly or through npx, and maestro. Raises
+    Denied otherwise.
     """
     if program == "maestro":
         placeholder = find_placeholder(args)
@@ -3139,6 +3382,8 @@ def runner_allowed(program, args, cwd):
         return vitest_allowed(args, cwd)
     if program == "playwright":
         return playwright_allowed(args, cwd)
+    if program == "jest":
+        return jest_allowed(args, cwd)
     return playwright_cli_allowed(args)
 
 
@@ -3540,6 +3785,8 @@ def atomic_allowed(segment, cwd):
         return True
     if program == "sleep":
         return sleep_allowed(tokens[1:])
+    if program == "node":
+        return audit_validator_allowed(tokens[1:], cwd)
     if program == "file" and has_option(tokens[1:], ("--compile",), "C", "mFefP"):
         # `file -C -m test/magic` writes test/magic.mgc.
         raise Denied(DENY_FILE_COMPILE)
@@ -4062,8 +4309,9 @@ def guard_tool(payload, cwd):
     An MCP tool call is checked first: see mcp_problem(). Its arguments are
     then read like those of any other tool.
 
-    A write tool needs every target path inside the write scope, or among
-    Cursor's own files. A tool the hook does not know by name counts as a
+    A write tool needs every target path inside the write scope, among
+    Cursor's own files, or inside the run folders of the security audit
+    (see is_audit_output). A tool the hook does not know by name counts as a
     write tool when its input has a path key and a content key, so a renamed
     or new writing tool is still checked. Every other tool passes.
 
@@ -4092,7 +4340,7 @@ def guard_tool(payload, cwd):
     if not paths:
         emit("deny", DENY_NO_TARGET)
     for path in paths:
-        if not is_allowed(path, cwd) and not is_cursor_file(path, cwd):
+        if not is_allowed(path, cwd) and not is_cursor_file(path, cwd) and not is_audit_output(path, cwd):
             emit("deny", outside_scope_message(path))
     if tool_name != DELETE_TOOL:
         for path in paths:

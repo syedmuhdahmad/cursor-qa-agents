@@ -121,6 +121,14 @@ When every flow passes, the summary line is `2/2 Flows Passed in 46s` and the ex
 
 A `[Failed]` line with no error after the time means that an element file did not load: the flow or the loader lacks a line, or an element file has a JavaScript fault. Run that one flow file to see the error. `maestro check-syntax` does not read an element file and does not check a name: it prints `OK` for a flow with any of these faults.
 
+## The sample app and CI
+
+[`examples/expo-app`](../examples/expo-app/) is a small Expo app with the sign-in screen of the web example, and the reference files for these skills: a plan, the Android element files, the loader, and one flow for each of its six scenarios. Its README says how to build it and run the flows.
+
+[`.github/workflows/android.yml`](../.github/workflows/android.yml) builds a release APK of it, starts an Android emulator on a Linux runner, and runs the six flows. It runs only for a change to the example, the mobile skills, their rule file, the hook, or the workflow itself, because an emulator job takes many minutes.
+
+No workflow runs iOS. It needs a macOS runner with Xcode, which is slower and costs more, and nothing has been run on iOS yet. iOS flows are to be checked on a Mac by hand. This was decided for [issue 24](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/24).
+
 ## Known limits
 
 - With no device, each skill stops and tells you what to start. On Linux or Windows the skills stop when the prompt says iOS.
@@ -146,7 +154,12 @@ Run on that emulator, about Maestro itself:
 - The folder run with `--exclude-tags=fixme`, and a run of all of `test/mobile` with the `config.yaml` template. That run takes neither the loader nor an element file for a flow.
 - The three MCP tools the skills call, `list_devices`, `inspect_screen`, and `run`, with the replies the skills describe.
 - That a `maestro test` run ends a running MCP session.
-- That a React Native `testID` is the id on the device. This was seen for 39 ids.
+- That a React Native `testID` is the id on the device. This was seen for 39 ids, and on 2026-10-25 for all 7 ids of `examples/expo-app`, on the same kind of emulator.
+
+Run on that emulator with `examples/expo-app` on 2026-10-25, by an agent that followed the templates by hand and not by a skill:
+
+- Its reference plan, element files, loader, and six flows. The six flows passed in five runs, each printing `6/6 Flows Passed` in 1 minute 45 seconds to 1 minute 57 seconds: twice from the app folder, once from the repository root, once as all of `test/mobile` with `config.yaml`, and once with an APK for all four architectures.
+- `maestro check-syntax` on every flow and the loader, and two copies of a flow with a wrong expected text, which failed with `Assertion is false`.
 
 Run on that emulator, about element files:
 
@@ -177,12 +190,11 @@ Not run:
 - The fix steps of `/qa-mobile-generate` after a failed run. The error lines they react to were seen.
 - These parts of `/qa-mobile-heal` as whole jobs: the two `BLOCKED` exits of its error table, a waiting check, the `fixme` mark in a flow with element files, a text that changes from run to run, a check that fails with `is not visible`, and another app on top of the app.
 - A system permission dialog, a physical device, and a native Android app, where an id has the form `com.example.app:id/name`.
-- A sample app with a sign-in screen. The sample has none. The prompts and examples on this page are from the imaginary app of the skills and were not walked.
-- CI. No emulator job exists.
+- The prompts and examples on this page, which are from the imaginary app of the skills.
 - Cursor itself: the folder it starts the `maestro` server in, its time limit for one MCP call, and what a walk costs a model. One `run` call took up to 45 seconds.
 - A lint or a type check of an element file in an app.
 
-A sample app with a sign-in screen and a CI job are tracked in [issue 23](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/23), and iOS in [issue 24](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/24).
+iOS is tracked in [issue 24](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/24).
 
 ## Open points
 

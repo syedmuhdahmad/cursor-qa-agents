@@ -1,6 +1,6 @@
 # Cursor QA agent
 
-This kit is a set of Cursor files that you copy into a React or Next.js app, so that the Cursor agent writes and fixes the app's tests: Vitest unit and integration tests, Playwright end-to-end tests, and Maestro flows for a mobile app (a preview). The agent reads your application source and does not edit it. When a test fails because the product is wrong, it reports the bug instead of weakening the test.
+This kit is a set of Cursor files that you copy into a React, Next.js, or React Native app, so that the Cursor agent writes and fixes the app's tests: Vitest unit and integration tests, Playwright end-to-end tests, Jest unit tests in a React Native or Expo app, and Maestro flows for a mobile app (a preview). The agent reads your application source and does not edit it. When a test fails because the product is wrong, it reports the bug instead of weakening the test. The kit also carries Cloudflare's security audit skill, for a high-tier model.
 
 It is written for low-cost and mid-tier models: each job is one skill of numbered steps, every test run ends with one verdict line, and a hook enforces the rules that a small model drops. In Cursor's own agent, Composer 2.5 passed 18 of 18 runs of the kit's evaluation cases and Claude Opus 5 passed 9 of 9. [Evaluation](#evaluation) says what that does not cover.
 
@@ -64,7 +64,20 @@ jsdom
 vitest
 ```
 
-Then install dependencies and the Chromium browser Playwright uses:
+In a React Native or Expo app, the installer below sees `react-native` or `expo` in your `package.json` and does three things differently. It leaves out `vitest.config.ts`, `playwright.config.ts`, `test/setup.ts`, and `test/e2e/`. It adds these dev dependencies in place of the ones above, with the ranges from [`examples/expo-app/package.json`](examples/expo-app/package.json), and picks the `test-renderer` line that matches your React version. And it adds one script, `"test:rn-unit": "jest --config .cursor/qa/jest.config.cjs --ci"`.
+
+<!-- install:react-native-dev-dependencies -->
+
+```text
+@testing-library/react-native
+@types/jest
+jest
+test-renderer
+```
+
+Your app needs a Jest preset of its own. For an Expo app that is `"jest": { "preset": "jest-expo" }` in `package.json`, with `jest-expo` from `npx expo install jest-expo`. The installer warns when it finds none. [docs/install-notes.md](docs/install-notes.md#a-react-native-app) has the detail.
+
+Then install dependencies and, in a web app, the Chromium browser Playwright uses:
 
 ```bash
 npm install
@@ -104,10 +117,11 @@ In Agent chat, type `/` and pick a skill from the menu. Then add the file or the
 | Plan | `/qa-plan sign-in` | Opens the feature in the browser and saves `test/e2e/plan/sign-in.plan.md` with 3 to 8 scenarios. |
 | Generate | `/qa-generate test/e2e/plan/sign-in.plan.md` | Writes page classes in `test/e2e/pages/` and the spec `test/e2e/sign-in.spec.ts`, then runs the spec. |
 | Heal | `/qa-heal test/e2e/sign-in.spec.ts` | Runs one failing spec and fixes the test, one line at a time, in at most three rounds. |
+| React Native unit test | `/qa-rn-unit src/components/SignIn.tsx` | In a React Native or Expo app: writes `test/unit/components/SignIn.test.ts` with Jest and React Native Testing Library, and runs it. Given a test file, it runs and fixes that file. |
 
 - **Start the app yourself** before a plan or generate job. The hook denies `npm run dev` to the agent. Without the app, the reply is `BLOCKED: start the app with npm run dev, then ask again.`
 - **The app must be on this machine.** For another port or route, say so: `/qa-plan checkout. Base URL http://localhost:4000. Route /cart/checkout.`
-- **When the app is wrong, no skill changes what the test expects.** `/qa-unit` and `/qa-generate` leave the test failing and name the source line under `Bug:`. `/qa-heal` marks that one test `test.fixme(`, under a `// product bug:` comment that names the source line.
+- **When the app is wrong, no skill changes what the test expects.** `/qa-unit`, `/qa-rn-unit`, and `/qa-generate` leave the test failing and name the source line under `Bug:`. `/qa-heal` marks that one test `test.fixme(`, under a `// product bug:` comment that names the source line.
 - **For a small model,** keep each prompt to one file, one feature, or one plan, and ask for generate in two prompts: first with `page classes only` after the path of the plan, then with `spec only`.
 
 `/qa` and a plain request also work, through the table in [`AGENTS.md`](AGENTS.md). The model then has one more choice to make, so prefer the `/` menu.
@@ -116,7 +130,7 @@ In Agent chat, type `/` and pick a skill from the menu. Then add the file or the
 
 Every skill ends with a form that the agent fills in. `Verdict:` is `PASS`, `FAIL`, or `BLOCKED:` with what you need to do. A plan ends with `DONE`. The last line, `Not checked:`, says what the agent did not run.
 
-The agent does not judge the runner's output. Every Vitest and Playwright run ends with one line that the agent copies:
+The agent does not judge the runner's output. Every Vitest, Playwright, and Jest run ends with one line that the agent copies:
 
 ```text
 QA-VERDICT: PASS (passed 3, failed 0, skipped 0, files 1)
@@ -171,6 +185,10 @@ For a real boundary, run the agent in a container with application source mounte
 ## Mobile
 
 Three more skills plan, write, and fix [Maestro](https://maestro.dev) flows for an Android or iOS app: `/qa-mobile-plan`, `/qa-mobile-generate`, and `/qa-mobile-heal`. Treat them as a preview. Parts were run on one Android emulator, with scripts in place of a model. Nothing was run on iOS, and the skills were not run on any model. You start the device and install the app, and every flow clears the app's data there. [docs/mobile.md](docs/mobile.md) has the layout, each job, what was run, and the [open points](docs/mobile.md#open-points).
+
+## Security audit
+
+`/security-audit` is Cloudflare's [security audit skill](https://github.com/cloudflare/security-audit-skill), copied byte for byte with only its frontmatter changed. It is not a test job. It maps the app's trust boundaries, sends subagents to hunt for vulnerabilities, has other subagents try to disprove each finding, and writes a report of the verified ones to `~/security-audit-skill/<repo-name>/run-<N>/`, outside your project. It reads the source and runs none of it. It is long and runs many subagents, so use it with a high-tier model such as Claude Opus 5, and ask for a small run first: `/security-audit quick audit of src/`. [docs/security-audit.md](docs/security-audit.md) says what the hook allows it and what was run.
 
 ## Evaluation
 

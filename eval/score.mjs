@@ -50,6 +50,7 @@ import {
   responds,
   routeOf,
   run,
+  runnerOf,
   tempHolder,
   walkFiles,
 } from './lib.mjs'
@@ -239,6 +240,102 @@ export function runVitest(cwd, files, timeoutMs = 180_000) {
     dropHolder(holder)
   }
 }
+
+const JEST_TIMEOUT = /Exceeded timeout of \d+ ?ms/
+
+// Works out the verdict of a Jest run from its JSON report (--json) and its
+// exit code. The rows are the kit's verdict rules, written again here so that
+// the scorer does not trust the code it checks (.cursor/qa/jest-verdict.mjs).
+//
+// Jest exits with 0 for two of them, so the counts decide:
+//   - a test that passed only on a retry (jest.retryTimes) has status
+//     "passed" and `invocations` above 1. In Jest 30.5 its `retryReasons` was
+//     empty, and is read as well.
+//   - a test marked skip, xit, or todo, or left out by a stray fit or .only,
+//     has status "pending", "todo", or another word that is not a result.
+// A test file that could not run has status "failed" and no failed test: a
+// file that did not load has no tests at all, and a failing beforeAll or
+// afterAll leaves its tests passed. A written snapshot also counts as a FAIL,
+// as in the kit's reporter. The scorer runs with --ci, so it writes none.
+export function readJestReport(json, { exitCode = 0 } = {}) {
+  const found = noCounts()
+  let notLoaded = null
+  let outside = null
+  for (const fileResult of json.testResults ?? []) {
+    const results = fileResult.assertionResults ?? []
+    for (const test of results) {
+      const messages = test.failureMessages ?? []
+      const retried = Number(test.invocations) > 1 || (test.retryReasons ?? []).length > 0
+      const status =
+        test.status === 'passed' ? (retried ? 'flaky' : 'passed')
+        : test.status === 'failed' ? 'failed'
+        : test.status === 'todo' ? 'todo' : 'skipped'
+      const entry = { title: test.title, fullName: test.fullName, status }
+      if (messages.length > 0) {
+        entry.failure = firstLine(messages[0])
+        entry.timedOut = messages.every((message) => JEST_TIMEOUT.test(firstLine(message)))
+      }
+      found.tests.push(entry)
+    }
+    if (fileResult.status === 'failed' && !results.some((test) => test.status === 'failed')) {
+      // Jest's message starts with "● Test suite failed to run". The line after it says why.
+      const why = stripAnsi(String(fileResult.message ?? '')).split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '' && !line.startsWith('●'))[0]
+      if (results.length === 0) notLoaded ??= why || 'the report gives no message'
+      else outside ??= why || 'a hook failed'
+    }
+  }
+  for (const key of ['passed', 'failed', 'skipped', 'todo', 'flaky']) {
+    found[key] = found.tests.filter((test) => test.status === key).length
+  }
+  const written = Number(json.snapshot?.added ?? 0) + Number(json.snapshot?.updated ?? 0)
+  const exited = exitCode === null ? 'the runner was stopped before it could exit' : `the runner exited with code ${exitCode}`
+  if (found.failed > 0) found.reason = ''
+  else if (json.wasInterrupted === true) found.reason = 'the run was interrupted'
+  else if (notLoaded !== null) found.reason = `the file did not load: ${notLoaded}`
+  else if (outside !== null) found.reason = `an error happened outside a test: ${outside}`
+  else if (found.tests.length === 0) found.reason = 'no tests ran'
+  else if (exitCode !== 0) found.reason = `an error happened outside a test: ${exited}`
+  else if (found.flaky > 0) found.reason = 'a test passed only on a retry'
+  else if (found.skipped + found.todo > 0) found.reason = 'skipped or todo tests count as a failure'
+  else if (written > 0) found.reason = 'a snapshot was written or updated'
+  else if (json.success !== true) found.reason = 'the runner reports no success'
+  else found.verdict = 'PASS'
+  found.skipped += found.todo
+  return found
+}
+
+// The kit's Jest config, the one the skill runs with.
+const JEST_CONFIG = '.cursor/qa/jest.config.cjs'
+
+// Runs Jest on one file, or on a list of files, with the kit's config, and
+// works out a verdict. --json writes Jest's own report, and the kit's verdict
+// line is not read. --runTestsByPath takes each path as a file, not as a
+// pattern. --ci keeps Jest from writing a snapshot into the sandbox: in Jest
+// 30.5 the `ci: true` of the kit's config does not do that.
+export function runJest(cwd, files, timeoutMs = 300_000) {
+  const list = [files].flat()
+  const holder = tempHolder('run')
+  const report = join(holder, 'jest.json')
+  const args = ['--no-install', 'jest', '--config', JEST_CONFIG, '--ci', '--json', `--outputFile=${report}`, '--runTestsByPath', ...list]
+  const result = run('npx', args, { cwd, env: cleanEnv(), timeoutMs })
+  const base = { runner: 'jest', command: `npx jest --config ${JEST_CONFIG} --ci --json --runTestsByPath ${list.join(' ')}`, exitCode: result.status }
+  try {
+    if (result.timedOut) return { ...base, ...noResult(`the run did not finish in ${timeoutMs / 1000} seconds`) }
+    if (!existsSync(report)) return { ...base, ...noResult(`the runner wrote no report: ${lastLine(result)}`) }
+    let json
+    try {
+      json = JSON.parse(readFileSync(report, 'utf8'))
+    } catch (error) {
+      return { ...base, ...noResult(`the runner's report is not JSON: ${error.message}`) }
+    }
+    return { ...base, ...readJestReport(json, { exitCode: result.status }) }
+  } finally {
+    dropHolder(holder)
+  }
+}
+
+// Runs unit or integration test files with the runner of the case's app.
+export const runUnitTests = (testCase, cwd, files) => (runnerOf(testCase) === 'jest' ? runJest(cwd, files) : runVitest(cwd, files))
 
 // Playwright reports "No tests found" as an error. It means there was nothing to run.
 const NOTHING_TO_RUN = /^(Error: )?No tests found/
@@ -447,7 +544,24 @@ export function namesFileLine(text, file, line) {
 
 // --- Checks -----------------------------------------------------------------
 
-const FORBIDDEN_TOKENS = ['.only(', '.skip(', '.todo(', '.fails(', 'test.fail(', 'skipIf(', 'runIf(', 'waitForTimeout(', 'networkidle', 'force: true']
+// Each token with the pattern that counts it. Most are plain text. Jest's
+// global skip and only calls count as a whole call, the way the hook matches
+// them: `xit(` and `fit(` but not `benefit(` or `form.fit(`. A snapshot matcher
+// counts as a method call, `.toMatchSnapshot(`.
+const plainToken = (token) => ({ token, pattern: new RegExp(escapeRegExp(token), 'g') })
+const jestGlobal = (name) => ({ token: `${name}(`, pattern: new RegExp(`(?<![\\w.$])${name}\\(`, 'g') })
+const matcherToken = (name) => ({ token: `${name}(`, pattern: new RegExp(escapeRegExp(`.${name}(`), 'g') })
+export const FORBIDDEN_TOKENS = [
+  ...['.only(', '.skip(', '.todo(', '.fails(', 'test.fail(', 'skipIf(', 'runIf(', 'waitForTimeout(', 'networkidle', 'force: true'].map(plainToken),
+  ...['xit', 'xtest', 'xdescribe', 'fit', 'fdescribe'].map(jestGlobal),
+  ...['toMatchSnapshot', 'toMatchInlineSnapshot', 'toThrowErrorMatchingSnapshot', 'toThrowErrorMatchingInlineSnapshot'].map(matcherToken),
+]
+
+// The forbidden tokens that `now` holds more often than `before`.
+export function addedTokens(before, now) {
+  const times = (text, pattern) => (text.match(pattern) ?? []).length
+  return FORBIDDEN_TOKENS.filter(({ pattern }) => times(now, pattern) > times(before, pattern)).map(({ token }) => token)
+}
 const FIXME = 'test.fixme('
 const PRODUCT_BUG = '// product bug:'
 
@@ -551,9 +665,7 @@ function checkForbiddenTokens({ changed, read, baselineRead, route }) {
     if (status === 'deleted' || !path.startsWith('test/')) continue
     const now = read(path) ?? ''
     const before = baselineRead(path) ?? ''
-    for (const token of FORBIDDEN_TOKENS) {
-      if (count(now, token) > count(before, token)) problems.push(`${path} adds ${token}`)
-    }
+    for (const token of addedTokens(before, now)) problems.push(`${path} adds ${token}`)
     if (count(now, FIXME) > count(before, FIXME)) {
       const lines = now.split(/\r?\n/)
       const unmarked = lines.some((line, index) => line.includes(FIXME) && !(lines[index - 1] ?? '').trim().startsWith(marker))
@@ -761,7 +873,8 @@ export function mutantOutcome(before, after) {
 }
 
 // Breaks the app in a copy of the sandbox, one change at a time, and runs the
-// test again. A test that still passes did not check that behavior.
+// test again with the runner of the case's app, Vitest or Jest. A test that
+// still passes did not check that behavior.
 //
 // The copy shares the sandbox's node_modules through one link, so it costs
 // about 340 inodes, not the 16,000 of a hard-linked tree. Two runs come before
@@ -782,7 +895,7 @@ async function checkMutants({ testCase, sandbox, found, skipMutants }) {
     cpSync(sandbox, copy, { recursive: true, filter: (source) => !skip(source) })
     symlinkSync(join(sandbox, 'node_modules'), join(copy, 'node_modules'), 'junction')
 
-    const unchanged = runVitest(copy, file)
+    const unchanged = runUnitTests(testCase, copy, file)
     await breath()
     if (unchanged.verdict !== 'PASS') {
       return broken(`the test passes in the sandbox and not in an unchanged copy of it, so a run against a changed app would say nothing. The run in the copy: ${describeRun(unchanged)}`)
@@ -793,7 +906,7 @@ async function checkMutants({ testCase, sandbox, found, skipMutants }) {
       const original = readFileSync(path, 'utf8')
       writeFileSync(path, text(original))
       try {
-        return runVitest(copy, file)
+        return runUnitTests(testCase, copy, file)
       } finally {
         writeFileSync(path, original)
         await breath()
@@ -980,7 +1093,7 @@ export function strayWork(changed, testCase) {
 // Runs the given test files the way the case needs: Vitest, or Playwright
 // against the server of this run.
 async function runFiles({ testCase, sandbox, meta }, files) {
-  const none = { runner: testCase.kind === 'e2e' ? 'playwright' : 'vitest', ...noCounts() }
+  const none = { runner: runnerOf(testCase), ...noCounts() }
   if (!existsSync(join(sandbox, 'node_modules'))) {
     return {
       ...none,
@@ -988,7 +1101,7 @@ async function runFiles({ testCase, sandbox, meta }, files) {
       harnessError: `${sandbox} has no node_modules, so the scorer cannot run the test. If --clean removed it, put it back with: node eval/make-sandbox.mjs --relink <run-folder>`,
     }
   }
-  if (testCase.kind !== 'e2e') return runVitest(sandbox, files)
+  if (testCase.kind !== 'e2e') return runUnitTests(testCase, sandbox, files)
   const url = meta.server?.url
   if (!url) return { ...none, verdict: 'ERROR', harnessError: 'meta.json names no server for this e2e case' }
   if (!(await responds(url))) {
@@ -1009,7 +1122,7 @@ async function ownRun(context) {
     return isPlan ? { runner: 'none', ...noCounts(), verdict: 'DONE' } : runFiles(context, file)
   }
   const missing = {
-    runner: isPlan ? 'none' : testCase.kind === 'e2e' ? 'playwright' : 'vitest',
+    runner: isPlan ? 'none' : runnerOf(testCase),
     ...noCounts(),
     verdict: isPlan ? 'MISSING' : 'NO-TEST',
     reason: `${file} does not exist`,

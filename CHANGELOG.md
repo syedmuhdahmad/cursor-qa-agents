@@ -8,13 +8,30 @@ The version of your copy is the one line in `.cursor/qa/VERSION`.
 
 ## Unreleased
 
+### Action needed if you copied an earlier version
+
+1. A write to a test file may no longer add a snapshot matcher: `toMatchSnapshot(`, `toMatchInlineSnapshot(`, `toThrowErrorMatchingSnapshot(`, or `toThrowErrorMatchingInlineSnapshot(`. This holds for your Vitest tests too. A snapshot that a file already has can stay, and the file can still be edited.
+2. In a React Native or Expo app, copy the kit again with the installer, which now leaves out the web files there. If you copied the kit into such an app by hand, delete `vitest.config.ts`, `playwright.config.ts`, `test/setup.ts`, and `test/e2e/` unless the app also builds for the web, and see [A React Native app](docs/install-notes.md#a-react-native-app).
+
 ### Added
+
+- `/qa-rn-unit`, a skill that writes or fixes one Jest unit test in a React Native or Expo app, built like `/qa-unit`: numbered steps, three templates, `BLOCKED` exits, and the same reply form ([#36](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/36)). It renders with `@testing-library/react-native` 14 and finds elements by role, label, or text. `/qa-unit` stops in a React Native app, and `/qa-rn-unit` in a web app, each with a sentence that names the other.
+- `.cursor/qa/jest.config.cjs` and `.cursor/qa/jest-verdict.mjs`: the kit's Jest config, which loads the app's own Jest config, and the reporter that ends every Jest run with the `QA-VERDICT:` line. Jest exits with 0 for a skipped test, a `todo`, a stray `.only`, and a pass on a retry, and the line says `FAIL` for each.
+- Hook rules for Jest. `jest` runs only with `--config .cursor/qa/jest.config.cjs`, `--ci`, and paths under `test/`, with `--runInBand` and `--verbose` as the only other options. Without `--ci` Jest writes a new snapshot, and Jest 30.5 ignores `ci` in a config file. Snapshot updates, watch mode, `--passWithNoTests`, a name filter, another reporter, and `--no-ci` are denied, each with its own message. `npm run test:rn-unit` is allowed. A test file may not add `xit(`, `xtest(`, `xdescribe(`, `fit(`, or `fdescribe(`.
+- The installer's React Native mode. An app that lists `expo` or `react-native` gets the kit without the web files, the React Native dev dependencies from the README's new list, with `test-renderer` matched to the app's React version, and the script `test:rn-unit`. It warns when the app has no Jest preset. `--app web` and `--app react-native` set the kind of app by hand.
+- `examples/expo-app`, an Expo SDK 58 app with the sign-in screen of the web example, reference Jest tests, and a reference Maestro plan and flows for Android ([#23](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/23)).
+- `/security-audit`, Cloudflare's [security audit skill](https://github.com/cloudflare/security-audit-skill), copied byte for byte at one commit, with only its frontmatter changed. It is for a high-tier model. The hook lets write tools write its report inside `~/security-audit-skill/`, outside the project, and lets `node` run its two validators on a file there. [docs/security-audit.md](docs/security-audit.md) says more.
+- For maintainers, and not copied into an app: `npm run check:security-audit-skill`, which compares the copied audit skill with the hashes in `scripts/ci/security-audit-skill.json`, `npm run test:audit-skill`, `node scripts/test-rn-example.mjs`, three CI jobs for them, and `.github/workflows/android.yml`, which builds the React Native example and runs its Maestro flows on an Android emulator.
+- For maintainers: Dependabot also watches `examples/expo-app`, with the test packages in one group and the Expo SDK left to a person.
 
 - For maintainers, and not copied into an app: the scorer's check `small-change`. It fails a fix or heal run that adds and removes more lines than the case allows in `expect.maxChangedLines`. The four fix and heal cases have a limit.
 - Six runs of the old skills on Composer 2.5, in Cursor's agent, for the three cases that repair a test. They passed 5 of 6, the new skills passed 6 of 6, and no run with either kit changed a line outside the failing ones. [The evaluation](docs/evaluation.md#the-old-skills-against-the-new-ones-on-the-fix-cases) has the table.
 
 ### Changed
 
+- For maintainers, and not copied into an app: `examples/next-app` uses Next.js 16.4.2. Version 16.4.0 has three security advisories, two of them critical, and its `next build` now stops with an error that says so.
+- The reply form of every job skill says to write it as plain lines, with no code fence around it. In the evaluation, Gemini 3.8 Flash put the reply of `/qa-unit` in a fence in 5 of 10 runs. `/qa-unit` and `/qa-rn-unit` also say how to find the file of an `@/` import and to test the value one step past a limit.
+- `/qa-unit` stops in a React Native or Expo app, and names `/qa-rn-unit`.
 - The README is about half as long. The text on RTK moved to `docs/rtk.md`, word for word, and the README has no section "Using RTK" any more. `AGENTS.md` no longer points to that section, which is its only change. The address of the app under test moved to `docs/jobs.md`, and the systems that CI runs on moved to `CONTRIBUTING.md`. The results of rounds 1 to 3 are described in `docs/evaluation.md`. `AGENTS.md` is the only file that you copy into an app that changed.
 
 ## 0.1.0 - 2026-10-09

@@ -177,7 +177,7 @@ Why: `maestro test` removes Maestro's helper app from the device when it ends. T
 
    After round 3, do not go back to step 5. Go to step 10 with `Verdict: FAIL`.
 
-10. **Reply** with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
+10. **Reply** with this form and nothing else, as plain lines with no ``` fence around them. The values shown are examples. A line you have nothing for gets `none`.
 
     ```text
     Flow: test/mobile/profile/02-taken-name.flow.yaml

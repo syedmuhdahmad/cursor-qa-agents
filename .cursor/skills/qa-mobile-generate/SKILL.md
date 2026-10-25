@@ -263,7 +263,7 @@ appId: com.example.app
 
    The app does not do what the plan says: leave the flow failing. Do not change a selector, a text, or a check, and do not tag the flow. Go to step 10 with `Verdict: FAIL`. `/qa-mobile-heal` reads the screen and finds the cause.
 
-10. **Reply** with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
+10. **Reply** with this form and nothing else, as plain lines with no ``` fence around them. The values shown are examples. A line you have nothing for gets `none`.
 
     ```text
     Plan: test/mobile/plan/profile.plan.md

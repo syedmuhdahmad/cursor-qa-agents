@@ -22,8 +22,24 @@ import { fileURLToPath } from 'node:url'
 
 export const EVAL_ROOT = dirname(fileURLToPath(import.meta.url))
 export const KIT_ROOT = resolve(EVAL_ROOT, '..')
-export const EXAMPLE = join(KIT_ROOT, 'examples', 'next-app')
 export const CASES_DIR = join(EVAL_ROOT, 'cases')
+
+// The example apps a case can run on. `app` in a case names one, and a case
+// without it runs on next-app.
+//   dir       the example in this repository
+//   runner    what runs a unit or integration test there
+//   lockfile  true when the example commits its package-lock.json. The shared
+//             node_modules are then installed from it with `npm ci`.
+//   browser   true when a new install also needs Playwright's Chromium
+export const DEFAULT_APP = 'next-app'
+export const APPS = Object.freeze({
+  'next-app': Object.freeze({ dir: join(KIT_ROOT, 'examples', 'next-app'), runner: 'vitest', lockfile: false, browser: true }),
+  'expo-app': Object.freeze({ dir: join(KIT_ROOT, 'examples', 'expo-app'), runner: 'jest', lockfile: true, browser: false }),
+})
+export const EXAMPLE = APPS[DEFAULT_APP].dir
+
+// The example folder of a case, or of an app name.
+export const exampleOf = (caseOrApp) => APPS[typeof caseOrApp === 'string' ? caseOrApp : caseOrApp.app ?? DEFAULT_APP].dir
 
 // The folder make-sandbox.mjs writes: <run>/sandbox is the app the agent works
 // in, <run>/meta.json says how it was built.
@@ -105,6 +121,12 @@ export function loadCase(id) {
   if ((found.kind === 'plan' || found.kind === 'e2e') && !found.server) {
     problems.push('a plan or e2e case needs "server"')
   }
+  const app = found.app ?? DEFAULT_APP
+  if (!Object.hasOwn(APPS, app)) problems.push(`"app" must be one of ${Object.keys(APPS).join(', ')}, or left out for ${DEFAULT_APP}`)
+  else if (app !== DEFAULT_APP && (found.server || !['unit', 'integration'].includes(found.kind))) {
+    // The app servers and the browser serve examples/next-app only.
+    problems.push(`a case on ${app} is a unit or integration case with no "server"`)
+  }
   const expect = found.expect
   if (expect === null || typeof expect !== 'object') {
     problems.push('"expect" must be an object')
@@ -129,7 +151,7 @@ export function loadCase(id) {
       if (found.kind !== 'e2e' || expect.outcome !== 'pass') problems.push('"expect.bugServer" is for an e2e case that wants a passing spec')
     }
     if (expect.mutants !== undefined && (found.kind === 'e2e' || found.kind === 'plan')) {
-      problems.push('"expect.mutants" is for a Vitest case. An e2e case uses "expect.bugServer"')
+      problems.push('"expect.mutants" is for a Vitest or Jest case. An e2e case uses "expect.bugServer"')
     }
     for (const rule of expect.content ?? []) {
       const known = ['glob', 'exists', 'firstLine', 'absent', 'assertsInEveryTest', 'inCode', 'why']
@@ -144,8 +166,11 @@ export function loadCase(id) {
     }
   }
   if (problems.length > 0) throw new EvalError(`${path}: ${problems.join('; ')}.`)
-  return { ...found, server: found.server ?? null, setup: { remove: [], edits: [], ...found.setup } }
+  return { ...found, app, server: found.server ?? null, setup: { remove: [], edits: [], ...found.setup } }
 }
+
+// What runs the tests of a case: playwright for an e2e case, else the runner of its app.
+export const runnerOf = (testCase) => (testCase.kind === 'e2e' ? 'playwright' : APPS[testCase.app ?? DEFAULT_APP].runner)
 
 // Reads <run>/meta.json and returns it with the sandbox path.
 export function readRun(runDir) {

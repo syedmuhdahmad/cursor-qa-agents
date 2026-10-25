@@ -1,0 +1,114 @@
+# Builds the React Native example, examples/expo-app, for Android and runs its
+# Maestro flows on an Android emulator. GitHub issue 23 asked for this job.
+#
+# It runs only when a change can break the flows: the example, the mobile
+# skills and their rule file, the hook, which decides the maestro commands the
+# skills may run, and this file. An emulator job takes several minutes to
+# start, so every other change skips it.
+#
+# To run it on your own machine, see "Run the flows yourself" in
+# examples/expo-app/README.md. The KVM step is for the runner only.
+#
+# iOS runs in no workflow. It needs a macOS runner with Xcode, which is slower
+# and costs more, and nothing in this repository has been run on iOS. See
+# docs/mobile.md.
+#
+# Every action is pinned to a full commit SHA. The comment after the SHA is the
+# release that commit belongs to.
+
+name: Android
+
+on:
+  pull_request:
+    paths:
+      - examples/expo-app/**
+      - .cursor/skills/qa-mobile-*/**
+      - .cursor/rules/mobile-test-conventions.mdc
+      - .cursor/hooks/**
+      - .github/workflows/android.yml
+  push:
+    branches: [main]
+    paths:
+      - examples/expo-app/**
+      - .cursor/skills/qa-mobile-*/**
+      - .cursor/rules/mobile-test-conventions.mdc
+      - .cursor/hooks/**
+      - .github/workflows/android.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The id of the example app, from examples/expo-app/app.json.
+  APP_ID: com.example.qasignin
+  # The Maestro version the flows were written and run with.
+  MAESTRO_VERSION: 2.10.0
+  # Maestro sends usage analytics unless this is set.
+  MAESTRO_CLI_NO_ANALYTICS: 1
+
+jobs:
+  flows:
+    name: Maestro flows on an Android emulator
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Any Node that "engines" in package.json allows.
+          node-version-file: package.json
+          cache: npm
+          cache-dependency-path: examples/expo-app/package-lock.json
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('examples/expo-app/package-lock.json') }}
+          restore-keys: gradle-${{ runner.os }}-
+      - name: Install the example's packages
+        working-directory: examples/expo-app
+        run: npm ci --no-audit --no-fund
+      # The native project is generated, not kept in the repository.
+      - name: Generate the Android project
+        working-directory: examples/expo-app
+        run: npx expo prebuild --platform android --no-install
+      # A release build has the JavaScript bundled into it, so no Metro server
+      # is needed while the flows run. Expo signs it with the debug key. Only
+      # the emulator's x86_64 code is built: all four ABIs take about four
+      # times the native build work and give an APK of 68 MB instead of 22 MB.
+      - name: Build the release APK
+        working-directory: examples/expo-app/android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=x86_64
+      - name: Install Maestro ${{ env.MAESTRO_VERSION }}
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Let the emulator use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # Each line of `script` runs on its own. The flows clear the app's data
+      # before each scenario, as the skills write them.
+      - name: Run the flows on an emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb install -r examples/expo-app/android/app/build/outputs/apk/release/app-release.apk
+            maestro --version
+            maestro test --platform android -e APP_ID=${{ env.APP_ID }} examples/expo-app/test/mobile/sign-in

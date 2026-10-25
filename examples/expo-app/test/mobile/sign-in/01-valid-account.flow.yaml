@@ -1,0 +1,32 @@
+# plan: test/mobile/plan/sign-in.plan.md
+# scenario: 1.1 Valid account reaches the dashboard
+appId: ${APP_ID}
+name: "Valid account reaches the dashboard"
+tags:
+  - sign-in
+---
+- runFlow: ../elements/load.yaml
+# 1. Launch the app with cleared state.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+# 2. On the Sign in screen, type `ada@example.com` into "Email".
+- tapOn:
+    id: ${output.signIn.email}
+- inputText: "ada@example.com"
+# 3. On the Sign in screen, type `correct-horse-battery` into "Password".
+- tapOn:
+    id: ${output.signIn.password}
+- inputText: "correct-horse-battery"
+# 4. On the Sign in screen, tap "Sign in".
+- hideKeyboard
+- tapOn:
+    id: ${output.signIn.signIn}
+# Expect: On the Dashboard screen, "Dashboard" is visible.
+- assertVisible:
+    id: ${output.dashboard.dashboard}
+    text: "Dashboard"
+# Expect: On the Dashboard screen, "Signed in as ada@example.com" is visible.
+- assertVisible:
+    id: ${output.dashboard.signedInAsAdaexamplecom}
+    text: "Signed in as ada@example.com"

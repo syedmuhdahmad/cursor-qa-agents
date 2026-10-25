@@ -169,7 +169,7 @@ A `run` that failed replies with `Failed to run flow:` and the error. An error w
    - A scenario passes a system dialog, or must go back: do section A.
    - No form fits: write one short sentence in the same style and name it under `Not checked:`.
 
-10. **Reply** with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
+10. **Reply** with this form and nothing else, as plain lines with no ``` fence around them. The values shown are examples. A line you have nothing for gets `none`.
 
     ```text
     Plan file: test/mobile/plan/profile.plan.md

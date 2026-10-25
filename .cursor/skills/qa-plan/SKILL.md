@@ -112,7 +112,7 @@ Do the steps in order. In every table, use the first row that matches. When a st
 
    No form fits: write one short sentence in the same style and name it under `Not checked:`.
 
-9. **Close the browser, check the plan file, then reply.** Run `npx --no-install playwright-cli close`. Run it on every path, also after BLOCKED. `Browser 'default' is not open.` is a fine answer. Not BLOCKED: count the `###` headings in the plan file. The count must equal your list from step 6. A scenario is missing: add it now. Then reply with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
+9. **Close the browser, check the plan file, then reply.** Run `npx --no-install playwright-cli close`. Run it on every path, also after BLOCKED. `Browser 'default' is not open.` is a fine answer. Not BLOCKED: count the `###` headings in the plan file. The count must equal your list from step 6. A scenario is missing: add it now. Then reply with this form and nothing else, as plain lines with no ``` fence around them. The values shown are examples. A line you have nothing for gets `none`.
 
    ```text
    Plan file: test/e2e/plan/profile.plan.md

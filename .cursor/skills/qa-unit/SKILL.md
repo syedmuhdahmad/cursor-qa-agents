@@ -14,16 +14,17 @@ When a step says BLOCKED, stop work, go to step 10, and put the sentence after `
 
 ## Steps
 
-1. **Job.**
+1. **Job.** Read `package.json` in the project root first.
 
-   | The prompt names | Do |
+   | Check | Do |
    | --- | --- |
-   | No file, or more than one | Reply `Which file? For example: /qa-unit src/components/ProfileForm.tsx` and stop. |
+   | `package.json` lists `react-native` or `expo` | Reply `This is a React Native app. Use /qa-rn-unit for a Jest test.` and stop. |
+   | The prompt names no file, or more than one | Reply `Which file? For example: /qa-unit src/components/ProfileForm.tsx` and stop. |
    | A path with no file at it, counted from the project root | Do not use a file of the same name in another folder. Reply `No file at that path. Which file?` and stop. |
    | One file under `test/` | Fix job. Go to step 7 and run that file. |
    | Any other file | Write job. Go to step 2. |
 
-2. **Read the source file.** If a text or value comes from a file it imports, read that file too. List 2 to 6 behaviors to test, one line each: what it shows or returns, each branch, each error message. Copy texts exactly. More than 6: keep 6 and name the rest under `Not checked:`.
+2. **Read the source file.** If a text or value comes from a file it imports, read that file too. An import that starts with `@/` names the path after `@/`, counted from the folder that `paths` in `tsconfig.json` gives for `@/*`. List 2 to 6 behaviors to test, one line each: what it shows or returns, each branch, each error message. For a limit on a length or a number, also test the value one step past it, such as a display name of 31 characters for a maximum of 30. Copy texts exactly. More than 6: keep 6 and name the rest under `Not checked:`.
 
 3. **Test file path.**
 
@@ -158,7 +159,7 @@ Read at most one file in `.cursor/skills/qa-unit/references/`.
 
 ## Reply
 
-Reply with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
+Reply with this form and nothing else, as plain lines with no ``` fence around them. The values shown are examples. A line you have nothing for gets `none`.
 
 ```text
 Job: write

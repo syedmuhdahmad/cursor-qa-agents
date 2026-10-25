@@ -70,12 +70,39 @@ Read the end of the output. If a skipped file leaves part of the kit switched of
 | `the hook is not registered, so nothing is guarded` | `.cursor/hooks.json` was skipped, and yours does not start the kit's hook for all three events. |
 | `Vitest runs print no QA-VERDICT line`, and the same for Playwright | A config file was skipped, and yours does not load the reporter from `.cursor/qa/`. The skills then stop with `BLOCKED`. |
 | `the kit's MCP server is not registered` | `.cursor/mcp.json` was skipped and lacks the `maestro` server. |
+| `your app has no Jest config, so Jest has no React Native preset` | A React Native app with no `"jest"` key in `package.json` and no `jest.config.js`. `/qa-rn-unit` then stops with `BLOCKED`. |
+| `the kit cannot read your Jest config` | A React Native app whose Jest config is `jest.config.ts`. |
 
 The command exits with 0 then too.
 
 A `NOTE:` names what an earlier version of the kit left in your app and this version no longer uses. Today that is the Playwright MCP server: an entry in `.cursor/mcp.json` that starts `@playwright/mcp`, and that package in your `package.json`. The installer removes neither. Delete both, unless you use the server yourself.
 
 Not checked: the installer on macOS and Windows, and a merged `hooks.json` or `mcp.json` loaded in Cursor. The installer treats a file with comments in it as not valid JSON.
+
+## A React Native app
+
+The installer looks at your `package.json` first. An app that lists `expo` or `react-native` in its dependencies is a React Native app, and every other app is a web app. The first lines of the output say which it found and why. `--app web` or `--app react-native` sets it by hand, for example for an Expo app that also builds for the web and wants the Vitest and Playwright files:
+
+```bash
+node scripts/install-into.mjs ../my-expo-app --dry-run --app web
+```
+
+In a React Native app it does three things differently:
+
+- **Files.** It leaves out `vitest.config.ts`, `playwright.config.ts`, `test/setup.ts`, and `test/e2e/`. In a React Native app they would load packages that are not installed, and a type check of the app would report them. Everything else in the copy list is copied, `.cursor/` whole, so the Maestro skills and `/qa-rn-unit` come with it.
+- **Dev dependencies.** It adds the README's React Native list: `@testing-library/react-native`, `@types/jest`, `jest`, and `test-renderer`. The ranges are the ones in [`examples/expo-app/package.json`](../examples/expo-app/package.json). `test-renderer` is the line of your React version, as React Native Testing Library asks: `~1.2.0` for React 19.2.
+- **Scripts.** It adds `"test:rn-unit": "jest --config .cursor/qa/jest.config.cjs --ci"` and none of the four web scripts.
+
+Two things it does not do:
+
+- **The preset.** Jest needs the preset of your app, which the installer does not add, because its version follows your Expo SDK or React Native version. For an Expo app run `npx expo install jest-expo` and add `"jest": { "preset": "jest-expo" }` to `package.json`. The installer warns when your app has no Jest config.
+- **Your own Jest config.** The kit does not change it. `/qa-rn-unit` runs Jest with `.cursor/qa/jest.config.cjs`, which loads your config and adds the kit's test folders and reporter. It reads `jest.config.js`, `.cjs`, `.mjs`, `.json`, or `"jest"` in `package.json`, and not a config in TypeScript.
+
+With TypeScript 6 or later, `tsconfig.json` needs `"types": ["jest"]` in `compilerOptions`, or `tsc` does not know `describe`, `it`, `expect`, and `jest` in a test file. TypeScript 6 no longer loads every package under `@types` by itself. Jest itself runs the tests either way.
+
+If a package that ships code Jest cannot parse stops a test with `SyntaxError` or `Cannot use import statement outside a module`, add it to `transformIgnorePatterns` in your Jest config. The skill stops with `BLOCKED` and names the package. It never edits the config.
+
+Checked on the example app, `examples/expo-app`, with Expo SDK 58: `node scripts/test-rn-example.mjs` installs the kit into a copy of it and runs the reference tests. A bare React Native app without Expo was not tried.
 
 ## If your app already has these files
 
@@ -97,7 +124,7 @@ Four lines in `.cursorignore` and four in `.gitignore` start with a slash: `/dis
 ## What the kit puts in your app
 
 ```text
-test/unit/                 Vitest unit tests
+test/unit/                 Vitest unit tests, or Jest unit tests in a React Native app
 test/integration/          Vitest integration tests
 test/e2e/<name>.spec.ts    Playwright specs
 test/e2e/plan/             End-to-end plans
@@ -113,15 +140,18 @@ playwright.config.ts       The end-to-end settings, and the verdict reporter
 .cursorignore              Paths the agent does not read
 .cursor/skills/qa-*/       One skill for each job, with its templates
 .cursor/skills/playwright-cli/  The manual of playwright-cli, copied from its package
+.cursor/skills/security-audit/  Cloudflare's security audit, copied from its repository
 .cursor/agents/qa.md       The /qa router
 .cursor/rules/             Where each kind of test file goes
 .cursor/hooks/             The hook and its tests
 .cursor/hooks.json         Registers the hook with Cursor
 .cursor/mcp.json           The maestro MCP server
-.cursor/qa/                The verdict reporters and the VERSION file
+.cursor/qa/                The verdict reporters, the kit's Jest config, and the VERSION file
 ```
 
 `.cursor/skills/playwright-cli/` is not a job. It is the skill that ships inside the `@playwright/cli` package, version 0.1.22, under Apache-2.0, with its `LICENSE` file. Only the frontmatter of its `SKILL.md` was changed. Each job skill lists the `playwright-cli` commands it needs, and the hook denies many of the others in the manual. You do not need `playwright-cli install --skills` in your app. By its code, which was read and not run, it copies the skill a second time, into `.claude/skills/` or `.agents/skills/`, with the package's own frontmatter.
+
+`.cursor/skills/security-audit/` is Cloudflare's security audit skill at one commit, under the MIT License, with its `LICENSE` file. Only the frontmatter of its `SKILL.md` was changed. It writes its report in `~/security-audit-skill/`, outside your app. See [security-audit.md](security-audit.md).
 
 Unit and integration test files end in `.test.ts` and contain no JSX. The test files and plans are yours. The other paths are the kit's.
 

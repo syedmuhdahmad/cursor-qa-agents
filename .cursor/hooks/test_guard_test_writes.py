@@ -28,6 +28,9 @@ PLAYWRIGHT_COMMAND = "RTK_DISABLED=1 npx playwright test test/e2e/sign-in.spec.t
 # A deny message sets a command or path to copy in backticks.
 RUN_VITEST = f"`{VITEST_COMMAND}`"
 RUN_PLAYWRIGHT = f"`{PLAYWRIGHT_COMMAND}`"
+JEST_COMMAND = "RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/components/SignIn.test.ts"
+RUN_JEST = f"`{JEST_COMMAND}`"
+JEST = "npx jest --config .cursor/qa/jest.config.cjs --ci "
 
 
 def run_hook(stdin, hook=HOOK, started_in=None, home=None):
@@ -860,6 +863,10 @@ class DocumentedCommands(CommandCase):
             # Maestro: a syntax check of one flow, and one run of a feature folder on either platform.
             "maestro --version",
             "maestro check-syntax test/mobile/sign-in/01-valid-account.flow.yaml",
+            # Jest in a React Native app: the kit's config and one path under test/.
+            "RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/components/SignIn.test.ts",
+            "RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/components/ProfileForm.test.ts",
+            "npm run test:rn-unit",
             "maestro check-syntax test/mobile/sign-in/02-wrong-password.flow.yaml",
             "RTK_DISABLED=1 maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/sign-in",
             "RTK_DISABLED=1 maestro test --platform ios --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/sign-in",
@@ -1104,6 +1111,116 @@ class CursorOwnFiles(CommandCase):
             "touch ~/.cursor/projects/app/agent-tools/a.txt",
             "sed -i s/a/b/ ~/.cursor/plans/a.plan.md",
         ], "deny", home=self.home)
+
+
+class SecurityAuditOutput(CommandCase):
+    """The security audit skill writes its run folders in ~/security-audit-skill/ and runs two validators.
+
+    Each test uses a stand-in home directory.
+    """
+
+    FINDINGS = ".cursor/skills/security-audit/validate-findings.cjs"
+    LEDGER = ".cursor/skills/security-audit/validate-coverage-ledger.cjs"
+
+    def setUp(self):
+        """Create an empty home directory."""
+        self.home = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.home)
+
+    def write(self, path, tool_name="Write"):
+        """The hook's decision for a write tool call to a path under the home directory."""
+        target = str(self.home / path)
+        return call(tool_name, {"file_path": target, "content": "{}\n"}, home=self.home)
+
+    def test_write_tools_may_write_a_run_folder(self):
+        """Every file of a run, at any depth, by its absolute path or with ~."""
+        for path in (
+            "security-audit-skill/my-app/run-1/run-metadata.json",
+            "security-audit-skill/my-app/run-1/coverage-ledger.json",
+            "security-audit-skill/my-app/run-1/findings.json",
+            "security-audit-skill/my-app/run-1/REPORT.md",
+            "security-audit-skill/my-app/run-2/agents/hunter-01/scratch/notes.md",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.write(path), "allow")
+        self.assertEqual(write("~/security-audit-skill/my-app/run-1/REPORT.md", home=self.home), "allow")
+        self.assertEqual(self.write("security-audit-skill/my-app/run-1/REPORT.md", "Delete"), "allow")
+
+    def test_nothing_next_to_it(self):
+        """The folder itself, folders of a similar name, a climb out, and the same folder in the project."""
+        for path in (
+            "security-audit-skill",
+            "security-audit-skill/../.bashrc",
+            "security-audit-skill/my-app/../../.ssh/authorized_keys",
+            "security-audit-skill-old/run-1/REPORT.md",
+            "security-audit/my-app/run-1/REPORT.md",
+            ".cursor/security-audit-skill/REPORT.md",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.write(path), "deny")
+        self.assertEqual(self.write("security-audit-skill", "Delete"), "deny")
+        self.assertEqual(write(REPO / "security-audit" / "run-1" / "REPORT.md", home=self.home), "deny")
+        self.assertIn(
+            "~/security-audit-skill/my-app/run-1/",
+            write_message(REPO / "security-audit" / "run-1" / "REPORT.md", home=self.home),
+        )
+
+    def test_links_into_the_project_are_refused(self):
+        """A link inside the folder, or the folder itself linked into the project, cannot point a write at the source."""
+        run = self.home / "security-audit-skill" / "my-app"
+        run.mkdir(parents=True)
+        os.symlink(REPO / "src", run / "run-1")
+        self.assertEqual(self.write("security-audit-skill/my-app/run-1/a.ts"), "deny")
+        shutil.rmtree(self.home / "security-audit-skill")
+        os.symlink(REPO, self.home / "security-audit-skill")
+        self.assertEqual(self.write("security-audit-skill/src/a.ts"), "deny")
+        self.assertEqual(self.write("security-audit-skill/package.json"), "deny")
+
+    def test_folder_may_be_a_link_to_another_place_outside_the_project(self):
+        """~/security-audit-skill kept on another disk and linked from the home directory still works."""
+        elsewhere = self.home / "disk" / "audits"
+        elsewhere.mkdir(parents=True)
+        os.symlink(elsewhere, self.home / "security-audit-skill")
+        self.assertEqual(self.write("security-audit-skill/my-app/run-1/REPORT.md"), "allow")
+
+    def test_shell_commands_may_not_write_there(self):
+        """Only the write tools get this exception."""
+        self.assert_all([
+            "echo x > ~/security-audit-skill/my-app/run-1/REPORT.md",
+            "mkdir -p ~/security-audit-skill/my-app/run-1",
+            "touch ~/security-audit-skill/my-app/run-1/REPORT.md",
+            "rm -rf ~/security-audit-skill/my-app",
+            "cp test/a ~/security-audit-skill/my-app/a",
+        ], "deny", home=self.home)
+
+    def test_validators(self):
+        """node may run one of the two validators on one file of a run, and nothing else."""
+        self.assert_all([
+            f"node {self.FINDINGS} ~/security-audit-skill/my-app/run-1/findings.json",
+            f"node {self.LEDGER} ~/security-audit-skill/my-app/run-1/coverage-ledger.json",
+            f"node {ROOT}/{self.FINDINGS} {self.home}/security-audit-skill/my-app/run-1/findings.json",
+            f"node ./{self.LEDGER} ~/security-audit-skill/my-app/run-1/coverage-ledger.json 2>&1 | tail -40",
+        ], "allow", home=self.home)
+        self.assert_denied_with([
+            "node",
+            "node -e 1",
+            "node test/a.js",
+            f"node {self.FINDINGS}",
+            f"node {self.FINDINGS} src/findings.json",
+            f"node {self.FINDINGS} ~/findings.json",
+            f"node {self.FINDINGS} ~/security-audit-skill",
+            f"node {self.FINDINGS} ~/security-audit-skill/a.json ~/security-audit-skill/b.json",
+            f"node --require ./test/a.js {self.FINDINGS} ~/security-audit-skill/my-app/run-1/findings.json",
+            f"node {self.FINDINGS} --help",
+            "node .cursor/skills/security-audit/validate-findings.test.cjs ~/security-audit-skill/a/f.json",
+            "node .cursor/skills/qa-unit/validate-findings.cjs ~/security-audit-skill/a/f.json",
+        ], "`node` is not available.", "write it in a test file under test/", "The one exception is the security audit",
+            home=self.home)
+        self.assert_denied_with(
+            ["nodejs .cursor/skills/security-audit/validate-findings.cjs ~/security-audit-skill/a/f.json"],
+            "`nodejs` is not available",
+            home=self.home,
+        )
 
 
 class HookInput(unittest.TestCase):
@@ -1486,6 +1603,108 @@ class VitestRuns(CommandCase):
             "npx vitest run --c vitest.config.ts test/unit/a.test.ts",
             "npx vitest run --output-file=test/unit/report.json test/unit/a.test.ts",
         ], "allow")
+
+
+class JestRuns(CommandCase):
+    """A Jest run uses the kit's config and paths under test/. It may not watch, skip tests, or write snapshots."""
+
+    def test_allowed(self):
+        """The command of /qa-rn-unit, every way to spell the config, and the options on the list."""
+        self.assert_all([
+            JEST_COMMAND,
+            JEST + "test/unit/a.test.ts test/unit/b.test.ts",
+            JEST + "test/unit",
+            JEST + "./test/unit/a.test.ts",
+            f"{JEST}{ROOT}/test/unit/a.test.ts",
+            "npx jest -c .cursor/qa/jest.config.cjs --ci test/unit/a.test.ts",
+            # Jest reads -c=X as the config X.
+            "npx jest -c=.cursor/qa/jest.config.cjs --ci test/unit/a.test.ts",
+            "npx jest --ci --config=./.cursor/qa/jest.config.cjs test/unit/a.test.ts",
+            f"npx jest --config {ROOT}/.cursor/qa/jest.config.cjs --ci test/unit/a.test.ts",
+            JEST + "--runInBand --verbose test/unit/a.test.ts",
+            "npx jest --config .cursor/qa/jest.config.cjs --run-in-band -i --ci=true test/unit/a.test.ts",
+            JEST + "-- test/unit/a.test.ts",
+            "npx --no-install jest --config .cursor/qa/jest.config.cjs --ci test/unit/a.test.ts",
+            "node_modules/.bin/jest --config .cursor/qa/jest.config.cjs --ci test/unit/a.test.ts",
+            "npm run test:rn-unit",
+            "npm run test:rn-unit -- test/unit/a.test.ts",
+            "npm run test:rn-unit -- --runInBand test/unit/a.test.ts",
+        ], "allow")
+
+    def test_denied_each_with_its_own_message(self):
+        """Each cause has a message that names it, and repeats the command to run."""
+        for commands, fragments in (
+            ([
+                "npx jest --ci test/unit/a.test.ts",
+                "npx jest --ci --config jest.config.js test/unit/a.test.ts",
+                "npx jest --ci --config test/jest.config.cjs test/unit/a.test.ts",
+                "npx jest --ci --config .cursor/qa/jest.config.cjs --config .cursor/qa/jest.config.cjs test/unit/a.test.ts",
+                "npx jest --config",
+                "jest test/unit/a.test.ts",
+            ], ("must run with the kit's config", RUN_JEST)),
+            ([
+                "npx jest --config .cursor/qa/jest.config.cjs test/unit/a.test.ts",
+                "npx jest -c .cursor/qa/jest.config.cjs --runInBand test/unit/a.test.ts",
+                "RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs test/unit/components/SignIn.test.ts",
+            ], ("must run with `--ci`", "writes a new snapshot", RUN_JEST)),
+            ([
+                JEST.strip(),
+                JEST + "SignIn",
+                JEST + "src/components/SignIn.test.ts",
+                JEST + "test/unit/a.test.ts src/a.test.ts",
+                JEST + "../test/unit/a.test.ts",
+                JEST + "-- SignIn",
+                "npm run test:rn-unit -- SignIn",
+            ], ("Give the full path of each test file, under test/", RUN_JEST)),
+            ([
+                JEST + "-u test/unit/a.test.ts",
+                JEST + "--updateSnapshot test/unit/a.test.ts",
+                JEST + "--update-snapshot test/unit/a.test.ts",
+                "npm run test:rn-unit -- -u",
+            ], ("writes snapshots", "check what the user sees", RUN_JEST)),
+            ([
+                JEST + "--watch test/unit/a.test.ts",
+                JEST + "--watchAll test/unit/a.test.ts",
+                JEST + "--watch-all=true test/unit/a.test.ts",
+                "npm run test:rn-unit -- --watch",
+            ], ("Watch mode never ends", RUN_JEST)),
+            ([
+                JEST + "--passWithNoTests test/unit/a.test.ts",
+                JEST + "--pass-with-no-tests test/unit/a.test.ts",
+            ], ("lets an empty run pass", "QA-VERDICT", RUN_JEST)),
+            ([
+                JEST + "-t 'signs in' test/unit/a.test.ts",
+                JEST + "--testNamePattern=Save test/unit/a.test.ts",
+                JEST + "--test-name-pattern Save test/unit/a.test.ts",
+            ], ("skips the rest. Run the whole file", RUN_JEST)),
+            ([
+                JEST + "--reporters=default test/unit/a.test.ts",
+                JEST + "--json test/unit/a.test.ts",
+                JEST + "--outputFile=test/report.json test/unit/a.test.ts",
+                JEST + "--testResultsProcessor ./x.js test/unit/a.test.ts",
+            ], ("removes the `QA-VERDICT:` line", RUN_JEST)),
+            ([
+                JEST + "--ci=false test/unit/a.test.ts",
+                JEST + "--no-ci test/unit/a.test.ts",
+            ], ("turns off ci mode", RUN_JEST)),
+            ([
+                JEST + "--coverage test/unit/a.test.ts",
+                JEST + "--setupFiles ./x.js test/unit/a.test.ts",
+                JEST + "--rootDir src test/unit/a.test.ts",
+                JEST + "--listTests test/unit/a.test.ts",
+                JEST + "--showConfig test/unit/a.test.ts",
+                JEST + "-iu test/unit/a.test.ts",
+                JEST + "-w 4 test/unit/a.test.ts",
+                JEST + "--verbose=false test/unit/a.test.ts",
+                "npm run test:rn-unit -- --config jest.config.js",
+            ], ("is not allowed with jest", "--runInBand or --verbose")),
+        ):
+            self.assert_denied_with(commands, *fragments)
+
+    def test_npx_may_fetch_jest_only_as_the_runner(self):
+        """`--package jest` names the runner. Another package, or a shell string, is denied."""
+        self.assertEqual(shell("npx --package jest jest --config .cursor/qa/jest.config.cjs --ci test/unit/a.test.ts"), "allow")
+        self.assert_denied_with(["npx --package jest-cli jest test/unit/a.test.ts", "npx -c 'jest test/unit'"], "npx may only run")
 
 
 class PlaywrightRuns(CommandCase):
@@ -3002,6 +3221,42 @@ class FileContent(ProjectCase):
                 text = self.message(path, f"// a test\n{line}\n")
                 self.assertIn(f"`{path}` is blocked: the new text adds `{token}`.", text)
                 self.assertIn(advice, text)
+
+    def test_jest_skip_only_and_snapshot_calls(self):
+        """Jest's xit, xtest, xdescribe, fit, and fdescribe, and the snapshot matchers of Jest and Vitest."""
+        for line, token, advice in (
+            ("xit('saves', () => {})", "xit(", "A skipped test counts as a failure"),
+            ("xtest('saves', () => {})", "xtest(", "A skipped test counts as a failure"),
+            ("  xdescribe('ProfileForm', () => {})", "xdescribe(", "A skipped test counts as a failure"),
+            ("fit('saves', () => {})", "fit(", "pass its file to the test command"),
+            ("});fdescribe('ProfileForm', () => {})", "fdescribe(", "pass its file to the test command"),
+            ("expect(screen.toJSON()).toMatchSnapshot()", "toMatchSnapshot(", "Check what the user sees"),
+            ("expect(screen.toJSON()).toMatchInlineSnapshot()", "toMatchInlineSnapshot(", "Check what the user sees"),
+            ("expect(() => save()).toThrowErrorMatchingSnapshot()", "toThrowErrorMatchingSnapshot(", "Check what the user sees"),
+            ("expect(() => save()).toThrowErrorMatchingInlineSnapshot()", "toThrowErrorMatchingInlineSnapshot(", "Check what the user sees"),
+        ):
+            with self.subTest(token=token):
+                text = self.message("test/unit/components/ProfileCard.test.ts", f"// a test\n{line}\n")
+                self.assertIn(f"the new text adds `{token}`.", text)
+                self.assertIn(advice, text)
+
+    def test_jest_names_inside_other_names_are_allowed(self):
+        """A word that ends in fit or xit, a method called fit, and a name that starts with xit."""
+        for line in (
+            "const benefit = (x) => x\nbenefit(1)",
+            "expect(layout.fit(2)).toBe(4)",
+            "const profit = calc.profit(3)",
+            "xitem(1)",
+            "const snapshot = store.getSnapshot()",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(self.write("test/unit/a.test.ts", line + "\n"), "allow")
+
+    def test_a_snapshot_already_in_the_file_does_not_block_an_edit(self):
+        """Only a new snapshot is denied. An app's own test may keep the ones it has."""
+        self.file("test/unit/a.test.ts", "expect(tree).toMatchSnapshot()\n")
+        self.assertEqual(self.write("test/unit/a.test.ts", "expect(tree).toMatchSnapshot()\nexpect(1).toBe(1)\n"), "allow")
+        self.assertEqual(self.write("test/unit/a.test.ts", "expect(tree).toMatchSnapshot()\nexpect(b).toMatchSnapshot()\n"), "deny")
 
     def test_text_in_a_comment_or_a_string_counts(self):
         """The match is on plain text. The rule is easy to predict, and a comment has no need for the text."""

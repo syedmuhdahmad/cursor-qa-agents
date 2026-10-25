@@ -8,8 +8,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import {
+  APPS,
+  DEFAULT_APP,
   EVAL_ROOT,
-  EXAMPLE,
   EvalError,
   INODE_MARGIN,
   KIT_ROOT,
@@ -18,6 +19,7 @@ import {
   cleanRun,
   countTree,
   diffOfRun,
+  exampleOf,
   fill,
   fillForm,
   git,
@@ -33,6 +35,7 @@ import {
   relinkRun,
   replyForm,
   routeOf,
+  runnerOf,
   splitFrontmatter,
   sweepHolders,
   tempHolder,
@@ -40,6 +43,8 @@ import {
 } from './lib.mjs'
 import { readRecords, table } from './report.mjs'
 import {
+  FORBIDDEN_TOKENS,
+  addedTokens,
   changedLineCount,
   changedPaths,
   contentProblems,
@@ -51,6 +56,7 @@ import {
   namesFileLine,
   quotedTexts,
   readClaim,
+  readJestReport,
   readPlaywrightReport,
   readVitestReport,
   recordLine,
@@ -63,7 +69,7 @@ import {
 } from './score.mjs'
 
 const count = (text, token) => text.split(token).length - 1
-const example = (file) => readFileSync(join(EXAMPLE, file), 'utf8')
+const example = (file, app = DEFAULT_APP) => readFileSync(join(exampleOf(app), file), 'utf8')
 
 test('globs: * stays in one folder, ** crosses folders', () => {
   assert.ok(globToRegExp('test/e2e/pages/*-page.ts').test('test/e2e/pages/sign-in-page.ts'))
@@ -344,6 +350,74 @@ test('own run (Vitest): the other rows of the verdict rules', () => {
   assert.deepEqual([hook.verdict, hook.reason], ['FAIL', 'an error happened outside a test: Error: beforeAll broke'])
   const timedOut = readVitestReport(vitestReport([['a', 'failed', ['Error: Test timed out in 5000ms.\nIf this is a long-running test, pass a timeout value']]]), { exitCode: 1 })
   assert.equal(timedOut.tests[0].timedOut, true)
+})
+
+// The shape of Jest 30's JSON report (--json), cut down to what the scorer
+// reads. Each row: title, status, and more fields of the assertion result.
+const jestReport = (tests, { file = {}, ...extra } = {}) => ({
+  success: true,
+  wasInterrupted: false,
+  snapshot: { added: 0, updated: 0 },
+  testResults: [
+    {
+      status: tests.some(([, status]) => status === 'failed') ? 'failed' : 'passed',
+      message: '',
+      assertionResults: tests.map(([title, status, more = {}]) => ({ title, fullName: `SignIn ${title}`, status, failureMessages: [], invocations: 1, retryReasons: [], ...more })),
+      ...file,
+    },
+  ],
+  ...extra,
+})
+
+test('own run (Jest): a pass needs exit code 0 and every test passing on its first try', () => {
+  const read = (tests, options = {}, extra) => {
+    const found = readJestReport(jestReport(tests, extra), { exitCode: 0, ...options })
+    return [found.verdict, found.reason]
+  }
+  assert.deepEqual(read([['a', 'passed'], ['b', 'passed']]), ['PASS', ''])
+  assert.deepEqual(read([['a', 'passed'], ['b', 'failed', { failureMessages: ['Error: expect(received).toBe(expected)'] }]], { exitCode: 1 }), ['FAIL', ''])
+  // What Jest 30.5 wrote for a test that failed once and passed under
+  // jest.retryTimes(2): status "passed", 2 invocations, no retry reasons, exit code 0.
+  const retried = readJestReport(jestReport([['a', 'passed'], ['b', 'passed', { invocations: 2 }]]), { exitCode: 0 })
+  assert.deepEqual([retried.verdict, retried.passed, retried.flaky, retried.reason], ['FAIL', 1, 1, 'a test passed only on a retry'])
+  assert.deepEqual(read([['a', 'passed'], ['b', 'passed', { retryReasons: ['Error: x'] }]]), ['FAIL', 'a test passed only on a retry'])
+  // xit, it.skip, describe.skip, and the tests a stray fit leaves out are "pending". Jest exits with 0.
+  assert.deepEqual(read([['a', 'passed'], ['b', 'pending']]), ['FAIL', 'skipped or todo tests count as a failure'])
+  assert.deepEqual(read([['a', 'passed'], ['b', 'todo']]), ['FAIL', 'skipped or todo tests count as a failure'])
+  assert.deepEqual(read([['a', 'passed'], ['b', 'disabled']]), ['FAIL', 'skipped or todo tests count as a failure'])
+  assert.equal(readJestReport(jestReport([['a', 'passed'], ['b', 'pending'], ['c', 'todo']])).skipped, 2)
+  assert.deepEqual(read([]), ['FAIL', 'no tests ran'])
+  assert.deepEqual(read([['a', 'passed']], { exitCode: 1 }), ['FAIL', 'an error happened outside a test: the runner exited with code 1'])
+  assert.deepEqual(read([['a', 'passed']], { exitCode: null }), ['FAIL', 'an error happened outside a test: the runner was stopped before it could exit'])
+  assert.deepEqual(read([['a', 'passed']], {}, { success: false }), ['FAIL', 'the runner reports no success'])
+  assert.deepEqual(read([['a', 'passed']], {}, { wasInterrupted: true }), ['FAIL', 'the run was interrupted'])
+  assert.deepEqual(read([['a', 'passed']], {}, { snapshot: { added: 1, updated: 0 } }), ['FAIL', 'a snapshot was written or updated'])
+})
+
+test('own run (Jest): a test file that could not run', () => {
+  // What Jest 30.5 wrote for an import of a file that is not there, and for a failing afterAll.
+  const notLoaded = readJestReport(
+    jestReport([], { file: { status: 'failed', message: "  \u001b[1m● \u001b[22mTest suite failed to run\n\n    Cannot find module '../../../lib/does-not-exist' from 'test/unit/exp/noload.test.ts'\n" }, success: false }),
+    { exitCode: 1 },
+  )
+  assert.deepEqual([notLoaded.verdict, notLoaded.reason], ['FAIL', "the file did not load: Cannot find module '../../../lib/does-not-exist' from 'test/unit/exp/noload.test.ts'"])
+  const afterAll = readJestReport(jestReport([['a', 'passed']], { file: { status: 'failed', message: '\n\n  ● Test suite failed to run\n\n    afterAll broke\n' }, success: false }), { exitCode: 1 })
+  assert.deepEqual([afterAll.verdict, afterAll.passed, afterAll.reason], ['FAIL', 1, 'an error happened outside a test: afterAll broke'])
+  const timedOut = readJestReport(jestReport([['a', 'failed', { failureMessages: ['Error: thrown: "Exceeded timeout of 5000 ms for a test.\nAdd a timeout value to this test'] }]]), { exitCode: 1 })
+  assert.equal(timedOut.tests[0].timedOut, true)
+  assert.equal(readJestReport(jestReport([['a', 'failed', { failureMessages: ['Error: expect(received).toBe(expected)'] }]])).tests[0].timedOut, false)
+})
+
+test('forbidden tokens: Jest\'s skip, only, and snapshot calls count as the hook counts them', () => {
+  for (const token of ['xit(', 'xtest(', 'xdescribe(', 'fit(', 'fdescribe(', 'toMatchSnapshot(', 'toMatchInlineSnapshot(', 'toThrowErrorMatchingSnapshot(', 'toThrowErrorMatchingInlineSnapshot(']) {
+    assert.ok(FORBIDDEN_TOKENS.some((entry) => entry.token === token), token)
+  }
+  assert.deepEqual(addedTokens('', "xit('a', () => {})\nfit('b', () => {})\n  xdescribe('c', () => {})"), ['xit(', 'xdescribe(', 'fit('])
+  assert.deepEqual(addedTokens('', "expect(tree).toMatchSnapshot()\nexpect(() => f()).toThrowErrorMatchingInlineSnapshot(`x`)"), ['toMatchSnapshot(', 'toThrowErrorMatchingInlineSnapshot('])
+  // Not a Jest global: another word that ends in `fit(` or `xit(`, a method of the same name, or a name without a call.
+  assert.deepEqual(addedTokens('', "benefit(1)\nform.fit(2)\nexit(0)\nconst toMatchSnapshot = 1\nit('fits', () => {})"), [])
+  assert.deepEqual(addedTokens("xit('a', () => {})\n", "xit('a', () => {})\n"), [], 'a token that was there at the baseline is not added')
+  assert.deepEqual(addedTokens('', "it.skip('a', () => {})\ntest.only('b', () => {})"), ['.only(', '.skip('])
 })
 
 // The shape of Playwright's JSON report, cut down to what the scorer reads.
@@ -718,17 +792,29 @@ test('summary and record lines', () => {
 
 const cases = listCaseIds().map(loadCase)
 
-test('cases: the nine that the eval promises are there', () => {
+test('cases: the thirteen that the eval promises are there', () => {
   for (const id of ['unit-ui', 'unit-plain', 'integration-api', 'fix-unit', 'unit-product-bug', 'e2e-plan', 'e2e-generate', 'e2e-heal-locator', 'e2e-heal-product-bug']) {
-    assert.ok(cases.some((testCase) => testCase.id === id), id)
+    assert.ok(cases.some((testCase) => testCase.id === id && testCase.app === 'next-app'), id)
   }
+  // The React Native cases mirror four of the next-app ones, with the same user texts after the skill name.
+  const mirror = { 'rn-unit-ui': 'unit-ui', 'rn-unit-plain': 'unit-plain', 'rn-fix-unit': 'fix-unit', 'rn-unit-product-bug': 'unit-product-bug' }
+  for (const [id, web] of Object.entries(mirror)) {
+    const testCase = cases.find((entry) => entry.id === id)
+    assert.ok(testCase, id)
+    assert.deepEqual([testCase.app, testCase.skill, testCase.server, runnerOf(testCase)], ['expo-app', 'qa-rn-unit', null, 'jest'], id)
+    assert.equal(testCase.user.replace('/qa-rn-unit ', ''), loadCase(web).user.replace('/qa-unit ', ''), `${id} has the user text of ${web}`)
+  }
+  assert.equal(loadCase('rn-fix-unit').user, loadCase('rn-unit-product-bug').user, 'the fix case and the product-bug case cannot be told apart by their text')
+  assert.deepEqual(Object.keys(APPS), ['next-app', 'expo-app'])
 })
 
 for (const testCase of cases) {
-  test(`case ${testCase.id}: fits examples/next-app`, () => {
-    for (const file of testCase.setup.remove) assert.ok(existsSync(join(EXAMPLE, file)), `${file} to remove is in the example`)
+  const exampleFile = (file) => example(file, testCase.app)
+  test(`case ${testCase.id}: fits examples/${testCase.app}`, () => {
+    const exampleDir = exampleOf(testCase)
+    for (const file of testCase.setup.remove) assert.ok(existsSync(join(exampleDir, file)), `${file} to remove is in the example`)
     for (const edit of testCase.setup.edits) {
-      const text = example(edit.file)
+      const text = exampleFile(edit.file)
       assert.equal(count(text, edit.find), 1, `setup edit of ${edit.file} matches once`)
       if (typeof edit.line === 'number') {
         assert.equal(text.slice(0, text.indexOf(edit.find)).split('\n').length, edit.line, `setup edit of ${edit.file} is on line ${edit.line}`)
@@ -736,13 +822,13 @@ for (const testCase of cases) {
       assert.notEqual(edit.find, edit.replace)
     }
     for (const mutant of testCase.expect.mutants ?? []) {
-      assert.equal(count(example(mutant.file), mutant.find), 1, `the change "${mutant.note}" matches ${mutant.file} once`)
+      assert.equal(count(exampleFile(mutant.file), mutant.find), 1, `the change "${mutant.note}" matches ${mutant.file} once`)
       assert.ok(!mutant.file.startsWith('test/'), 'a mutant changes the app, not a test')
     }
-    assert.ok(existsSync(join(EXAMPLE, testCase.expect.file)), `${testCase.expect.file} is a reference file in the example`)
+    assert.ok(existsSync(join(exampleDir, testCase.expect.file)), `${testCase.expect.file} is a reference file in the example`)
     assert.ok(matchesAny(testCase.expect.file, testCase.expect.mayWrite), 'the expected file is one the case may write')
     for (const file of testCase.reference.restore) {
-      assert.ok(existsSync(join(EXAMPLE, file)), `${file} to restore is in the example`)
+      assert.ok(existsSync(join(exampleDir, file)), `${file} to restore is in the example`)
       assert.ok(matchesAny(file, testCase.expect.mayWrite), `${file} to restore is one the case may write`)
     }
     if (testCase.expect.bug) {
@@ -774,6 +860,11 @@ for (const testCase of cases) {
     assert.ok(form.fields.includes('Verdict') && form.fields.includes('Not checked'))
     for (const field of Object.keys(testCase.reference.reply)) {
       assert.ok(form.fields.includes(field), `the form of ${testCase.skill} has the line "${field}:" that the reference reply fills in`)
+    }
+    if (runnerOf(testCase) === 'jest') {
+      // The reference reply of a Jest case names the command the skill teaches, with the case's own file.
+      assert.equal(testCase.reference.reply.Command, `RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci ${testCase.expect.file}`)
+      assert.ok(skillText.includes('RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/'), `${testCase.skill} teaches that command`)
     }
     // The scorer takes DONE as "it worked" only for a job that ends with a file and no test run.
     const formSaysDone = form.lines.some((line) => /^Verdict:\s*DONE\b/.test(line))
@@ -845,7 +936,8 @@ test('README: the commands work from any clone and say where runs belong', () =>
   for (const line of readme.split('\n').filter((entry) => /^\s*(node|agent) /.test(entry) || entry.includes('$(node '))) {
     assert.ok(!/node eval\//.test(line) || !/RUNS\/[\w-]+\/sandbox/.test(line), `a command that runs in a sandbox does not use a path relative to the clone: ${line.trim()}`)
   }
-  for (const word of ['tmpfs', 'inode', '--clean', '--relink', '--running-servers', 'playwright-cli', 'browser-open', 'Google Chrome']) assert.ok(readme.includes(word), `the README says "${word}"`)
+  for (const word of ['tmpfs', 'inode', '--clean', '--relink', '--running-servers', 'playwright-cli', 'browser-open', 'Google Chrome', 'examples/expo-app', '--only rn', 'Jest']) assert.ok(readme.includes(word), `the README says "${word}"`)
+  for (const testCase of cases) assert.ok(readme.includes(`| \`${testCase.id}\` |`), `the cases table of the README has a row for ${testCase.id}`)
 })
 
 // --- The browser route: playwright-cli, no MCP server -----------------------------

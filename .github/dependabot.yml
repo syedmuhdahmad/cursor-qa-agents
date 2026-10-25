@@ -46,6 +46,35 @@ updates:
           - "@types/react"
           - "@types/react-dom"
 
+  # The React Native example app. Its package.json also holds the version
+  # ranges that scripts/install-into.mjs gives a React Native app for the dev
+  # dependencies in README.md's React Native list, so they stay current here.
+  # Expo pins the versions of react, react-native, and its own packages to one
+  # SDK: move the SDK with `npx expo install expo@latest --fix` on a branch,
+  # not package by package.
+  - package-ecosystem: npm
+    directory: /examples/expo-app
+    schedule:
+      interval: weekly
+    groups:
+      testing:
+        patterns:
+          - jest
+          - jest-expo
+          - "@types/jest"
+          - "@testing-library/*"
+          - test-renderer
+    ignore:
+      - dependency-name: expo
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react-native
+      - dependency-name: react
+      - dependency-name: "expo-*"
+        update-types: ["version-update:semver-major"]
+      # Its major version is the Expo SDK, so it moves with expo.
+      - dependency-name: jest-expo
+        update-types: ["version-update:semver-major"]
+
   # The actions that .github/workflows/ pins.
   - package-ecosystem: github-actions
     directory: /

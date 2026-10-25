@@ -23,7 +23,10 @@ mobile:
   - changed-files:
       - any-glob-to-any-file:
           - .cursor/skills/qa-mobile-*/**
+          - .cursor/skills/qa-rn-unit/**
           - .cursor/rules/mobile-test-conventions.mdc
+          - .cursor/qa/jest*
+          - examples/expo-app/**
           - docs/mobile.md
 
 ci:
@@ -44,3 +47,5 @@ dependencies:
           - package.json
           - package-lock.json
           - examples/next-app/package.json
+          - examples/expo-app/package.json
+          - examples/expo-app/package-lock.json

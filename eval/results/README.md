@@ -17,12 +17,12 @@ Rounds 1 to 3 ran outside Cursor, with two stand-in models. Round 4 ran in Curso
 | `claude-haiku-4-5 (low-tier proxy)` | Claude Haiku 4.5 | A low-cost model in Cursor |
 | `claude-sonnet-5-5 (mid-tier proxy)` | Claude Sonnet 5.5 | A mid-tier model in Cursor |
 
-The models of round 4 are the ones Cursor offers under these ids:
+The models of round 4 are the ones Cursor offers under these ids. The tier column uses the tiers set on 2026-10-10 in [issue 39](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/39). Round 4 was written before that, and called Composer 2.5 the low tier and Claude Opus 5 the mid tier.
 
 | `model` in `runs.jsonl` | Model, as the agent's stream names it | Tier |
 | --- | --- | --- |
-| `composer-2.5` | Composer 2.5 | Low |
-| `claude-opus-5-high` | Claude Opus 5 300K High No Thinking | Mid |
+| `composer-2.5` | Composer 2.5 | Mid |
+| `claude-opus-5-high` | Claude Opus 5 300K High No Thinking | High |
 
 For each run of rounds 1 to 3:
 

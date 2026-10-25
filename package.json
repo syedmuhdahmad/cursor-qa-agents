@@ -20,9 +20,11 @@
     "test:e2e:list": "playwright test --list",
     "test:hook": "python3 -m unittest discover -s .cursor/hooks",
     "test:reporters": "node --test \".cursor/qa/*.test.mjs\"",
+    "test:audit-skill": "node --test \".cursor/skills/security-audit/*.test.cjs\"",
     "lint:md": "markdownlint-cli2",
     "typecheck": "tsc --noEmit",
-    "check:playwright-cli-skill": "node scripts/ci/playwright-cli-skill.mjs"
+    "check:playwright-cli-skill": "node scripts/ci/playwright-cli-skill.mjs",
+    "check:security-audit-skill": "node scripts/ci/security-audit-skill.mjs"
   },
   "devDependencies": {
     "@playwright/cli": "^0.1.22",

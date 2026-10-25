@@ -102,12 +102,12 @@ Do the steps in order. In every table, use the first row that matches. When a st
 
    A run here that says `FAIL`: go to step 9 with `Verdict: FAIL` and that `QA-VERDICT:` line under `After:`. No `QA-VERDICT:` line: BLOCKED, as in step 7.
 
-9. **Reply** with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`. Write the first six lines once for each failure you worked on. Nothing failed: write them once, with `none` on the first five.
+9. **Reply** with this form and nothing else, as plain lines with no ``` fence around them. The values shown are examples. A line you have nothing for gets `none`. Write the first six lines once for each failure you worked on. Nothing failed: write them once, with `none` on the first five.
 
    ```text
    Test: A taken name shows an error, test/e2e/profile.spec.ts:41
    Class: Product bug
-   Cause: the alert shows "Name unavailable" and plan line 3.1 expects "That name is taken"
+   Cause: the alert shows "Name unavailable" and plan scenario 3.1 expects "That name is taken"
    Fix: test.fixme at test/e2e/profile.spec.ts:41, product bug at src/components/ProfileForm.tsx:9
    Before: Received: "Name unavailable"
    After: QA-VERDICT: PASS-WITH-FIXME (passed 3, failed 0, skipped 0, fixme 1, files 1)
