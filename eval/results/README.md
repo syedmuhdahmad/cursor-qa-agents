@@ -17,7 +17,7 @@ Rounds 1 to 3 ran outside Cursor, with two stand-in models. Round 4 ran in Curso
 | `claude-haiku-4-5 (low-tier proxy)` | Claude Haiku 4.5 | A low-cost model in Cursor |
 | `claude-sonnet-5-5 (mid-tier proxy)` | Claude Sonnet 5.5 | A mid-tier model in Cursor |
 
-The models of rounds 4 and 5 are the ones Cursor offers under these ids. The tier column uses the tiers set on 2026-10-10 in [issue 39](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/39). Round 4 was written before that, and called Composer 2.5 the low tier and Claude Opus 5 the mid tier.
+The models of rounds 4 and 5 are the ones Cursor offers under these ids. The tier column uses the tiers set on 2026-10-10 in [issue 39](https://github.com/syedmuhdahmad/qa-agent-kit/issues/39). Round 4 was written before that, and called Composer 2.5 the low tier and Claude Opus 5 the mid tier.
 
 | `model` in `runs.jsonl` | Model, as the agent's stream names it | Tier |
 | --- | --- | --- |
@@ -149,7 +149,7 @@ The label `round-4-old-kit` holds six runs of 2026-10-10. They ran the same way 
 
 <!-- results:round-5 -->
 
-Round 5 is the first round with the three tiers that [issue 39](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/39) set, and the first with the four React Native cases on `examples/expo-app`. It ran from a git worktree of commit `090c6d1`, with the Cursor CLI version `2026.10.22-27dcf5f`, in the way round 4 did, with one change: `ECC_HOOKS_ENABLED=false` in front of every `agent` command. On the machine of the round, the CLI also ran the hooks of a Claude Code plugin from `~/.claude/plugins`, and one of them denied the first write of every run. The variable turns that plugin off for one process and changes no file. The kit's hook ran as before.
+Round 5 is the first round with the three tiers that [issue 39](https://github.com/syedmuhdahmad/qa-agent-kit/issues/39) set, and the first with the four React Native cases on `examples/expo-app`. It ran from a git worktree of commit `090c6d1`, with the Cursor CLI version `2026.10.22-27dcf5f`, in the way round 4 did, with one change: `ECC_HOOKS_ENABLED=false` in front of every `agent` command. On the machine of the round, the CLI also ran the hooks of a Claude Code plugin from `~/.claude/plugins`, and one of them denied the first write of every run. The variable turns that plugin off for one process and changes no file. The kit's hook ran as before.
 
 | Case | Composer 2.5 | Gemini 3.8 Flash | Claude Opus 5 |
 | --- | --- | --- | --- |

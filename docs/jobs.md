@@ -4,15 +4,15 @@ This file holds the detail behind [Start a job](../README.md#start-a-job) in the
 
 ## Notes on each job
 
-- **`/qa-unit`** mirrors the source path and drops a leading `src/` or `app/`: `src/components/SignIn.tsx` gets `test/unit/components/SignIn.test.ts`. A `.tsx` or `.jsx` file gets a jsdom test. A file named `route.ts`, or under an `api/` folder, goes to `test/integration/`. Say `unit test` or `integration` in the prompt to choose the folder yourself. Give it a test file, and it runs that file and fixes it in at most three rounds.
-- **`/qa-plan`** opens the feature in the browser. `/qa-plan sign-in` opens `http://localhost:3000/sign-in`. If the app or the page is somewhere else, say so, and give a test account if the feature needs one: `/qa-plan checkout. Base URL http://localhost:4000. Route /cart/checkout. Test account ada@example.com / correct-horse-battery.`
+- **`/qa-unit`** mirrors the source path and drops a leading `src/` or `app/`: `src/components/ProfileForm.tsx` gets `test/unit/components/ProfileForm.test.ts`. A `.tsx` or `.jsx` file gets a jsdom test. A file named `route.ts`, or under an `api/` folder, goes to `test/integration/`. Say `unit test` or `integration` in the prompt to choose the folder yourself. Give it a test file, and it runs that file and fixes it in at most three rounds.
+- **`/qa-plan`** opens the feature in the browser. `/qa-plan profile` opens `http://localhost:3000/profile`. If the app or the page is somewhere else, say so, and give a test account if the feature needs one: `/qa-plan checkout. Base URL http://localhost:4000. Route /cart/checkout. Test account grace@example.org / profile-test-1.`
 - **`/qa-generate`** has two parts. The first uses the browser and writes the page classes. The second writes the spec and runs it. Ask for one part with `page classes only` or `spec only` after the path of the plan.
 - **`/qa-heal`** runs one spec and fixes the test, one line at a time, in at most three rounds. It also takes a spec that fails with no failing test: a test marked `.skip` or `.only`, or a spec that does not load. It removes the mark, or corrects the import, and runs the spec again.
-- **`/qa-rn-unit`** writes or fixes one Jest test in a React Native or Expo app, the way `/qa-unit` does for Vitest. It mirrors the source path under `test/unit/`, also when the app keeps its own tests in `__tests__/` folders. It renders a component with `@testing-library/react-native`, finds elements by role, label, or text, and drives them with `userEvent`. It writes no snapshot, and the hook denies the snapshot matchers. It runs the test with the kit's Jest config: `RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/components/SignIn.test.ts`. It writes tests for components and plain functions, and not yet for hooks or navigation. In a web app it replies `This is not a React Native app. Use /qa-unit for a web app.`, and `/qa-unit` in a React Native app replies `This is a React Native app. Use /qa-rn-unit for a Jest test.`
+- **`/qa-rn-unit`** writes or fixes one Jest test in a React Native or Expo app, the way `/qa-unit` does for Vitest. It mirrors the source path under `test/unit/`, also when the app keeps its own tests in `__tests__/` folders. It renders a component with `@testing-library/react-native`, finds elements by role, label, or text, and drives them with `userEvent`. It writes no snapshot, and the hook denies the snapshot matchers. It runs the test with the kit's Jest config: `RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/components/ProfileForm.test.ts`. It writes tests for components and plain functions, and not yet for hooks or navigation. In a web app it replies `This is not a React Native app. Use /qa-unit for a web app.`, and `/qa-unit` in a React Native app replies `This is a React Native app. Use /qa-rn-unit for a Jest test.`
 
 Every web job needs the app on this machine. `/qa-plan` and the first part of `/qa-generate` open it in a browser with `playwright-cli`, and the hook lets that browser open only `http://localhost` and `http://127.0.0.1`, with any port. `/qa-heal` and the second part of `/qa-generate` run tests, and the hook allows a test run only against the same two hosts. With another host in the prompt, all three skills stop with `BLOCKED: the tests run only against an app on this machine.`
 
-`/qa` and a plain request, such as "Write a unit test for src/components/SignIn.tsx", also work. [`AGENTS.md`](../AGENTS.md) is always in the model's context, and it has a table from the kind of request to the one skill file to read. `/qa` asks the model to hand the request to the subagent in [`.cursor/agents/qa.md`](../.cursor/agents/qa.md), which has the same table. On both routes the model must pick the skill file and read it. With a slash skill, Cursor attaches the skill's text to your message. Whether a skill name that is typed or pasted, and not picked from the menu, attaches the skill was not checked.
+`/qa` and a plain request, such as "Write a unit test for src/components/ProfileForm.tsx", also work. [`AGENTS.md`](../AGENTS.md) is always in the model's context, and it has a table from the kind of request to the one skill file to read. `/qa` asks the model to hand the request to the subagent in [`.cursor/agents/qa.md`](../.cursor/agents/qa.md), which has the same table. On both routes the model must pick the skill file and read it. With a slash skill, Cursor attaches the skill's text to your message. Whether a skill name that is typed or pasted, and not picked from the menu, attaches the skill was not checked.
 
 The examples inside the skills come from an imaginary app with a profile form, not from `examples/next-app`. The evaluation runs on the example app, so no skill shows the answer to a case.
 
@@ -23,8 +23,8 @@ The examples inside the skills come from an imaginary app with a profile form, n
 - Ask for generate in two prompts. The first uses the browser, and the second does not:
 
   ```text
-  /qa-generate test/e2e/plan/sign-in.plan.md page classes only
-  /qa-generate test/e2e/plan/sign-in.plan.md spec only
+  /qa-generate test/e2e/plan/profile.plan.md page classes only
+  /qa-generate test/e2e/plan/profile.plan.md spec only
   ```
 
 - When the reply says `BLOCKED`, do what the line says and ask again.
@@ -89,17 +89,17 @@ If your app runs somewhere else, start it yourself and set `BASE_URL` for your o
 BASE_URL=http://localhost:4000 npm run test:e2e
 ```
 
-In a prompt, name the address in words: `/qa-plan sign-in. Base URL http://localhost:4000.` The agent's own test commands and browser commands accept only `localhost` and `127.0.0.1`.
+In a prompt, name the address in words: `/qa-plan profile. Base URL http://localhost:4000.` The agent's own test commands and browser commands accept only `localhost` and `127.0.0.1`.
 
 ## The reply form
 
-This is a reply to `/qa-unit src/components/SignIn.tsx`:
+This is a reply to `/qa-unit src/components/ProfileForm.tsx`:
 
 ```text
 Job: write
-Source: src/components/SignIn.tsx
-Test file: test/unit/components/SignIn.test.ts
-Command: RTK_DISABLED=1 npx vitest run test/unit/components/SignIn.test.ts
+Source: src/components/ProfileForm.tsx
+Test file: test/unit/components/ProfileForm.test.ts
+Command: RTK_DISABLED=1 npx vitest run test/unit/components/ProfileForm.test.ts
 Cause: none
 Fix: none
 Before: none
@@ -118,7 +118,7 @@ Each skill has its own lines, and two lines are in every form:
   | `PASS` | The last test run passed. For Vitest and Playwright that means its `QA-VERDICT:` line says `PASS`, or `PASS-WITH-FIXME` in Playwright. |
   | `FAIL` | The last test run did not pass. A fix job stops after 3 rounds, with `FAIL` when the test still fails. |
   | `BLOCKED:` | The agent stopped. The words after it say what you need to do, such as start the app. Do it and ask again. |
-  | `DONE` | The job runs no test and its file is written: a plan from `/qa-plan` or `/qa-mobile-plan`, and `/qa-generate` with `page classes only`. |
+  | `DONE` | The job runs no test and its file is written: a plan from `/qa-plan` or `/qa-mobile-plan`, `/qa-generate` with `page classes only`, and `/qa-mobile-generate` with `element files only`. |
 
 - `Not checked:` is the last line. It says what the agent did not run or verify.
 

@@ -125,7 +125,7 @@ function check(manifest) {
 }
 
 async function fetchOk(url, headers = {}) {
-  const response = await fetch(url, { headers: { 'User-Agent': 'cursor-qa-agents', ...headers } })
+  const response = await fetch(url, { headers: { 'User-Agent': 'qa-agent-kit', ...headers } })
   if (!response.ok) fail(`GET ${url} answered ${response.status} ${response.statusText}.`)
   return response
 }

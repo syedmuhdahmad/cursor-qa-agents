@@ -127,7 +127,7 @@ What the run does not show:
 
 ## Round 5, three tiers
 
-Scored on 2026-10-25, with the kit at commit `090c6d1`, in Cursor's agent, the way round 4 ran. It is the first round with the three tiers of [issue 39](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/39) and with the four React Native cases on `examples/expo-app`, which run with Jest.
+Scored on 2026-10-25, with the kit at commit `090c6d1`, in Cursor's agent, the way round 4 ran. It is the first round with the three tiers of [issue 39](https://github.com/syedmuhdahmad/qa-agent-kit/issues/39) and with the four React Native cases on `examples/expo-app`, which run with Jest.
 
 | Tier | Model | Runs passed |
 | --- | --- | --- |
@@ -149,7 +149,7 @@ What round 5 does not show:
 
 ## Round 4, in Cursor's agent
 
-Scored on 2026-10-09, with the kit at commit `611d6fd`. Round 4 is the first round in which Cursor itself did the work: the Cursor CLI started Cursor's agent in each sandbox with only the user's text, and Cursor attached the skill, loaded `AGENTS.md`, and ran the hook. Composer 2.5 is the mid tier and Claude Opus 5 the high tier. When round 4 was written, the two were called the low and the mid tier. The tiers were set on 2026-10-10 in [issue 39](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/39), with Gemini 3.8 Flash as the low tier.
+Scored on 2026-10-09, with the kit at commit `611d6fd`. Round 4 is the first round in which Cursor itself did the work: the Cursor CLI started Cursor's agent in each sandbox with only the user's text, and Cursor attached the skill, loaded `AGENTS.md`, and ran the hook. Composer 2.5 is the mid tier and Claude Opus 5 the high tier. When round 4 was written, the two were called the low and the mid tier. The tiers were set on 2026-10-10 in [issue 39](https://github.com/syedmuhdahmad/qa-agent-kit/issues/39), with Gemini 3.8 Flash as the low tier.
 
 | Case | Composer 2.5, runs passed | Claude Opus 5 |
 | --- | --- | --- |

@@ -6,7 +6,7 @@ metadata:
   source: "https://github.com/cloudflare/security-audit-skill, folder skills/security-audit"
   commit: "c1c8a8c1471069fb0e188eeaff69b8e8db6564a8"
   license: "MIT. Copyright (c) 2025-2026 Cloudflare, Inc. The full text is in the LICENSE file in this folder."
-  changes: "Changed by cursor-qa-agents: this frontmatter only. The description was rewritten, and disable-model-invocation and metadata were added. The text below the frontmatter and every other file in this folder are byte for byte as published at the commit above. LICENSE is the LICENSE file of that repository's root."
+  changes: "Changed by qa-agent-kit: this frontmatter only. The description was rewritten, and disable-model-invocation and metadata were added. The text below the frontmatter and every other file in this folder are byte for byte as published at the commit above. LICENSE is the LICENSE file of that repository's root."
 ---
 
 # Security Audit

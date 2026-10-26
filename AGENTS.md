@@ -27,8 +27,8 @@ If a test fails because the product is wrong, report the bug. Do not change what
 
 Keep the `RTK_DISABLED=1` prefix. RTK otherwise hides the Vitest result and changes Playwright's summary.
 
-- `RTK_DISABLED=1 npx vitest run test/unit/components/SignIn.test.ts`
-- `RTK_DISABLED=1 npx playwright test test/e2e/sign-in.spec.ts`
-- `RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/components/SignIn.test.ts`, in a React Native app
+- `RTK_DISABLED=1 npx vitest run test/unit/components/ProfileForm.test.ts`
+- `RTK_DISABLED=1 npx playwright test test/e2e/profile.spec.ts`
+- `RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/components/ProfileForm.test.ts`, in a React Native app
 
 The paths are examples. Never `cd`.

@@ -1,6 +1,6 @@
 # Next app example
 
-A small Next.js app that the Cursor QA agent kit is tested against ([issue 19](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/19)). It is not part of the files you copy into your own app. The copy list is under "Add it to your app" in the [root README](../../README.md#add-it-to-your-app).
+A small Next.js app that the Cursor QA agent kit is tested against ([issue 19](https://github.com/syedmuhdahmad/qa-agent-kit/issues/19)). It is not part of the files you copy into your own app. The copy list is under "Add it to your app" in the [root README](../../README.md#add-it-to-your-app).
 
 The app has a sign-in form, a session route, and a dashboard page. `test/` holds hand-written reference tests in the layout the skills produce.
 

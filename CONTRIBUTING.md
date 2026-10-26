@@ -16,8 +16,8 @@ You need:
 - `git`. Two tests of the evaluation scripts make a small repository in the temporary folder.
 
 ```bash
-git clone https://github.com/syedmuhdahmad/cursor-qa-agents.git
-cd cursor-qa-agents
+git clone https://github.com/syedmuhdahmad/qa-agent-kit.git
+cd qa-agent-kit
 npm ci
 ```
 
@@ -61,7 +61,7 @@ One fact is often written in more than one file. Change every copy in the same p
 | The Node range | `engines` in `package.json`, and the requirements in `README.md` |
 | Something a user must do after an upgrade | `CHANGELOG.md`, under `Unreleased` |
 | A skill's reply form, the example app, or a reference test | The cases in `eval/cases/`. `node --test "eval/*.test.mjs"` names the case that no longer fits. |
-| The prompt a skill takes, a reply form, or the verdict line | "Start a job" in `README.md`, and `docs/jobs.md` |
+| The prompt a skill takes, a reply form, or the verdict line | "Start a job" in `README.md`, `docs/jobs.md`, and the wiki pages "Skills and example prompts" and "Jobs and commands" |
 | A mobile skill, or what was run on a device | `docs/mobile.md` |
 | A React Native dev dependency that users need | The block after `<!-- install:react-native-dev-dependencies -->` in `README.md`, and `devDependencies` in `examples/expo-app/package.json`, which holds its version range |
 | The Jest config or the Jest reporter in `.cursor/qa/` | "The verdict line" in `docs/jobs.md`, and the Jest section of `docs/hook-rules.md` when a command changes |
@@ -73,7 +73,7 @@ Five things to know about these files:
 - `typescript` and `markdownlint-cli2` are tools for this repository only. Keep them out of the README block, so they do not reach users' apps.
 - The installer adds every line of `.gitignore` that the user's `.gitignore` lacks, and users copy `.cursorignore` as it is. Put a path in those two files only when it belongs in a user's app.
 - In those two files, start a folder name with a slash when an app could have a folder of that name in its source, such as `/coverage/` or `/build/`. Without the slash the line also matches `app/coverage/`. Then git hides the user's own files, and the hook denies the agent a read of application source.
-- `README.md` holds what a new user needs, in about 2,300 words. Detail goes into a file under `docs/`, with a short paragraph and a link in the README. The two marked blocks stay in `README.md`. The [wiki](https://github.com/syedmuhdahmad/cursor-qa-agents/wiki) is a short guide that links to both, and it is a repository of its own: update it when a page there goes out of date.
+- `README.md` is the overview and the index, in about 2,800 words: what the kit supports, how to add it, a first session, one example prompt for each skill, and a link to each wiki page. The two marked blocks stay in `README.md`. The [wiki](https://github.com/syedmuhdahmad/qa-agent-kit/wiki) is the full manual: getting started, the skills and their prompts, and a QA manual for each tech stack. Its pages live in [`docs/wiki/`](docs/wiki/README.md): update them in the same pull request when a page goes out of date, and publish them after the merge. Reference detail goes into a file under `docs/`. Take every example from the imaginary profile app, as in the skills, and never from `examples/`.
 
 ## Skills
 

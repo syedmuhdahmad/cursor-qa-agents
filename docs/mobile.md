@@ -127,7 +127,7 @@ A `[Failed]` line with no error after the time means that an element file did no
 
 [`.github/workflows/android.yml`](../.github/workflows/android.yml) builds a release APK of it, starts an Android emulator on a Linux runner, and runs the six flows. It runs only for a change to the example, the mobile skills, their rule file, the hook, or the workflow itself, because an emulator job takes many minutes.
 
-No workflow runs iOS. It needs a macOS runner with Xcode, which is slower and costs more, and nothing has been run on iOS yet. iOS flows are to be checked on a Mac by hand. This was decided for [issue 24](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/24).
+No workflow runs iOS. It needs a macOS runner with Xcode, which is slower and costs more, and nothing has been run on iOS yet. iOS flows are to be checked on a Mac by hand. This was decided for [issue 24](https://github.com/syedmuhdahmad/qa-agent-kit/issues/24).
 
 ## Known limits
 
@@ -218,7 +218,7 @@ Not run:
 - Cursor itself: the folder it starts the `maestro` server in, its time limit for one MCP call, and what a walk costs a model. One `run` call took up to 45 seconds.
 - A lint or a type check of an element file in an app.
 
-iOS is tracked in [issue 24](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/24).
+iOS is tracked in [issue 24](https://github.com/syedmuhdahmad/qa-agent-kit/issues/24).
 
 ## Open points
 

@@ -1,6 +1,6 @@
 # Expo app example
 
-A small React Native app, made with Expo, that the Cursor QA agent kit is tested against. It is the sample app for Maestro flows on Android ([issue 23](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/23)) and the React Native example for Jest unit tests ([issue 36](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/36)). It is not part of the files you copy into your own app.
+A small React Native app, made with Expo, that the Cursor QA agent kit is tested against. It is the sample app for Maestro flows on Android ([issue 23](https://github.com/syedmuhdahmad/qa-agent-kit/issues/23)) and the React Native example for Jest unit tests ([issue 36](https://github.com/syedmuhdahmad/qa-agent-kit/issues/36)). It is not part of the files you copy into your own app.
 
 The app has the same sign-in feature as [`examples/next-app`](../next-app/), with the same rules and texts. It has two screens. The sign-in screen has an "Email" field, a "Password" field, and a "Sign in" button. The dashboard shows the heading "Dashboard", the text "Signed in as ada@example.com", and a "Sign out" button that goes back to the sign-in screen. `App.tsx` switches between the two screens with React state. There is no navigation library.
 
