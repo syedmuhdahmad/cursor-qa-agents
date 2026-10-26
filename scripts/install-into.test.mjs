@@ -32,6 +32,11 @@ import {
   KIT_ROOT,
   MCP_FILE,
   RETIRED_PACKAGE,
+  RN_DEV_DEPENDENCIES_MARKER,
+  RN_TEST_SCRIPTS,
+  RN_VERSIONS_FILE,
+  WEB_ONLY,
+  appKind,
   TEST_SCRIPTS,
   TEST_TSCONFIG,
   TEST_TSCONFIG_TEXT,
@@ -40,6 +45,7 @@ import {
   install,
   readInstallLists,
   readMarkedBlock,
+  testRendererRange,
 } from './install-into.mjs'
 
 const FENCE = '```'
@@ -995,6 +1001,108 @@ describe('install: test/tsconfig.json', () => {
       .filter((line) => !line.trim().startsWith('//'))
       .join('\n')
     assert.deepEqual(JSON.parse(withoutComments), { extends: '../tsconfig.json', include: ['**/*.ts'], exclude: [] })
+  })
+})
+
+describe('install: a React Native app', () => {
+  const RN_LIST = '@testing-library/react-native\njest\ntest-renderer'
+  const RN_VERSIONS = { devDependencies: { '@testing-library/react-native': '^14.1.0', jest: '^30.5.2', 'test-renderer': '~1.3.0', typescript: '~6.0.0' } }
+
+  function makeRnKit({ withList = true } = {}) {
+    const text = readme(WITH_CONFIGS, 'vitest\njsdom')
+    write(kit, 'README.md', withList ? `${text}\n${RN_DEV_DEPENDENCIES_MARKER}\n\n${FENCE}text\n${RN_LIST}\n${FENCE}\n` : text)
+    write(kit, RN_VERSIONS_FILE, JSON.stringify(RN_VERSIONS))
+    write(kit, 'test/e2e/seed.spec.ts', '// kit seed\n')
+    write(kit, 'test/mobile/plan/.gitkeep', '')
+  }
+
+  function makeRnApp(extra = {}) {
+    write(app, 'package.json', `${JSON.stringify({ name: 'app', dependencies: { expo: '~58.0.19', react: '19.2.3', 'react-native': '0.88.0' }, ...extra }, null, 2)}\n`)
+  }
+
+  it('finds the kind of app in package.json, or takes it from --app', () => {
+    assert.equal(appKind({ dependencies: { 'react-native': '0.88.0' } }).kind, 'react-native')
+    assert.equal(appKind({ devDependencies: { expo: '~58.0.0' } }).reason, 'package.json lists expo')
+    assert.equal(appKind({ dependencies: { next: '16.4.0', 'react-native-web': '0.21.0' } }).kind, 'web')
+    assert.equal(appKind({ dependencies: { expo: '~58.0.0' } }, 'web').kind, 'web')
+    assert.equal(appKind({}, 'react-native').reason, 'set with --app')
+    assert.throws(() => appKind({}, 'ios'), InstallError)
+  })
+
+  it('picks the test-renderer line that matches the React minor version', () => {
+    assert.equal(testRendererRange('19.2.3', '~1.3.0'), '~1.2.0')
+    assert.equal(testRendererRange('^19.3.1', '~1.3.0'), '~1.3.0')
+    assert.equal(testRendererRange('18.3.1', '~1.3.0'), '~1.3.0')
+    assert.equal(testRendererRange(undefined, '~1.3.0'), '~1.3.0')
+  })
+
+  it('leaves out the web files and adds the React Native dev dependencies and script', () => {
+    makeRnKit()
+    makeRnApp({ jest: { preset: 'jest-expo' } })
+    const report = install(app, { kitRoot: kit })
+    assert.equal(report.app.kind, 'react-native')
+    for (const file of WEB_ONLY) assert.ok(!existsSync(join(app, file)), `${file} is not copied`)
+    assert.ok(!existsSync(join(app, 'test', 'e2e', 'seed.spec.ts')))
+    assert.ok(existsSync(join(app, 'test', 'mobile', 'plan', '.gitkeep')))
+    assert.equal(read(app, 'AGENTS.md'), '# Kit rules\n')
+    const appPackage = readJsonFile(app, 'package.json')
+    assert.deepEqual(appPackage.devDependencies, { '@testing-library/react-native': '^14.1.0', jest: '^30.5.2', 'test-renderer': '~1.2.0' })
+    assert.deepEqual(appPackage.scripts, RN_TEST_SCRIPTS)
+    assert.equal(appPackage.jest.preset, 'jest-expo')
+    assert.deepEqual(report.warnings, [])
+    const text = formatReport(report)
+    assert.match(text, /^App: a React Native app, because package.json lists expo\.$/m)
+    assert.match(text, /left out for a React Native app: vitest\.config\.ts, playwright\.config\.ts, test\/setup\.ts, test\/e2e/)
+    assert.doesNotMatch(text, /playwright install/)
+  })
+
+  it('installs the web kit into a React Native app with --app web', () => {
+    makeRnKit()
+    makeRnApp()
+    const report = install(app, { kitRoot: kit, app: 'web' })
+    assert.equal(report.app.kind, 'web')
+    assert.ok(existsSync(join(app, 'vitest.config.ts')))
+    assert.deepEqual(Object.keys(readJsonFile(app, 'package.json').devDependencies).sort(), ['jsdom', 'vitest'])
+  })
+
+  it('warns when the app has no Jest preset, and names the Expo one for an Expo app', () => {
+    makeRnKit()
+    makeRnApp()
+    const report = install(app, { kitRoot: kit, dryRun: true })
+    assert.deepEqual(warningIds(report), ['jest-preset'])
+    assert.match(formatReport(report), /npx expo install jest-expo/)
+  })
+
+  it('warns when the Jest config is in TypeScript, and is quiet for jest.config.js', () => {
+    makeRnKit()
+    makeRnApp()
+    write(app, 'jest.config.ts', 'export default {}\n')
+    assert.deepEqual(warningIds(install(app, { kitRoot: kit, dryRun: true })), ['jest-config'])
+    rmSync(join(app, 'jest.config.ts'))
+    write(app, 'jest.config.js', "module.exports = { preset: 'react-native' }\n")
+    assert.deepEqual(warningIds(install(app, { kitRoot: kit, dryRun: true })), [])
+  })
+
+  it('stops for a React Native app when the kit has no React Native list', () => {
+    makeRnKit({ withList: false })
+    makeRnApp()
+    assert.throws(() => install(app, { kitRoot: kit, dryRun: true }), /is a React Native app \(package.json lists expo\), and README.md in this kit has no/)
+  })
+
+  it('stops when the React Native list names a package the example app does not have', () => {
+    makeRnKit()
+    write(kit, RN_VERSIONS_FILE, JSON.stringify({ devDependencies: { jest: '^30.5.2' } }))
+    assert.throws(() => readInstallLists(kit), /"@testing-library\/react-native", but devDependencies in examples\/expo-app\/package.json does not have it/)
+  })
+
+  it('takes --app on the command line', () => {
+    makeRnApp()
+    const script = fileURLToPath(new URL('./install-into.mjs', import.meta.url))
+    const run = (...args) => spawnSync(process.execPath, [script, app, '--dry-run', ...args], { encoding: 'utf8' })
+    assert.match(run('--app', 'web').stdout, /^App: a web app, because set with --app\.$/m)
+    const wrong = run('--app', 'ios')
+    assert.equal(wrong.status, 1)
+    assert.match(wrong.stderr, /--app must be web or react-native, not "ios"/)
   })
 })
 

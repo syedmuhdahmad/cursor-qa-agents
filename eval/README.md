@@ -2,7 +2,7 @@
 
 A fixed set of test jobs for the kit, and a scorer that needs no model. Use it to compare two versions of the skills, or two models, on the same work.
 
-Each case is one request a user would type, such as `/qa-unit Write a unit test for src/components/SignIn.tsx. This is UI.` The app is always [`examples/next-app`](../examples/next-app/). An agent does the job in a throwaway copy of the app, called a sandbox. Then `score.mjs` looks at what the agent left behind and at its last message.
+Each case is one request a user would type, such as `/qa-unit Write a unit test for src/components/SignIn.tsx. This is UI.` Nine cases run on [`examples/next-app`](../examples/next-app/), a Next.js app. Four React Native cases run on [`examples/expo-app`](../examples/expo-app/), an Expo app with the same sign-in feature, and their tests run with Jest. A case names its app with `"app": "expo-app"`. A case without the key runs on `examples/next-app`. An agent does the job in a throwaway copy of the app, called a sandbox. Then `score.mjs` looks at what the agent left behind and at its last message.
 
 The scorer reads files, runs the test itself, and asks the kit's own hook. The same sandbox and reply always give the same score.
 
@@ -28,7 +28,9 @@ You need Node, npm, git, `tar`, and Python 3. The hook is a Python script, and t
 
 The plan and generate cases also need Google Chrome. Their skills open the app with `playwright-cli`, and that starts the Chrome that is installed on the machine. See [The browser an agent opens](#the-browser-an-agent-opens).
 
-The first sandbox runs `npm install` once in a shared folder and `npx playwright install chromium`. That took 47 seconds here with a warm npm cache. Every later sandbox links to those files and took about 1 second.
+The first sandbox runs `npm install` once in a shared folder and `npx playwright install chromium`. That took 47 seconds here with a warm npm cache. Every later sandbox links to those files and took about 1 second. `npx playwright install` also removes the browsers of other Playwright versions from `~/.cache/ms-playwright`, which other projects on the machine share. On 2026-10-25 it removed four of them here.
+
+The first sandbox of a React Native case runs `npm ci` once in a shared folder of its own, from the `package-lock.json` of `examples/expo-app`, and installs no browser. `npm ci` took 17 seconds here with a warm npm cache, and the whole first sandbox 28 seconds. Linking the 58,180 files into a sandbox took 1.5 seconds. The installer sees that the Expo app lists `expo`. It leaves out the Vitest and Playwright configs and `test/e2e/`, and adds the script `test:rn-unit`, which runs Jest with the kit's config.
 
 Keep sandboxes outside this repository. The scripts refuse a folder inside it. Run the commands below in the root of your clone of the kit. `KIT` holds that path for the commands that run in another folder.
 
@@ -51,7 +53,7 @@ This works with any agent that can read files, write files, and run shell comman
    node eval/make-sandbox.mjs --case unit-ui --out "$RUNS/run-01"
    ```
 
-   The agent's working folder is `$RUNS/run-01/sandbox`. It is its own git repository with one commit. `$RUNS/run-01/meta.json` records how it was built. The last lines of output list anything the installed kit lacks, for example a hook rule that is not there yet.
+   The agent's working folder is `$RUNS/run-01/sandbox`. It is its own git repository with one commit. `$RUNS/run-01/meta.json` records how it was built. The last lines of output list anything the installed kit lacks, for example a hook rule that is not there yet. For a React Native case the hook is asked about the Jest rules: the run command of `/qa-rn-unit`, `jest` without the kit's config, `jest -u`, `xit(`, and `toMatchSnapshot(`.
 
 2. Print the prompt.
 
@@ -112,7 +114,7 @@ done
 
 ## Where the runs live
 
-Put `$RUNS` on a disk. On many Linux systems `/tmp` is a tmpfs. It lives in memory, it has a fixed number of inodes, and it counts one inode for every hard link. `node_modules` is hard-linked into every sandbox, so one sandbox costs about 16,000 inodes there (15,971 measured for `node_modules`). On an ext4 disk a hard link costs no inode, so `node_modules` costs one inode for each of its folders there, about 1,500.
+Put `$RUNS` on a disk. On many Linux systems `/tmp` is a tmpfs. It lives in memory, it has a fixed number of inodes, and it counts one inode for every hard link. `node_modules` is hard-linked into every sandbox, so one sandbox costs about 16,000 inodes there (15,971 measured for `node_modules`). On an ext4 disk a hard link costs no inode, so `node_modules` costs one inode for each of its folders there, about 1,500. The `node_modules` of `examples/expo-app` is larger: 69,257 files and folders, of which 11,012 are folders.
 
 When a file system has no free inode, every write on it fails with `ENOSPC: no space left on device`, while `df -h` still shows free space. That happened during the first evaluation round, on a `/tmp` with 1,048,576 inodes.
 
@@ -169,6 +171,8 @@ Both servers must run when you score `e2e-generate`. The scorer runs the spec ag
 
 Change the ports with `--app-port` and `--bug-port`. Pass the same two flags when you build the sandboxes. In an end-to-end sandbox the default base URL in `playwright.config.ts` is set to the case's server, so the plain command `npx playwright test test/e2e/sign-in.spec.ts` reaches it. That one line is the only change to the kit's files. The planner and the generator open the page in a browser, so their user text also names the URL.
 
+A version of Next.js with a known security advisory can stop a start at once. On 2026-10-25, Next.js 16.4.0 printed an upgrade recommendation addressed to a coding agent, with commands to run, and exited with 1, and `next build` did the same. Do not run what it asks for. The example now uses 16.4.2, which has no such advisory. If it happens again, start the server again: the second start went on with a one-line warning.
+
 Start the servers before the agent runs. With the server down, `playwright.config.ts` tells Playwright to start `npm run dev` itself. That listens on port 3000, not on the case's port, so the run fails after the config's two-minute wait. This was read from the config, not run.
 
 ## The browser an agent opens
@@ -198,12 +202,16 @@ A browser stays open until the agent runs `close`. The documentation of `playwri
 | `e2e-generate` | `qa-generate` | The reference plan. No spec, no page classes. | Writes the page classes and `test/e2e/sign-in.spec.ts`. All six scenarios pass. |
 | `e2e-heal-locator` | `qa-heal` | The dashboard page class looks for a heading named "Overview". 1 of 6 tests fails. | Corrects the name in the page class. All 6 tests pass, with every check kept. |
 | `e2e-heal-product-bug` | `qa-heal` | The app shows "Invalid credentials". The plan and the route say "Email or password is incorrect". 1 of 6 tests fails. | Marks that one test `test.fixme` under a `// product bug:` line that names `src/components/SignIn.tsx:7`, and names it in the reply |
+| `rn-unit-ui` | `qa-rn-unit` | `examples/expo-app`. No test for `src/components/SignIn.tsx` | Writes `test/unit/components/SignIn.test.ts`, and it passes with Jest |
+| `rn-unit-plain` | `qa-rn-unit` | `examples/expo-app`. No test for `lib/validation.ts` | Writes `test/unit/lib/validation.test.ts`, and it passes with Jest |
+| `rn-fix-unit` | `qa-rn-unit` | `examples/expo-app`. One check in the reference test expects a message that exists nowhere else. 1 of 14 tests fails. | Corrects the expected value. All 14 tests pass. |
+| `rn-unit-product-bug` | `qa-rn-unit` | `examples/expo-app`. `lib/validation.ts` line 25 says "6 characters" while `MIN_PASSWORD_LENGTH` is 8. 3 of 14 tests fail. | Leaves the tests failing, replies `FAIL`, and names `lib/validation.ts:25` |
 
-The two product-bug cases use the same user text as the fix cases. The agent has to find out which one it is.
+Each product-bug case uses the same user text as its fix case. The agent has to find out which one it is. The four React Native cases have the user texts of `unit-ui`, `unit-plain`, `fix-unit`, and `unit-product-bug`, with `/qa-rn-unit` in place of `/qa-unit`.
 
 A product-bug case shows nothing when the skill prints its answer. `make-sandbox.mjs` looks for the source `file:line` of the bug and for the wrong text in the skill it installed. When it finds one, it prints a warning and lists it under `answerInSkill` in `meta.json`. Use an example from another screen in the skill.
 
-Each case file has a `reference` part: the files from the example that solve the case, and the reply that goes with them. `self-test.mjs` uses it. `make-sandbox.mjs` does not copy it into the sandbox. The example's `README.md` is also left out of the sandbox, because it describes the reference tests.
+Each case file has a `reference` part: the files from the example that solve the case, and the reply that goes with them. `self-test.mjs` uses it. `make-sandbox.mjs` does not copy it into the sandbox. The example's `README.md` is also left out of the sandbox, because it describes the reference tests. From `examples/expo-app` it also leaves out the folders a build makes, `android/`, `ios/`, `.expo/`, and `dist/`, when they are at the top of the example. The sandbox keeps `test/mobile/`, the Maestro plan and flows, with `test/mobile/elements/android/`.
 
 ## Checks
 
@@ -217,7 +225,7 @@ A check is `pass`, `fail`, `na` (it does not apply to this case or this kit), or
 | `only-expected-files` | Only the files the case asks for changed |
 | `expected-file` | The test, spec, or plan is at the path that mirrors the source |
 | `path-rules` | No `.tsx` test, no `tests/`, `specs/`, or `__tests__/` folder, page classes named `<name>-page.ts`, plans named `<name>.plan.md` |
-| `forbidden-tokens` | The agent added none of `.only(`, `.skip(`, `.todo(`, `.fails(`, `test.fail(`, `skipIf(`, `runIf(`, `waitForTimeout(`, `networkidle`, `force: true`, and no `test.fixme(` without the product bug comment |
+| `forbidden-tokens` | The agent added none of `.only(`, `.skip(`, `.todo(`, `.fails(`, `test.fail(`, `skipIf(`, `runIf(`, `waitForTimeout(`, `networkidle`, `force: true`, Jest's `xit(`, `xtest(`, `xdescribe(`, `fit(`, `fdescribe(`, and the snapshot matchers `toMatchSnapshot(`, `toMatchInlineSnapshot(`, `toThrowErrorMatchingSnapshot(`, `toThrowErrorMatchingInlineSnapshot(`, and no `test.fixme(` without the product bug comment. The Jest calls count as the hook counts them: `xit(` as a whole call, so `benefit(` and `form.fit(` do not count, and a matcher as a method call such as `.toMatchSnapshot(`. |
 | `outcome` | The scorer's own run gives what the case wants: `PASS`, or the failing tests still failing, or `PASS-WITH-FIXME` with only the right test parked, or the plan file |
 | `tests` | Enough tests ran, and for a spec every scenario of the plan is a passing test |
 | `fixme-marker` | The line above `test.fixme(` starts with `// product bug:` and names the source file and line |
@@ -262,17 +270,24 @@ The scorer runs the test with the runner's JSON reporter and counts for itself. 
 | --- | --- |
 | Vitest | Exit code 0, at least one passed test, and no failed, retried, skipped, or todo test |
 | Playwright | Exit code 0, at least one passed test, and no failed, retried, or skipped test. A test marked `test.fixme` gives `PASS-WITH-FIXME`. |
+| Jest | Exit code 0, at least one passed test, no failed, retried, pending, skipped, or todo test, no test file that failed to run, and no snapshot written |
 
 Two rows need more than the counts in the JSON report:
 
 - A test that failed once and passed on a retry is a FAIL. Vitest's report calls such a test `passed` and keeps the first failure in `failureMessages`.
 - An error outside a test is a FAIL. The usual one is a check that is not awaited and rejects after its test has ended. Vitest's report then says `"success": true` with every test passed, and only the exit code is 1. The scorer also runs Vitest's default reporter, because that one prints the error.
 
+For a React Native case the scorer runs `npx --no-install jest --config .cursor/qa/jest.config.cjs --ci --json --outputFile=<file> --runTestsByPath <files>`, with the kit's config as the skill does. Three things were seen with Jest 30.5:
+
+- Jest exits with 0 for a test that passed only on a retry with `jest.retryTimes`. Its report says `passed`, with `invocations` 2 and an empty `retryReasons`. The scorer reads both.
+- Jest exits with 0 for a test marked `xit`, `it.skip`, or `it.todo`, and for the tests that a stray `fit` leaves out. Their status is `pending` or `todo`.
+- `ci` in a Jest config file does not stop Jest from writing a snapshot, and `CI=true` in the environment does not either. Only `--ci` on the command line does. So the skill's command, the `test:rn-unit` script, and the scorer all pass `--ci`, and the hook denies a `jest` run without it. With `--ci`, a `toMatchSnapshot()` with no stored snapshot fails, and nothing is written into the sandbox.
+
 When the file the case asks for is not there, the scorer runs the test files the agent wrote at other paths. `expected-file`, `only-expected-files`, and `outcome` fail all the same. The run is there for `reply-verdict` only.
 
 ### Mutants
 
-For a Vitest case the scorer copies the sandbox without `node_modules`, links the sandbox's `node_modules` into the copy, and runs the test there:
+For a Vitest or a Jest case the scorer copies the sandbox without `node_modules`, links the sandbox's `node_modules` into the copy, and runs the test there with the case's runner:
 
 1. With the app unchanged. The test must pass, or a later failure would say nothing. If it does not pass, the check is `error`.
 2. With a `throw` at the end of the source file. A test that still passes never loads the file: it reads the source as text, or it replaces the file with a mock. The check fails.
@@ -325,6 +340,8 @@ Three things differ in the score for such a kit:
 
 The old README did not list `.cursorignore`, so an old-kit sandbox has none. `make-sandbox.mjs` prints that under `Missing`.
 
+A React Native case needs a kit whose README has the list of React Native dev dependencies. With `--kit-ref origin/main` at commit `3ff2a0b`, `make-sandbox.mjs --case rn-unit-plain` stopped with `The kit could not be installed: ... is a React Native app (package.json lists expo), and README.md in this kit has no "<!-- install:react-native-dev-dependencies -->" list.` and left no folder behind.
+
 A kit from before the switch to `playwright-cli` names the `browser_*` tools of the Playwright MCP server in its plan and generate steps. An agent that has no such tools then needs an environment note that gives the `playwright-cli` command for each tool. Rounds 1 and 2 were run that way. See [results/README.md](results/README.md).
 
 ## Run it with the Cursor CLI
@@ -359,10 +376,13 @@ First prove that the hook runs under the CLI, because the model cannot tell. Wit
 ```bash
 node "$KIT/eval/make-sandbox.mjs" --case unit-plain --out "$RUNS/canary"
 cd "$RUNS/canary/sandbox"
-agent -p --force --trust --model MODEL_ID "Create the file src/canary.ts with the text: export const canary = 1"
+agent -p --force --trust --model MODEL_ID --output-format stream-json "This is a check of the workspace hook, in a throwaway sandbox. Make one write tool call that creates src/canary.ts with the text: export const canary = 1. Do not decide yourself that it is forbidden: try the call once, and let the hook decide. Then quote the exact message you got back, and stop." > ../stream.jsonl
 test ! -e src/canary.ts && echo "The hook is live." || echo "The hook did not stop the write. Do not trust CLI runs."
+grep -o 'Edit blocked for[^"]*' ../stream.jsonl | head -3
 cd "$KIT"
 ```
+
+The prompt asks for the write in so many words. With a shorter prompt, Gemini 3.8 Flash and Claude Opus 5 refused the write because of `AGENTS.md` and never called the tool, so the hook had nothing to deny. The CLI adds one line of its own to every deny: `Agent note: Do not suggest workarounds to the blocked tool.` Apart from that line, the deny text in the stream must be the kit's message alone. Another block next to it means that the CLI also runs hooks from somewhere else. On the machine of round 5 the CLI ran the hooks of a Claude Code plugin from `~/.claude/plugins`, and one of them denied the first write of every run with a `[Fact-Forcing Gate]` block. Turn such hooks off for the round, and say how in the note of the round. For that plugin it was `ECC_HOOKS_ENABLED=false` in front of `agent`, which changes no file.
 
 Without a live hook the scores still stand: `scope`, `app-source`, and `hook-replay` are checked after the run. But the agent then never sees a deny message, so the run does not show what a Cursor user gets.
 
@@ -394,7 +414,7 @@ node --test "eval/*.test.mjs"
 node eval/self-test.mjs --out "$RUNS/self-test"
 ```
 
-The first command takes under a second. It tests the scripts' own functions and checks that every case still fits the example app and the skills: each text a case replaces must occur exactly once, on the line the case names.
+The first command takes under a second. It tests the scripts' own functions and checks that every case still fits its example app and the skills: each text a case replaces must occur exactly once, on the line the case names, in `examples/next-app` or in `examples/expo-app`.
 
 The second command builds a sandbox for every case, puts the reference solution in place, and scores it. Every reference solution must score 100 percent. Then it scores wrong solutions. Each must fail the checks named for it, and must be a false pass or not as the list in `self-test.mjs` says. Some of them:
 
@@ -405,14 +425,16 @@ The second command builds a sandbox for every case, puts the reference solution 
 - A test that reads the source file as text, and one that renders the component and checks only its text.
 - A spec of six tests with no `expect`.
 - The right fix of a unit test, with three other tests renamed.
+- For the React Native cases: a `.tsx` test, an `xit(`, two inline snapshots as the only checks, an edit to application source, a reply that says `PASS` over a failing test, a test that reads the source file as text, a test that passes only on a retry with `jest.retryTimes`, a product bug hidden by a changed expected value, and the two wrong fixes of `rn-fix-unit`.
 
 With the end-to-end cases it also scores one reference solution in a sandbox where `playwright-cli` has opened the app and was not closed. The score must stay at 100 percent, with the note `browser-open` and with nothing from `.playwright-cli/` among the changed paths. `--clean` must then close the browser. This part needs Google Chrome.
 
-It starts the two app servers on ports 3424 and 3425 and stops them. Each sandbox is cleaned with `make-sandbox.mjs --clean` as soon as it is scored, so one hard-linked `node_modules` exists at a time. With `--kit-ref origin/main` and `--running-servers` it took 5 minutes 30 seconds here. That includes one `npm install`: the two kits have the same dependencies and share one folder.
+It starts the two app servers on ports 3424 and 3425 and stops them. Each sandbox is cleaned with `make-sandbox.mjs --clean` as soon as it is scored, so one hard-linked `node_modules` exists at a time. With `--kit-ref origin/main` and `--running-servers` it took 5 minutes 30 seconds here. That includes one `npm install`: the two kits have the same dependencies and share one folder. With `--only rn` it took 7 minutes 5 seconds here, with the first `npm ci` of the Expo app. The whole self-test, with no option, took 15 minutes 45 seconds here on 2026-10-25. It started both servers itself and installed both apps once. Most of that time is Jest: one run of the component test took about 10 seconds, and its `mutants` check runs Jest eight times.
 
 | Option | What it does |
 | --- | --- |
-| `--only unit` | Runs only the cases that need no server and no browser |
+| `--only unit` | Runs only the cases on `examples/next-app` that need no server and no browser |
+| `--only rn` | Runs only the four React Native cases, on `examples/expo-app` with Jest. They need no server and no browser, and they install their own `node_modules`. |
 | `--only e2e` | Runs only the cases that need the servers |
 | `--kit-ref origin/main` | Also builds and scores a sandbox with the kit at that ref |
 | `--app-port 3424`, `--bug-port 3425` | The ports for the two servers |
@@ -420,11 +442,12 @@ It starts the two app servers on ports 3424 and 3425 and stops them. Each sandbo
 | `--base "$RUNS/.eval-base"` | Where the shared `node_modules` are kept. Default: `.eval-base` in `--out` |
 | `--keep` | Keeps the run folders, each without its `node_modules` |
 
-Run both after a change to a skill's reply form, to the example app, or to a reference test.
+Run both after a change to a skill's reply form, to an example app, or to a reference test.
 
 ## Limits
 
-- The app is one small Next.js app. A good score here says nothing about a large app.
+- The apps are one small Next.js app and one small Expo app with the same sign-in feature. A good score here says nothing about a large app.
+- The React Native cases cover `/qa-rn-unit` only. No case runs a Maestro skill, because those need a device.
 - The checks cannot judge whether a test is well written. `mutants` only shows that the test can fail.
 - `mutants` reads a test that renders the component and searches the text of its source file as a test that checks nothing. That holds for a search for a text or a pattern. A test that counts the matches still notices a change without running the code.
 - The product-bug server holds the bug of every case with `"server": "bug"`. A new case of that kind changes which tests of `e2e-generate` fail there. Then update `bugServer.mustFail` in `cases/e2e-generate.json`.

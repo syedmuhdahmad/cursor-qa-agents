@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "QA Sign In",
+    "slug": "qa-sign-in",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "ios": {
+      "bundleIdentifier": "com.example.qasignin"
+    },
+    "android": {
+      "package": "com.example.qasignin",
+      "predictiveBackGestureEnabled": false
+    }
+  }
+}

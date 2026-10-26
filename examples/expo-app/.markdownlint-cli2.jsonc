@@ -1,0 +1,8 @@
+{
+  // Adds to .markdownlint-cli2.jsonc in the root of the repository this example sits in.
+  "config": {
+    // A plan under test/mobile/plan/ quotes what the screen shows, word for word.
+    // MD034 would ask for angle brackets around an email address in such a quote.
+    "MD034": false
+  }
+}

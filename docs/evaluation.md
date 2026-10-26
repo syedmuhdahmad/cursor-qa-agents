@@ -1,6 +1,6 @@
 # Evaluation results
 
-[`eval/`](../eval/) holds nine fixed test jobs on the example app, [`examples/next-app`](../examples/next-app/), and a scorer that needs no model. [eval/README.md](../eval/README.md) says how to run a case and what each check means. This file records the rounds that were run, and how.
+[`eval/`](../eval/) holds thirteen fixed test jobs and a scorer that needs no model. Nine jobs run on the example app [`examples/next-app`](../examples/next-app/). Four run `/qa-rn-unit` on the React Native example, [`examples/expo-app`](../examples/expo-app/), and their tests run with Jest. [eval/README.md](../eval/README.md) says how to run a case and what each check means. This file records the rounds that were run, and how. No recorded round has run the four React Native cases yet.
 
 The recorded scores are in [`eval/results/runs.jsonl`](../eval/results/runs.jsonl). [eval/results/README.md](../eval/results/README.md) says what each field of a line means and what is known to be wrong with the rounds. To print the scores as a table:
 
@@ -119,15 +119,37 @@ What the run shows:
 
 What the run does not show:
 
-- **How often it works.** It is one run of each prompt, on one model. Round 4 has more runs, and a mid-tier model.
+- **How often it works.** It is one run of each prompt, on one model. Round 4 has more runs, and a second model.
 - **The cases with a planted bug and the fix of a failing unit test.** No prompt asked for them. Round 4 has them.
 - **The `BLOCKED` exits.** No prompt led to one.
 - **The hook's rules for MCP tools, and the mobile skills.**
 - **Which Cursor version it was.** It was not written down.
 
+## Round 5, three tiers
+
+Scored on 2026-10-25, with the kit at commit `090c6d1`, in Cursor's agent, the way round 4 ran. It is the first round with the three tiers of [issue 39](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/39) and with the four React Native cases on `examples/expo-app`, which run with Jest.
+
+| Tier | Model | Runs passed |
+| --- | --- | --- |
+| Mid | Composer 2.5 | 26 of 26: the nine web cases 18 of 18, the four React Native cases 8 of 8 |
+| Low | Gemini 3.8 Flash | 6 of 6, one run each of `unit-ui`, `unit-plain`, `e2e-plan`, `e2e-generate`, `rn-unit-ui`, and `rn-unit-plain` |
+| High | Claude Opus 5 | 6 of 6, the same six cases |
+
+Every run passed every check, and none was a false pass. Gemini 3.8 Flash and Claude Opus 5 stopped after six runs each, when the Cursor account reached its usage limit. Their other 20 runs each are still to be run. Composer 2.5 met the agreed rate: at least 17 of 18 runs of the web cases with two runs for each case, and no false pass.
+
+Earlier on the same day, the nine web cases ran twice each on Gemini 3.8 Flash with the kit at commit `3ff2a0b`, before the changes of this round. All 18 runs passed every check. That round was a first look and is not in `runs.jsonl`. In 5 of its 10 `/qa-unit` runs the reply sat in a code fence, and twice the model guessed the file of an `@/` import wrong. Both led to a sentence in the skills.
+
+What round 5 does not show:
+
+- **Gemini 3.8 Flash and Claude Opus 5 on the fix, heal, and product-bug cases.** They did not get to them.
+- **How a model goes on after a deny.** No deny happened in the 38 runs. In the canaries, every model quoted the deny and stopped.
+- **The Cursor window, another app, macOS, and Windows.**
+
+[`eval/results/README.md`](../eval/results/README.md#round-5) has the detail: the table by case, the canaries, and what a job cost.
+
 ## Round 4, in Cursor's agent
 
-Scored on 2026-10-09, with the kit at commit `611d6fd`. Round 4 is the first round in which Cursor itself did the work: the Cursor CLI started Cursor's agent in each sandbox with only the user's text, and Cursor attached the skill, loaded `AGENTS.md`, and ran the hook. The low tier is Composer 2.5, and the mid tier is Claude Opus 5.
+Scored on 2026-10-09, with the kit at commit `611d6fd`. Round 4 is the first round in which Cursor itself did the work: the Cursor CLI started Cursor's agent in each sandbox with only the user's text, and Cursor attached the skill, loaded `AGENTS.md`, and ran the hook. Composer 2.5 is the mid tier and Claude Opus 5 the high tier. When round 4 was written, the two were called the low and the mid tier. The tiers were set on 2026-10-10 in [issue 39](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/39), with Gemini 3.8 Flash as the low tier.
 
 | Case | Composer 2.5, runs passed | Claude Opus 5 |
 | --- | --- | --- |

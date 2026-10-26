@@ -81,6 +81,29 @@ Cursor uses the same `Write` tool for two kinds of file of its own, outside the 
 
 Shell commands get no such exception.
 
+## The run folders of the security audit
+
+The security audit, `/security-audit`, writes its report outside the project, in `~/security-audit-skill/`, which is the folder the skill uses by default. The hook lets a write tool write any file inside that folder, and the shell run the skill's two validators on a file there. See [security-audit.md](security-audit.md).
+
+| Tool call or command | Decision |
+| --- | --- |
+| `Write {"file_path": "~/security-audit-skill/my-app/run-1/findings.json", "content": "x"}` | allow |
+| `Write {"file_path": "~/security-audit-skill/my-app/run-1/agents/hunter-01/scratch/notes.md", "content": "x"}` | allow |
+| `Delete {"file_path": "~/security-audit-skill/my-app/run-1/REPORT.md"}` | allow |
+| `Delete {"file_path": "~/security-audit-skill"}` | deny |
+| `Write {"file_path": "~/security-audit-skill/../.bashrc", "content": "x"}` | deny |
+| `Write {"file_path": "security-audit/run-1/REPORT.md", "content": "x"}` | deny |
+| `node .cursor/skills/security-audit/validate-findings.cjs ~/security-audit-skill/my-app/run-1/findings.json` | allow |
+| `node .cursor/skills/security-audit/validate-coverage-ledger.cjs ~/security-audit-skill/my-app/run-1/coverage-ledger.json` | allow |
+| `node .cursor/skills/security-audit/validate-findings.cjs src/findings.json` | deny |
+| `node --require ./test/a.js .cursor/skills/security-audit/validate-findings.cjs ~/security-audit-skill/a/f.json` | deny |
+| `node -e 1` | deny |
+| `mkdir -p ~/security-audit-skill/my-app/run-1` | deny |
+
+- Paths are compared after symlinks are resolved. A link inside the folder that leads into the project does not make the project writable. When `~/security-audit-skill` itself leads into the project, or the project lies inside it, the hook gives the folder no exception at all.
+- `node` may run only those two validators, from `.cursor/skills/security-audit/`, with one file inside the folder and no option. The validators read the file and print what is wrong with it. Every other `node` command is denied, as before.
+- A folder of that name inside the project gets no exception. The skill allows one there only when version control ignores it, and the hook does not check that.
+
 ## Rules for files under `test/`
 
 A write tool call under `test/` must also pass the naming rules and the content rules. A low-cost model drops a rule that is only written down, so the hook holds these.
@@ -150,19 +173,30 @@ The hook compares the new text with the file on disk and denies only what the wr
 | `Write {"file_path": "test/e2e/a.spec.ts", "content": "// product bug: src/a.ts:7 expected \"1\", got \"2\"\ntest.fixme('adds', async () => {})"}` | allow |
 | `Write {"file_path": "test/unit/a.test.ts", "content": "// product bug: src/a.ts:7 expected \"1\", got \"2\"\ntest.fixme('adds', () => {})"}` | deny |
 | `Write {"file_path": "test/e2e/a.spec.ts", "content": "// product bug: the app is wrong\ntest.fixme('adds', async () => {})"}` | deny |
+| `Write {"file_path": "test/unit/a.test.ts", "content": "xit('adds', () => {})"}` | deny |
+| `Write {"file_path": "test/unit/a.test.ts", "content": "fdescribe('math', () => {})"}` | deny |
+| `Write {"file_path": "test/unit/a.test.ts", "content": "expect(layout.fit(2)).toBe(4)"}` | allow |
+| `Write {"file_path": "test/unit/a.test.ts", "content": "expect(screen.toJSON()).toMatchSnapshot()"}` | deny |
+| `Write {"file_path": "test/unit/a.test.ts", "content": "expect(value).toMatchInlineSnapshot()"}` | deny |
 | `Write {"file_path": "test/e2e/plan/a.plan.md", "content": "Do not use test.skip( or waitForTimeout("}` | allow |
 | `Write {"file_path": "test/mobile/sign-in/01-a.flow.yaml", "content": "- waitForTimeout(\n"}` | allow |
 | `Write {"file_path": ".cursor/skills/x/SKILL.md", "content": "it.only("}` | allow |
 | `Write {"file_path": "test/mobile/config.yaml", "content": "excludeTags:\n  - fixme\n"}` | allow |
 | `Write {"file_path": "test/mobile/config.yaml", "content": "testOutputDir: out\n"}` | deny |
+| `Write {"file_path": "test/mobile/profile/01-save.flow.yaml", "content": "- takeScreenshot: src/screen\n"}` | deny |
+| `Write {"file_path": "test/mobile/profile/01-save.flow.yaml", "content": "- runScript: ../elements/android/profile.js\n"}` | deny |
+| `Write {"file_path": "test/mobile/elements/load.yaml", "content": "- runScript: android/profile.js\n"}` | allow |
 
 - Test code is a file under `test/` that ends in `.ts`, `.js`, `.mts`, `.cts`, `.mjs`, or `.cjs`. Plans, flows, and files outside `test/` are not scanned.
 - A write may not add `.only(`, `.skip(`, `.todo(`, or `.fails(` on a test function (`it`, `test`, `describe`, `suite`, `bench`, and names built on them such as `test.describe`), or `test.fail(`, `skipIf(`, or `runIf(`.
+- It may not add Jest's `xit(`, `xtest(`, `xdescribe(`, `fit(`, or `fdescribe(`. A name that ends in one of them, such as `benefit(`, and a method such as `layout.fit(`, are allowed.
+- It may not add a snapshot matcher: `toMatchSnapshot(`, `toMatchInlineSnapshot(`, `toThrowErrorMatchingSnapshot(`, or `toThrowErrorMatchingInlineSnapshot(`. This holds for Vitest and Jest tests alike. A snapshot passes for whatever the code renders once it is written, so it cannot show a product bug. A snapshot that a file already has can stay.
 - Under `test/e2e/` it may not add `waitForTimeout(` or `networkidle`.
 - Under `test/e2e/` it may not add `force: true` as an option of a Playwright action (`click`, `dblclick`, `tap`, `check`, `uncheck`, `hover`, `fill`, `selectOption`, `setChecked`, `setInputFiles`, `dragTo`, `clear`, `selectText`, `scrollIntoViewIfNeeded`). A `force: true` passed to `fs.rm` or `rmSync`, as a globalSetup or fixture uses to clear a temp folder, is not an action and is allowed. The option object must open with `{` on the same line as the action call.
 - `test.fixme(` is allowed only in a spec directly in `test/e2e/`, and only when the line above it starts with `// product bug:` and then names the application source file and line that are wrong, as in `// product bug: src/a.ts:7 expected "1", got "2"`. A marker with no file and line, or one that names a file under `test/`, does not count.
 - The check is on plain text. The same text in a comment or a string counts.
 - A write may not add `testOutputDir` to `config.yaml` or `config.yml` under `test/mobile/`. See "maestro".
+- A write of a `.yaml` or `.yml` file under `test/mobile/` may not add `takeScreenshot`, `startRecording`, `evalScript`, or `addMedia`, and may add `runScript` only to the loader, `test/mobile/elements/load.yaml`. They save a file where the flow says or run code on this machine, and `maestro test` and the `run` tool run every flow there. A flow that already holds one can still be edited.
 
 ## Shell commands
 
@@ -302,6 +336,35 @@ A runner option that names a file or folder must point inside the write scope: `
 
 `--reporter` replaces Playwright's reporters and removes the `QA-VERDICT:` line the kit reads, so it is denied; `--add-reporter` keeps the kit's reporter and is allowed. `--repeat-each` may be at most 5, and every occurrence is checked, because Playwright uses the last value.
 
+### Jest
+
+One run, with the kit's config, of files the command names under `test/`. `/qa-rn-unit` runs it in a React Native app.
+
+| Command | Decision |
+| --- | --- |
+| `RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/components/SignIn.test.ts` | allow |
+| `npx jest -c .cursor/qa/jest.config.cjs --ci test/unit/a.test.ts test/unit/b.test.ts` | allow |
+| `npx jest --config=.cursor/qa/jest.config.cjs --runInBand --ci --verbose test/unit` | allow |
+| `npx jest test/unit/a.test.ts` | deny |
+| `npx jest --config jest.config.js test/unit/a.test.ts` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs --ci` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs test/unit/a.test.ts` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs SignIn` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs src/a.test.ts` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs -u test/unit/a.test.ts` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs --updateSnapshot test/unit/a.test.ts` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs --watch test/unit/a.test.ts` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs --passWithNoTests test/unit/a.test.ts` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs -t "saves" test/unit/a.test.ts` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs --json test/unit/a.test.ts` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs --no-ci test/unit/a.test.ts` | deny |
+| `npx jest --config .cursor/qa/jest.config.cjs --coverage test/unit/a.test.ts` | deny |
+
+- `--ci` must be there. Without it Jest writes a new snapshot for a snapshot matcher, and `ci` in a config file does not change that in Jest 30.5. With it the snapshot matcher fails.
+- `--config` or `-c` must name `.cursor/qa/jest.config.cjs`, once. That file loads the app's own Jest config and adds the reporter that prints the `QA-VERDICT:` line. See [the verdict line](jobs.md#the-verdict-line).
+- Jest reads each path as a pattern. Every path must name a file or a folder under `test/`, so a pattern cannot pick up other files.
+- The other options are an allow list: `--runInBand` or `-i`, and `--verbose`. Every other option is denied, each of these with its own message: `-u` and `--updateSnapshot` write snapshots, `--watch` and `--watchAll` never end, `--passWithNoTests` lets an empty run pass, `-t` and `--testNamePattern` skip the other tests of a file, `--reporters`, `--json`, and `--outputFile` remove the verdict line, and `--ci=false` and `--no-ci` let Jest write a new snapshot.
+
 ### npm scripts and npx
 
 | Command | Decision |
@@ -310,7 +373,10 @@ A runner option that names a file or folder must point inside the write scope: `
 | `npm run test:integration` | allow |
 | `npm run test:e2e` | allow |
 | `npm run test:e2e:list` | allow |
+| `npm run test:rn-unit` | allow |
 | `npm run test:unit -- test/unit/a.test.ts` | allow |
+| `npm run test:rn-unit -- test/unit/a.test.ts` | allow |
+| `npm run test:rn-unit -- -u` | deny |
 | `npm run test:e2e -- --retries=2` | deny |
 | `npm run test:e2e -- --headed` | deny |
 | `npm run test:unit -- --watch` | deny |
@@ -322,7 +388,7 @@ A runner option that names a file or folder must point inside the write scope: `
 | `npx --package=cowsay vitest run test/unit/a.test.ts` | deny |
 | `npx cowsay hi` | deny |
 
-The four scripts may run the whole suite, so they need no path. The options a direct run may not use are denied after `--` too. `npx` may only run `vitest`, `playwright`, and `playwright-cli`.
+The five scripts may run the whole suite, so they need no path. `test:rn-unit` is the script the installer adds to a React Native app: `jest --config .cursor/qa/jest.config.cjs --ci`. The options a direct run may not use are denied after `--` too. `npx` may only run `vitest`, `playwright`, `playwright-cli`, and `jest`.
 
 ### sleep
 
@@ -1000,16 +1066,17 @@ What the `rtk` forms do when they run was not checked here. RTK is not installed
 
 ## MCP tools
 
-Cursor raises two events for one MCP call, according to its code (version 3.23.23) and its documentation. `preToolUse` carries the tool name with `MCP:` in front and the arguments as an object. `beforeMCPExecution` carries the bare tool name, the arguments as a JSON string, and the server's name. The hook gives the same answer to both. No real MCP call has been seen in a hook log, so this section is UNVERIFIED in Cursor. See "Known limits and unverified behaviour".
+Cursor raises two events for one MCP call, according to its code (version 3.23.23) and its documentation. `preToolUse` carries the tool name with `MCP:` in front and the arguments as an object. `beforeMCPExecution` carries the bare tool name, the arguments as a JSON string, and the server's name. The hook gives the same answer to both. On 2026-10-26 the hook log of the Cursor CLI, version 2026.10.22, showed both events, in these shapes, for each of 132 calls of the Maestro server. See "Known limits and unverified behaviour" for what was not seen.
 
 In a `beforeMCPExecution` payload, `command` is the line that started the MCP server. The hook never reads it as a shell command. Arguments in a shape the hook does not expect, such as text that is not JSON, are treated as no arguments, so an odd payload cannot make the hook deny every MCP call.
 
 The kit's `.cursor/mcp.json` starts the Maestro server. The kit does not start a Playwright MCP server: it browses with `playwright-cli`, under the rules above. The `browser_*` rows below are for a Playwright MCP server you add yourself. The hook does not hold `browser_navigate` to a URL on this machine.
 
-Most MCP tools pass. The hook does two things:
+Most MCP tools pass. The hook does three things:
 
 1. It denies a few tools by name.
-2. It checks the files a tool names.
+2. It denies Maestro's `run` when its inline flow, `yaml`, holds a command that writes a file on this machine or runs code there: `takeScreenshot`, `startRecording`, `runScript`, `evalScript`, or `addMedia`. In a live run, `run` with `takeScreenshot` saved two files into `src/`, because Maestro saves a screenshot where the flow says. No skill sends these commands: `inspect_screen` reads the screen.
+3. It checks the files a tool names.
 
 | Tool call | Decision |
 | --- | --- |
@@ -1036,6 +1103,8 @@ Most MCP tools pass. The hook does two things:
 | `MCP:take_screenshot {"device_id": "emulator-5554"}` | allow |
 | `MCP:cheat_sheet {}` | allow |
 | `MCP:run {"device_id": "emulator-5554", "yaml": "- launchApp"}` | allow |
+| `MCP:run {"device_id": "emulator-5554", "yaml": "appId: x\n---\n- takeScreenshot:\n    path: src/screen.png"}` | deny |
+| `MCP:run {"device_id": "emulator-5554", "yaml": "appId: x\n---\n- evalScript: ${1}"}` | deny |
 | `MCP:run {"device_id": "emulator-5554", "files": ["test/mobile/sign-in/01-valid-account.flow.yaml"]}` | allow |
 | `MCP:run {"device_id": "emulator-5554", "dir": "test/mobile/sign-in"}` | allow |
 | `MCP:run {"device_id": "emulator-5554", "files": ["src/flows/a.yaml"]}` | deny |
@@ -1107,8 +1176,7 @@ The hook reads tool calls and command lines. It is a guardrail and not a sandbox
 - **Seen in Cursor.** On 2026-10-09, with Composer 2.5, a denied shell command reached the model as `Rejected: Command execution was blocked by a hook:` followed by the hook's own message, word for word, and a line from Cursor that tells the model not to suggest workarounds. A `cd lib`, a read of `package-lock.json`, and a `playwright-cli open` on localhost each got the answer this document gives. A denied file write was not tried in that session.
 Not seen in a real Cursor session:
 
-- **MCP payloads.** No MCP call is in Cursor's hook logs on the machine these rules were written on. The two payload shapes are read from the code of Cursor 3.23.23 and from Cursor's documentation. The hook's tests send those shapes. Whether Cursor sends exactly these, whether both events fire in the command-line agent, and whether the agent sees the deny message are UNVERIFIED.
-- **Where an MCP server resolves a relative path.** The hook uses the project root. Which directory Cursor starts an MCP server in was not checked.
+- **An MCP deny reaching the agent.** Both MCP events fire in the Cursor CLI with the shapes the hook expects, and the Maestro server resolves a relative path from the project root, as the hook does. That was seen on 2026-10-26. No MCP call was denied in those runs, so whether the agent sees the message of an MCP deny is UNVERIFIED. The deny of every other tool reached the agent word for word.
 - **The shell's directory.** Cursor sent an empty `cwd` with every logged shell command. The hook then assumes the project root. Whether Cursor's shell keeps a directory between commands is UNVERIFIED. The `cd` rule makes the answer not matter.
 - **The `Delete` tool.** The name is read from Cursor's code. No call was logged.
 - **Windows.** The hook accepts the byte order mark that Cursor on Windows puts in front of the payload. It was not run on Windows. `hooks.json` names a `.py` file, which Windows cannot start by itself.

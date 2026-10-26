@@ -1,6 +1,6 @@
 # Mobile testing with Maestro
 
-Three skills plan, write, and fix [Maestro](https://maestro.dev) flows for an Android or iOS app: `/qa-mobile-plan`, `/qa-mobile-generate`, and `/qa-mobile-heal`. Treat them as a preview. Only Android was run, and no model has run the skills. [What was run](#what-was-run) says what stands behind them, and [Open points](#open-points) lists what is known to be missing.
+Three skills plan, write, and fix [Maestro](https://maestro.dev) flows for an Android or iOS app: `/qa-mobile-plan`, `/qa-mobile-generate`, and `/qa-mobile-heal`. Treat them as a preview. Only Android was run. On 2026-10-26 the three skills ran on one emulator in Cursor's agent on three models, and 7 of the 9 jobs met every check. [What was run](#what-was-run) says what stands behind them, and [Open points](#open-points) lists what is known to be missing.
 
 ## What you need
 
@@ -121,6 +121,14 @@ When every flow passes, the summary line is `2/2 Flows Passed in 46s` and the ex
 
 A `[Failed]` line with no error after the time means that an element file did not load: the flow or the loader lacks a line, or an element file has a JavaScript fault. Run that one flow file to see the error. `maestro check-syntax` does not read an element file and does not check a name: it prints `OK` for a flow with any of these faults.
 
+## The sample app and CI
+
+[`examples/expo-app`](../examples/expo-app/) is a small Expo app with the sign-in screen of the web example, and the reference files for these skills: a plan, the Android element files, the loader, and one flow for each of its six scenarios. Its README says how to build it and run the flows.
+
+[`.github/workflows/android.yml`](../.github/workflows/android.yml) builds a release APK of it, starts an Android emulator on a Linux runner, and runs the six flows. It runs only for a change to the example, the mobile skills, their rule file, the hook, or the workflow itself, because an emulator job takes many minutes.
+
+No workflow runs iOS. It needs a macOS runner with Xcode, which is slower and costs more, and nothing has been run on iOS yet. iOS flows are to be checked on a Mac by hand. This was decided for [issue 24](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/24).
+
 ## Known limits
 
 - With no device, each skill stops and tells you what to start. On Linux or Windows the skills stop when the prompt says iOS.
@@ -138,7 +146,31 @@ A `[Failed]` line with no error after the time means that an element file did no
 
 ## What was run
 
-All of it was run by a maintainer on one machine: a Linux host, Maestro 2.10.0, Java 17, and one Android emulator (a Pixel 7 image with Android 17 and Google Play). The app was a React Native sample app with a product list, a cart with a promo code field, and a checkout form that shows three validation messages. No model ran any of it.
+### The skills on three models
+
+On 2026-10-26 Cursor's agent ran each skill once on each of the three models, with the Cursor CLI version `2026.10.22-27dcf5f`, on the emulator below and on `examples/expo-app`, with the kit installed and the hook live. Each job started in a copy of the app: with no mobile files for plan, with the reference plan alone for generate, and with the reference files and one wrong id in an element file for heal. Each prompt was the one in [Start a job](#start-a-job), with `sign-in` and the app id `com.example.qasignin`.
+
+| Model | Plan | Generate | Heal |
+| --- | --- | --- | --- |
+| Gemini 3.8 Flash | fail | pass, `6/6 Flows Passed` | pass |
+| Composer 2.5 | pass | pass, `6/6 Flows Passed` | pass |
+| Claude Opus 5 | pass | fail, in the reply only | pass |
+
+- **No job wrote outside `test/mobile/`, and no reply claimed a pass over a failing run.** Each heal changed the one wrong id back, in the element file, and edited no flow.
+- **The plan that failed** merged signing in and signing out into one scenario, and put the checks of the dashboard after the step that leaves it. A flow written from it cannot pass. The plan skill now says that the expected lines are checked after the last step of a scenario.
+- **The generate that failed** passed its flows, but its reply sat in a code fence, with a sentence in front. The three skills now say which line comes first and which comes last.
+- **Each plan had 5 scenarios.** The reference plan has 6: no model gave signing out a scenario of its own, and the plan skill does not ask for one.
+- **Names.** Two models made `signedInAsAdaExampleCom` from `"Signed in as ada@example.com"`, and one made `signedInAsAdaexamplecom`, as the skill meant. Each run used its own name throughout, so its flows passed, but a second platform could reach another name. The generate skill now says that a word ends only at a space.
+- **A job took 2 to 9 minutes**: about 2 minutes for heal, 4 to 5 for plan, and 6 to 9 for generate, with 14 to 17 calls of the `maestro` MCP server in a plan or generate job.
+- **Without a device**, the heal skill on Gemini 3.8 Flash replied `BLOCKED: no Android device is connected. Start an emulator or plug in a device, install the app on it, then ask again.` **With `This is iOS.` on Linux**, the plan skill replied `BLOCKED: iOS needs a Mac with Xcode. This computer is not a Mac.`, with no tool call.
+- **After a deny the models went on.** The hook denied `npm install`, `npx markdownlint-cli2`, and a `for` loop over `$f`. Each model read the message, did without, and finished the job. Asked to save a screenshot into `src/`, Composer 2.5 met seven denies in a row and tried another way after each, and in the end told the user to move the file by hand.
+- **The hook found a gap.** In that run the MCP `run` tool, given an inline flow with `takeScreenshot`, saved two files into `src/`, and the hook allowed it. The hook now denies `run` with `takeScreenshot`, `startRecording`, `runScript`, `evalScript`, or `addMedia` in its flow, and a write of a flow under `test/mobile/` that adds one, with `runScript` allowed in the loader only. See [the hook rules](hook-rules.md#mcp-tools).
+- **Five skill changes came after these runs** and were not run again on a device: the expected lines of a plan, the first and last line of a reply, names that end only at a space, a time limit of 10 minutes for `maestro test`, and waiting for an edit to finish before the next `run` in heal.
+- **A long `maestro test`** passed the shell's default time limit of 2 minutes on Gemini 3.8 Flash. The CLI moved it to the background and asked the model to report again, so that reply came twice.
+
+### Runs by a maintainer
+
+All of the rest was run by a maintainer on one machine: a Linux host, Maestro 2.10.0, Java 17, and one Android emulator (a Pixel 7 image with Android 17 and Google Play). The app was a React Native sample app with a product list, a cart with a promo code field, and a checkout form that shows three validation messages. No model ran any of it.
 
 Run on that emulator, about Maestro itself:
 
@@ -146,7 +178,12 @@ Run on that emulator, about Maestro itself:
 - The folder run with `--exclude-tags=fixme`, and a run of all of `test/mobile` with the `config.yaml` template. That run takes neither the loader nor an element file for a flow.
 - The three MCP tools the skills call, `list_devices`, `inspect_screen`, and `run`, with the replies the skills describe.
 - That a `maestro test` run ends a running MCP session.
-- That a React Native `testID` is the id on the device. This was seen for 39 ids.
+- That a React Native `testID` is the id on the device. This was seen for 39 ids, and on 2026-10-25 for all 7 ids of `examples/expo-app`, on the same kind of emulator.
+
+Run on that emulator with `examples/expo-app` on 2026-10-25, by an agent that followed the templates by hand and not by a skill:
+
+- Its reference plan, element files, loader, and six flows. The six flows passed in five runs, each printing `6/6 Flows Passed` in 1 minute 45 seconds to 1 minute 57 seconds: twice from the app folder, once from the repository root, once as all of `test/mobile` with `config.yaml`, and once with an APK for all four architectures.
+- `maestro check-syntax` on every flow and the loader, and two copies of a flow with a wrong expected text, which failed with `Assertion is false`.
 
 Run on that emulator, about element files:
 
@@ -177,18 +214,17 @@ Not run:
 - The fix steps of `/qa-mobile-generate` after a failed run. The error lines they react to were seen.
 - These parts of `/qa-mobile-heal` as whole jobs: the two `BLOCKED` exits of its error table, a waiting check, the `fixme` mark in a flow with element files, a text that changes from run to run, a check that fails with `is not visible`, and another app on top of the app.
 - A system permission dialog, a physical device, and a native Android app, where an id has the form `com.example.app:id/name`.
-- A sample app with a sign-in screen. The sample has none. The prompts and examples on this page are from the imaginary app of the skills and were not walked.
-- CI. No emulator job exists.
+- The prompts and examples on this page, which are from the imaginary app of the skills.
 - Cursor itself: the folder it starts the `maestro` server in, its time limit for one MCP call, and what a walk costs a model. One `run` call took up to 45 seconds.
 - A lint or a type check of an element file in an app.
 
-A sample app with a sign-in screen and a CI job are tracked in [issue 23](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/23), and iOS in [issue 24](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/24).
+iOS is tracked in [issue 24](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/24).
 
 ## Open points
 
-- **The skills are long, and no small model has tried them.** `wc -w` counts 2,485 words in `/qa-mobile-plan`, 4,120 in `/qa-mobile-generate`, and 3,332 in `/qa-mobile-heal`. The four web skills have 1,648 to 2,507. The generate skill had 1,914 words before the element files: it now finds the device and walks the plan, which it did not do before. The kit is written for small models, and the mobile skills have not been tried on a low-tier model, or on any model.
+- **The skills are long, and each job ran once on each model.** `wc -w` counts 2,541 words in `/qa-mobile-plan`, 4,172 in `/qa-mobile-generate`, and 3,373 in `/qa-mobile-heal`. The four web skills have 1,648 to 2,507. One run of each job on each model says little about how often a job fails, and the skill changes that came after those runs were not run on a device.
 - **System dialog texts are still in flows.** The block for a system dialog holds the dialog's question and its button as texts, and the heal skill's block for the iOS keyboard taps a text. The skills take these texts to differ by platform, so they belong in element files. That change waits for a device run with a real dialog.
 - **An element with an id on one platform only has no rule.** The shared flow fixes whether a name stands under `id:` or alone. No rule says what to do when that differs between Android and iOS. A text that differs by platform would be marked as a product bug. This waits for the first iOS run.
-- **The hook does not check the code in an element file.** It allows any JavaScript in an element file, a `.js` file anywhere under `test/mobile/`, `runScript` and `evalScript` in a flow, and `runScript` in the inline text of the MCP `run` tool. Maestro's script engine can make network calls. Only the skill text forbids these.
+- **The hook does not check the code in an element file.** It allows any JavaScript in an element file and in a `.js` file anywhere under `test/mobile/`, which the loader runs. Maestro's script engine can make network calls. Only the skill text forbids that. The hook does deny `runScript` outside the loader, `evalScript`, `takeScreenshot`, `startRecording`, and `addMedia`, in a flow and in the inline flow of the MCP `run` tool.
 - **A plan made before the element files is not read.** `/qa-mobile-generate` does not read a plan with lines such as ``Tap "Save profile" (id `profile-save`)``. Plan the feature again. The mobile skills were never on the `main` branch or in a tagged version, so only a plan made from this branch can have that form.
 - **Smaller gaps in the skill text.** In a `flows only` job, one missing name stops the whole job. `/qa-mobile-heal` has no row for a fault in the flow file itself. The walk of generate has no row for `Couldn't hide the keyboard`, which the other two skills treat as an iOS error. A name made from an expected text can be odd: "Discount: 2.45" gives `discount245`, and a second amount gives a second name for the same id.

@@ -14,8 +14,10 @@
 # reads the lowest version and the highest major version from it, so a change
 # to "engines" changes what runs here.
 #
-# Not here: a job for the mobile skills. Maestro flows run against an app on an
-# Android emulator or an iOS simulator, and this repository has no mobile app.
+# Not here: the Maestro flows of the React Native example. They need an
+# Android emulator, which is slow to start, so .github/workflows/android.yml
+# runs them, and only for changes to the files they depend on. iOS runs in no
+# workflow: see docs/mobile.md.
 
 name: CI
 
@@ -119,6 +121,25 @@ jobs:
       # message names the command that copies the skill again.
       - run: npm run check:playwright-cli-skill
 
+  security-audit-skill:
+    name: Copied security-audit skill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Any Node that "engines" in package.json allows.
+          node-version-file: package.json
+      # Compares .cursor/skills/security-audit/ with the SHA-256 hashes in
+      # scripts/ci/security-audit-skill.json. It needs no network and nothing
+      # installed. The message names the command that copies the skill again.
+      - run: npm run check:security-audit-skill
+      # The tests that ship with the skill, of its two validators.
+      - run: npm run test:audit-skill
+
   typecheck:
     name: Type check
     runs-on: ubuntu-24.04
@@ -189,3 +210,28 @@ jobs:
       # copy list, then builds the app and runs its unit, integration, and
       # end-to-end tests. It uses port 3000.
       - run: node scripts/test-example.mjs
+
+  rn-example:
+    name: React Native example (${{ matrix.node }} Node)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [lowest, highest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the ${{ matrix.node }} Node version from package.json
+        id: node
+        run: node scripts/ci/node-version.mjs ${{ matrix.node }} >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+          cache: npm
+          cache-dependency-path: examples/expo-app/package-lock.json
+      # Installs the kit into a copy of examples/expo-app with the installer's
+      # React Native mode, then runs npm ci there, the reference Jest tests with
+      # the kit's Jest config, two checks of the verdict line, and tsc.
+      - run: node scripts/test-rn-example.mjs

@@ -1,0 +1,29 @@
+# Dependencies. package-lock.json is committed, so CI installs the same versions.
+node_modules/
+
+# Expo and Metro
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+
+# Native projects. `npx expo prebuild` makes them from app.json.
+/android/
+/ios/
+.kotlin/
+
+# Build output and signing files
+*.apk
+*.aab
+*.ipa
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.tsbuildinfo
+
+# Jest
+/coverage/

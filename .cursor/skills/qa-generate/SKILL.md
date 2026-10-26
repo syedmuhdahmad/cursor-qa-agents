@@ -134,7 +134,7 @@ Why: Next.js adds its own `alert` to every page, outside `main`, so `page.getByR
 
    The app contradicts the plan: leave the test failing. Do not change the expected value, do not remove the check, and do not mark the test `test.fixme`. Find the source line that holds the received text. Go to step 9 with `Verdict: FAIL` and fill in `Bug:`.
 
-9. **Close the browser, then reply.** Run `npx --no-install playwright-cli close`. Run it on every path, also after BLOCKED. `Browser 'default' is not open.` is a fine answer. Then reply with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
+9. **Close the browser, then reply.** Run `npx --no-install playwright-cli close`. Run it on every path, also after BLOCKED. `Browser 'default' is not open.` is a fine answer. Then reply with this form and nothing else, as plain lines with no ``` fence around them. The values shown are examples. A line you have nothing for gets `none`.
 
    ```text
    Plan: test/e2e/plan/profile.plan.md

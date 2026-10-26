@@ -5,13 +5,18 @@
 //   1. Copy the paths in the README's copy list into the app.
 //   2. Add the README's dev dependencies and the four test:* scripts to the
 //      app's package.json.
+//
+// In a React Native app, one that lists react-native or expo in package.json,
+// it leaves out the files only a web app uses (see WEB_ONLY), adds the
+// README's React Native dev dependencies instead, and adds the test:rn-unit
+// script. --app web or --app react-native sets the kind of app by hand.
 //   3. Add the lines of the kit's .gitignore that the app's .gitignore lacks.
 //   4. Add test/tsconfig.json when the app has a tsconfig.json and no
 //      test/tsconfig.json. See TEST_TSCONFIG_TEXT below for what it is for.
 //
 // Usage:
 //
-//   node scripts/install-into.mjs <app-dir> [--dry-run] [--force]
+//   node scripts/install-into.mjs <app-dir> [--dry-run] [--force] [--app web|react-native]
 //
 //   --dry-run  Print what would change. Write nothing.
 //   --force    Replace files, dependency ranges, and scripts that the app
@@ -63,6 +68,28 @@ export const KIT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 export const COPY_MARKER = '<!-- install:copy -->'
 export const DEV_DEPENDENCIES_MARKER = '<!-- install:dev-dependencies -->'
+export const RN_DEV_DEPENDENCIES_MARKER = '<!-- install:react-native-dev-dependencies -->'
+
+// The React Native example app holds the version ranges of the React Native dev
+// dependencies. They stay out of this repository's own package.json, which
+// would otherwise install React Native here, and Dependabot keeps them current.
+export const RN_VERSIONS_FILE = 'examples/expo-app/package.json'
+
+// An app is a React Native app when its package.json lists one of these.
+export const REACT_NATIVE_PACKAGES = ['expo', 'react-native']
+
+// The script a React Native app gets in place of the four test:* scripts.
+export const RN_TEST_SCRIPTS = { 'test:rn-unit': 'jest --config .cursor/qa/jest.config.cjs --ci' }
+
+// Files of the copy list that only a web app uses: the Vitest and Playwright
+// configs, Vitest's setup file, and the folder of the Playwright tests. In a
+// React Native app they would load packages that are not installed.
+export const WEB_ONLY = ['vitest.config.ts', 'playwright.config.ts', 'test/setup.ts', 'test/e2e']
+
+// The Jest config files of an app that the kit's .cursor/qa/jest.config.cjs reads,
+// and the ones in TypeScript that it cannot read.
+const JEST_CONFIGS = ['jest.config.js', 'jest.config.cjs', 'jest.config.mjs', 'jest.config.json']
+const JEST_TYPESCRIPT_CONFIGS = ['jest.config.ts', 'jest.config.cts', 'jest.config.mts']
 
 // "The four test:* scripts" in the README.
 export const TEST_SCRIPTS = ['test:unit', 'test:integration', 'test:e2e', 'test:e2e:list']
@@ -105,11 +132,13 @@ const NEVER_COPIED = new Set(['node_modules', '__pycache__', '.pytest_cache', '.
 
 const GITIGNORE_HEADING = '# Added with the Cursor QA agent kit'
 
-const USAGE = `Usage: node scripts/install-into.mjs <app-dir> [--dry-run] [--force]
+const USAGE = `Usage: node scripts/install-into.mjs <app-dir> [--dry-run] [--force] [--app web|react-native]
 
   --dry-run  Print what would change. Write nothing.
   --force    Replace files, dependency ranges, and scripts that the app already
              has with the kit's. Without it they are left alone and listed.
+  --app      The kind of app. Without it, an app whose package.json lists
+             react-native or expo is a React Native app, and any other is a web app.
 
 .cursor/hooks.json and .cursor/mcp.json are merged into the app's own files.
 A symbolic link in the app is never written through, also with --force.
@@ -119,10 +148,12 @@ version of the kit left in the app and this version no longer uses.`
 // A problem the user can fix. Printed without a stack trace.
 export class InstallError extends Error {}
 
-// Returns the words inside the fenced code block that follows `marker`.
-export function readMarkedBlock(readme, marker) {
+// Returns the words inside the fenced code block that follows `marker`. With
+// `optional`, a README without the marker gives null.
+export function readMarkedBlock(readme, marker, { optional = false } = {}) {
   const lines = readme.split(/\r?\n/)
   const found = lines.flatMap((line, index) => (line.trim() === marker ? [index] : []))
+  if (found.length === 0 && optional) return null
   if (found.length !== 1) {
     throw new InstallError(
       `README.md must have exactly one "${marker}" line. Found ${found.length}.`,
@@ -192,7 +223,54 @@ export function readInstallLists(kitRoot = KIT_ROOT) {
     scripts[name] = command
   }
 
-  return { copyPaths, devDependencies, scripts }
+  // The React Native list is optional, so that a kit without it still installs into a web app.
+  let rnDevDependencies = null
+  const rnNames = readMarkedBlock(readme, RN_DEV_DEPENDENCIES_MARKER, { optional: true })
+  if (rnNames) {
+    const versionsFile = join(kitRoot, RN_VERSIONS_FILE)
+    if (!existsSync(versionsFile)) {
+      throw new InstallError(`README.md lists React Native dev dependencies, but this repository has no ${RN_VERSIONS_FILE}.`)
+    }
+    const rnPackage = readJson(versionsFile)
+    rnDevDependencies = {}
+    for (const name of rnNames) {
+      const range = rnPackage.devDependencies?.[name]
+      if (typeof range !== 'string') {
+        throw new InstallError(
+          `README.md lists the React Native dev dependency "${name}", but devDependencies in ${RN_VERSIONS_FILE} does not have it.`,
+        )
+      }
+      rnDevDependencies[name] = range
+    }
+  }
+
+  return { copyPaths, devDependencies, scripts, rnDevDependencies }
+}
+
+// The kind of app: { kind: 'react-native' | 'web', reason }. `chosen` is the
+// value of --app, or undefined to look at the app's package.json.
+export function appKind(appPackage, chosen) {
+  if (chosen === 'web' || chosen === 'react-native') return { kind: chosen, reason: 'set with --app' }
+  if (chosen !== undefined) throw new InstallError(`--app must be web or react-native, not "${chosen}".`)
+  for (const section of ['dependencies', 'devDependencies', 'peerDependencies']) {
+    const name = REACT_NATIVE_PACKAGES.find((pkg) => typeof appPackage[section]?.[pkg] === 'string')
+    if (name) return { kind: 'react-native', reason: `package.json lists ${name}` }
+  }
+  return { kind: 'web', reason: 'package.json lists neither react-native nor expo' }
+}
+
+// True for a file of the copy list that a React Native app does not get.
+export function isWebOnly(file) {
+  return WEB_ONLY.some((path) => file === path || file.startsWith(`${path}/`))
+}
+
+// The range of test-renderer for the app's React. @testing-library/react-native
+// asks for the test-renderer line that matches the React minor version:
+// test-renderer 1.2 for React 19.2. Falls back to the kit's range.
+export function testRendererRange(reactRange, kitRange) {
+  const match = /(\d+)\.(\d+)/.exec(typeof reactRange === 'string' ? reactRange : '')
+  if (!match || match[1] !== '19') return kitRange
+  return `~1.${match[2]}.0`
 }
 
 // Lists the files under `path` (a file or a folder), relative to `root`,
@@ -655,6 +733,37 @@ function startsRetiredPackage(server) {
   return words.some((word) => typeof word === 'string' && (word === RETIRED_PACKAGE || word.startsWith(`${RETIRED_PACKAGE}@`)))
 }
 
+// /qa-rn-unit runs Jest with .cursor/qa/jest.config.cjs, which reads the app's
+// own Jest config for its preset. Without a preset React Native code does not
+// load in Jest, and a config in TypeScript is one that file cannot read.
+function findJestWarnings(appRoot, appPackage) {
+  const typescript = JEST_TYPESCRIPT_CONFIGS.find((name) => existsSync(join(appRoot, name)))
+  if (typescript) {
+    return [{
+      id: 'jest-config',
+      title: `the kit cannot read your Jest config, ${typescript}.`,
+      lines: [
+        '.cursor/qa/jest.config.cjs reads jest.config.js, .cjs, .mjs, or .json, or "jest" in package.json, and no TypeScript.',
+        'Without it /qa-rn-unit stops with BLOCKED.',
+        `What to do: move the config to jest.config.js, or to "jest" in package.json.`,
+      ],
+    }]
+  }
+  const hasConfig = JEST_CONFIGS.some((name) => existsSync(join(appRoot, name))) || isRecord(appPackage.jest) || typeof appPackage.jest === 'string'
+  if (hasConfig) return []
+  const expo = typeof (appPackage.dependencies?.expo ?? appPackage.devDependencies?.expo) === 'string'
+  return [{
+    id: 'jest-preset',
+    title: 'your app has no Jest config, so Jest has no React Native preset.',
+    lines: [
+      'Without a preset Jest cannot load React Native code, and /qa-rn-unit stops with BLOCKED.',
+      expo
+        ? 'What to do: run `npx expo install jest-expo` and add "jest": { "preset": "jest-expo" } to package.json.'
+        : 'What to do: add the React Native Jest preset of your React Native version as a dev dependency, and name it in "jest": { "preset": ... } in package.json.',
+    ],
+  }]
+}
+
 // What the app still has of the Playwright MCP server, which this kit no
 // longer uses. A note switches nothing off. It is there because the installer
 // never removes anything, so an app that installed an earlier version of the
@@ -717,7 +826,7 @@ function writeFile(kitRoot, appRoot, { file, action, text }) {
 
 // Installs the kit into `appDir`. Returns a report of what was done, or of
 // what would be done when `dryRun` is set.
-export function install(appDir, { dryRun = false, force = false, kitRoot = KIT_ROOT } = {}) {
+export function install(appDir, { dryRun = false, force = false, kitRoot = KIT_ROOT, app = undefined } = {}) {
   const appRoot = resolve(appDir)
   if (followedKind(appRoot) !== 'folder') throw new InstallError(`${appRoot} is not a folder.`)
   const packagePath = join(appRoot, 'package.json')
@@ -733,11 +842,6 @@ export function install(appDir, { dryRun = false, force = false, kitRoot = KIT_R
 
   const lists = readInstallLists(kitRoot)
 
-  // Plan everything before the first write, so a problem stops the install
-  // while the app is still untouched.
-  const files = planFiles(kitRoot, appRoot, lists.copyPaths, force)
-  const testTsconfig = planTestTsconfig(appRoot)
-
   const packageText = readFileSync(packagePath, 'utf8')
   let appPackage
   try {
@@ -748,9 +852,31 @@ export function install(appDir, { dryRun = false, force = false, kitRoot = KIT_R
   if (!isRecord(appPackage)) {
     throw new InstallError(`${packagePath} does not hold a JSON object.`)
   }
+  const kind = appKind(appPackage, app)
+  const reactNative = kind.kind === 'react-native'
+  if (reactNative && !lists.rnDevDependencies) {
+    throw new InstallError(
+      `${appRoot} is a React Native app (${kind.reason}), and README.md in this kit has no "${RN_DEV_DEPENDENCIES_MARKER}" list.`,
+    )
+  }
+  let wantedDependencies = lists.devDependencies
+  if (reactNative) {
+    wantedDependencies = { ...lists.rnDevDependencies }
+    if (wantedDependencies['test-renderer']) {
+      const react = appPackage.dependencies?.react ?? appPackage.devDependencies?.react
+      wantedDependencies['test-renderer'] = testRendererRange(react, wantedDependencies['test-renderer'])
+    }
+  }
+
+  // Plan everything before the first write, so a problem stops the install
+  // while the app is still untouched.
+  const allFiles = planFiles(kitRoot, appRoot, lists.copyPaths, force)
+  const files = reactNative ? allFiles.filter((entry) => !isWebOnly(entry.file)) : allFiles
+  const testTsconfig = planTestTsconfig(appRoot)
+
   let devDependencies = planPackageEntries(
     appPackage,
-    lists.devDependencies,
+    wantedDependencies,
     ['devDependencies', 'dependencies', 'optionalDependencies'],
     'devDependencies',
     force,
@@ -758,7 +884,7 @@ export function install(appDir, { dryRun = false, force = false, kitRoot = KIT_R
   if (devDependencies.some((entry) => entry.action === 'add')) {
     appPackage.devDependencies = sortKeys(appPackage.devDependencies)
   }
-  let scripts = planPackageEntries(appPackage, lists.scripts, ['scripts'], 'scripts', force)
+  let scripts = planPackageEntries(appPackage, reactNative ? RN_TEST_SCRIPTS : lists.scripts, ['scripts'], 'scripts', force)
   const packageProblem = rootFileProblem(appRoot, 'package.json')
   if (packageProblem) {
     devDependencies = withoutWrites(devDependencies, packageProblem)
@@ -770,6 +896,7 @@ export function install(appDir, { dryRun = false, force = false, kitRoot = KIT_R
 
   const gitignore = planGitignore(kitRoot, appRoot)
   const warnings = findWarnings(kitRoot, appRoot, files)
+  if (reactNative) warnings.push(...findJestWarnings(appRoot, appPackage))
   const notes = findNotes(kitRoot, appRoot, lists, appPackage)
 
   if (!dryRun) {
@@ -792,6 +919,7 @@ export function install(appDir, { dryRun = false, force = false, kitRoot = KIT_R
     appRoot,
     dryRun,
     force,
+    app: kind,
     // The merged text is written above. The report has no use for it.
     files: files.map(({ text, ...entry }) => entry),
     testTsconfig,
@@ -829,13 +957,18 @@ export function formatReport(report) {
   const row = (action, text) => `  ${verb[action].padEnd(14)}${text}`
   const withNote = (text, note) => (note ? `${text} (${note})` : text)
 
+  const kindName = report.app?.kind === 'react-native' ? 'React Native app' : 'web app'
   const out = [
     dryRun
       ? `Dry run. Nothing is written. An install into ${report.appRoot} would do this:`
       : `Installed the Cursor QA agent kit into ${report.appRoot}`,
     '',
+    ...(report.app ? [`App: a ${kindName}, because ${report.app.reason}.`, ''] : []),
     'Files',
   ]
+  if (report.app?.kind === 'react-native') {
+    out.push(`  left out for a React Native app: ${WEB_ONLY.join(', ')}`)
+  }
   for (const { file, action, note } of report.files) {
     if (action !== 'same') out.push(row(action, withNote(file, note)))
   }
@@ -916,7 +1049,8 @@ export function formatReport(report) {
     }
   }
   if (!dryRun) {
-    out.push('', 'Next, in the app folder:', '  npm install', '  npx playwright install chromium')
+    const next = report.app?.kind === 'react-native' ? ['  npm install'] : ['  npm install', '  npx playwright install chromium']
+    out.push('', 'Next, in the app folder:', ...next)
   }
   // Notes come before warnings, so that a warning is the last thing printed.
   for (const note of report.notes) {
@@ -937,6 +1071,7 @@ function main(argv) {
       options: {
         'dry-run': { type: 'boolean', default: false },
         force: { type: 'boolean', default: false },
+        app: { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
       },
     })
@@ -956,6 +1091,7 @@ function main(argv) {
     const report = install(parsed.positionals[0], {
       dryRun: parsed.values['dry-run'],
       force: parsed.values.force,
+      app: parsed.values.app,
     })
     console.log(formatReport(report))
     return 0

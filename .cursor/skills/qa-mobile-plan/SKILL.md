@@ -98,7 +98,7 @@ A `run` that failed replies with `Failed to run flow:` and the error. An error w
    | `is not connected` | BLOCKED, with the sentence for your platform from step 2. |
    | No row matches | BLOCKED: `the app com.example.app did not launch. Check that it is installed on the device.` Put the error from the reply under `Not checked:`. |
 
-4. **Read the screen.** Call `inspect_screen`. Note the name and the `rid` of each field, button, and message. Give the screen a name of one or two words, letters only, from its heading or from what it is for, such as `Profile` or `Order history`. Name every later screen the same way, and use the same name every time. The reply shows nothing of the app, only the status bar, the home screen, or another app: call `inspect_screen` again. Still nothing of the app after 3 calls: BLOCKED: `the app com.example.app is not on the screen of the device. Close what covers it, then ask again.`
+4. **Read the screen.** Call `inspect_screen`. Note the name and the `rid` of each field, button, and message. Give the screen a name of one or two words of letters, with a space between two words, from its heading or from what it is for, such as `Profile`, `Order history`, or `Sign in`. Name every later screen the same way, and use the same name every time. The reply shows nothing of the app, only the status bar, the home screen, or another app: call `inspect_screen` again. Still nothing of the app after 3 calls: BLOCKED: `the app com.example.app is not on the screen of the device. Close what covers it, then ask again.`
 
 5. **Reach the feature's screen.**
 
@@ -136,7 +136,7 @@ A `run` that failed replies with `Failed to run flow:` and the error. An error w
 
    1. Call `run` with one `yaml`: the two first lines, the `launchApp` block, the start steps, the scenario's actions, and the last line. Stop at an action that opens a new screen or shows a message.
    2. Call `inspect_screen`. Copy each name that the scenario uses from it. More actions follow on the new screen: call `run` again without the `launchApp` block.
-   3. Add the scenario to the plan file, in the template's form, with the sentence forms below.
+   3. Add the scenario to the plan file, in the template's form, with the sentence forms below. Its Expect lines are checked after its last step, so put in them only what the last `inspect_screen` of the scenario shows.
 
    | The `run` reply contains | Do |
    | --- | --- |
@@ -169,7 +169,7 @@ A `run` that failed replies with `Failed to run flow:` and the error. An error w
    - A scenario passes a system dialog, or must go back: do section A.
    - No form fits: write one short sentence in the same style and name it under `Not checked:`.
 
-10. **Reply** with this form and nothing else. The values shown are examples. A line you have nothing for gets `none`.
+10. **Reply** with this form and nothing else, as plain lines with no ``` fence around them. Your first line is the `Plan file:` line, and your last line is the `Not checked:` line. The values shown are examples. A line you have nothing for gets `none`.
 
     ```text
     Plan file: test/mobile/plan/profile.plan.md

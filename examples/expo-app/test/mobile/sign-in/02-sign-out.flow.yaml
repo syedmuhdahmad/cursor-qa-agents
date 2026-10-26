@@ -1,0 +1,33 @@
+# plan: test/mobile/plan/sign-in.plan.md
+# scenario: 1.2 Sign out returns to the sign-in screen
+appId: ${APP_ID}
+name: "Sign out returns to the sign-in screen"
+tags:
+  - sign-in
+---
+- runFlow: ../elements/load.yaml
+# 1. Launch the app with cleared state.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+# 2. On the Sign in screen, type `ada@example.com` into "Email".
+- tapOn:
+    id: ${output.signIn.email}
+- inputText: "ada@example.com"
+# 3. On the Sign in screen, type `correct-horse-battery` into "Password".
+- tapOn:
+    id: ${output.signIn.password}
+- inputText: "correct-horse-battery"
+# 4. On the Sign in screen, tap "Sign in".
+- hideKeyboard
+- tapOn:
+    id: ${output.signIn.signIn}
+# 5. On the Dashboard screen, tap "Sign out".
+- tapOn:
+    id: ${output.dashboard.signOut}
+# Expect: On the Sign in screen, "Sign in" is visible.
+- assertVisible:
+    id: ${output.signIn.signIn}
+    text: "Sign in"
+# Expect: On the Sign in screen, "Signed in as ada@example.com" is not visible.
+- assertNotVisible: "Signed in as ada@example.com"

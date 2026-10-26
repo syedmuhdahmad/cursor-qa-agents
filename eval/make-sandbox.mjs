@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Builds one sandbox for one eval case: a copy of examples/next-app with the
-// kit installed, the case's start state applied, and one baseline commit in
-// its own git repository, so score.mjs can see what an agent changed.
+// Builds one sandbox for one eval case: a copy of the case's example app
+// (examples/next-app, or examples/expo-app for a case with "app": "expo-app")
+// with the kit installed, the case's start state applied, and one baseline
+// commit in its own git repository, so score.mjs can see what an agent changed.
 //
 //   node eval/make-sandbox.mjs --case unit-ui --out ../runs/unit-ui
 //   node eval/make-sandbox.mjs --case unit-ui --out ../runs/unit-ui-before --kit-ref origin/main
@@ -18,7 +19,10 @@
 //
 // The kit comes from the working tree, uncommitted changes included, or from
 // a git ref with --kit-ref. node_modules is installed once per set of
-// dependencies in a base folder and hard-linked into every sandbox.
+// dependencies in a base folder and hard-linked into every sandbox. The
+// installer sees that examples/expo-app is a React Native app and installs the
+// kit's React Native part there. That app's node_modules come from its own
+// package-lock.json, with `npm ci`, in a base folder of their own.
 //
 // --clean <run-folder> is for a run that has been scored. It writes the
 // agent's changes to <run-folder>/changes.diff and removes node_modules and
@@ -50,9 +54,10 @@ import {
   install,
 } from '../scripts/install-into.mjs'
 import {
+  APPS,
+  DEFAULT_APP,
   DEFAULT_APP_PORT,
   DEFAULT_BUG_PORT,
-  EXAMPLE,
   EvalError,
   KIT_ROOT,
   META_NAME,
@@ -93,21 +98,27 @@ const USAGE = `Usage:
                     node_modules and .next from its sandbox. Frees about 16,000 inodes.
   --relink <folder> Put node_modules back into a cleaned run, to score it again.`
 
-// Generated files a maintainer may have in examples/next-app, and two files
-// that would tell the agent about the reference tests.
-const NOT_COPIED_FROM_EXAMPLE = new Set([
-  'node_modules',
-  '.next',
-  'out',
-  'package-lock.json',
-  'next-env.d.ts',
-  'tsconfig.tsbuildinfo',
-  'coverage',
-  'test-results',
-  'playwright-report',
-  'README.md',
-  '.markdownlint-cli2.jsonc',
-])
+// For each app: generated files a maintainer may have in the example, and two
+// files that would tell the agent about the reference tests. The names are
+// matched at the top of the example only, so examples/expo-app keeps
+// test/mobile/elements/android/. The Expo app commits its package-lock.json,
+// and the sandbox keeps it: its node_modules are installed from it.
+const NOT_COPIED_FROM_EXAMPLE = {
+  'next-app': new Set([
+    'node_modules',
+    '.next',
+    'out',
+    'package-lock.json',
+    'next-env.d.ts',
+    'tsconfig.tsbuildinfo',
+    'coverage',
+    'test-results',
+    'playwright-report',
+    'README.md',
+    '.markdownlint-cli2.jsonc',
+  ]),
+  'expo-app': new Set(['node_modules', 'android', 'ios', '.expo', 'dist', 'coverage', 'README.md', '.markdownlint-cli2.jsonc']),
+}
 
 const DEFAULT_URL = 'http://localhost:3000'
 
@@ -139,15 +150,19 @@ function prepareOut(out, force) {
   return target
 }
 
-function copyExample(target) {
-  if (!existsSync(join(EXAMPLE, 'package.json'))) {
-    throw new EvalError(`${EXAMPLE} has no package.json. The example app is missing from this working tree.`)
+function copyExample(target, app = DEFAULT_APP) {
+  const example = APPS[app].dir
+  if (!existsSync(join(example, 'package.json'))) {
+    throw new EvalError(`${example} has no package.json. The example app is missing from this working tree.`)
   }
-  cpSync(EXAMPLE, target, {
+  if (APPS[app].lockfile && !existsSync(join(example, 'package-lock.json'))) {
+    throw new EvalError(`${example} has no package-lock.json, and its node_modules are installed from that file.`)
+  }
+  cpSync(example, target, {
     recursive: true,
     filter: (source) => {
-      const path = relative(EXAMPLE, source)
-      return !NOT_COPIED_FROM_EXAMPLE.has(path.split(sep)[0])
+      const path = relative(example, source)
+      return !NOT_COPIED_FROM_EXAMPLE[app].has(path.split(sep)[0])
     },
   })
 }
@@ -231,17 +246,21 @@ function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
-// Installs the dependencies of `packagePath` once and returns the folder that
-// holds them. Two sandboxes with the same dependencies share one folder.
-function ensureBase(baseRoot, packagePath, { browser }) {
-  const packageText = readFileSync(packagePath, 'utf8')
+// Installs the dependencies of the app in `appDir` once and returns the folder
+// that holds them. Two sandboxes with the same dependencies share one folder.
+// An app whose example commits package-lock.json is installed from that file
+// with `npm ci`, and the file is part of the key. Its folder name starts with
+// the name of the app, so the large Expo install never shares a folder with
+// the Next.js one. The Next.js folders keep the names they had before.
+function ensureBase(baseRoot, appDir, { browser, app = DEFAULT_APP }) {
+  const packageText = readFileSync(join(appDir, 'package.json'), 'utf8')
   const packageJson = JSON.parse(packageText)
+  const lockText = APPS[app].lockfile ? readFileSync(join(appDir, 'package-lock.json'), 'utf8') : null
   const sorted = (object = {}) => Object.entries(object).sort(([a], [b]) => (a < b ? -1 : 1))
-  const key = createHash('sha256')
-    .update(JSON.stringify([sorted(packageJson.dependencies), sorted(packageJson.devDependencies)]))
-    .digest('hex')
-    .slice(0, 12)
-  const dir = join(baseRoot, key)
+  const hash = createHash('sha256').update(JSON.stringify([sorted(packageJson.dependencies), sorted(packageJson.devDependencies)]))
+  if (lockText !== null) hash.update(lockText)
+  const key = hash.digest('hex').slice(0, 12)
+  const dir = join(baseRoot, app === DEFAULT_APP ? key : `${app}-${key}`)
   const done = join(dir, '.installed')
   if (existsSync(done)) return { dir, fresh: false }
 
@@ -268,9 +287,14 @@ function ensureBase(baseRoot, packagePath, { browser }) {
     rmSync(dir, { recursive: true, force: true })
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, 'package.json'), packageText)
-    log(`Installing dependencies once into ${dir}`)
-    const installed = run('npm', ['install', '--no-audit', '--no-fund'], { cwd: dir, inherit: true, timeoutMs: 15 * 60_000 })
-    if (installed.status !== 0) throw new EvalError(`npm install failed in ${dir}.`)
+    if (lockText !== null) writeFileSync(join(dir, 'package-lock.json'), lockText)
+    const command = lockText !== null ? 'ci' : 'install'
+    log(`Installing dependencies once into ${dir} with npm ${command}`)
+    const installed = run('npm', [command, '--no-audit', '--no-fund'], { cwd: dir, inherit: true, timeoutMs: 15 * 60_000 })
+    if (installed.status !== 0) {
+      const why = lockText !== null ? ` If it says that package.json and package-lock.json are not in sync, the kit's installer added a package that examples/${app}/package-lock.json lacks.` : ''
+      throw new EvalError(`npm ${command} failed in ${dir}.${why}`)
+    }
     if (browser) {
       const chromium = run('npx', ['playwright', 'install', 'chromium'], { cwd: dir, inherit: true, timeoutMs: 15 * 60_000 })
       if (chromium.status !== 0) throw new EvalError(`npx playwright install chromium failed in ${dir}.`)
@@ -284,8 +308,8 @@ function ensureBase(baseRoot, packagePath, { browser }) {
 
 // Stops before the first link when the file system of `appDir` has too few
 // free inodes, and warns when only a few more sandboxes fit.
-function shareNodeModules(appDir, baseRoot, browser) {
-  const base = ensureBase(baseRoot, join(appDir, 'package.json'), { browser })
+function shareNodeModules(appDir, baseRoot, browser, app = DEFAULT_APP) {
+  const base = ensureBase(baseRoot, appDir, { browser: browser && APPS[app].browser, app })
   linkNodeModules(base.dir, appDir, log)
   const lockfile = join(base.dir, 'package-lock.json')
   if (existsSync(lockfile)) cpSync(lockfile, join(appDir, 'package-lock.json'))
@@ -368,41 +392,52 @@ function bugServerEdits() {
 
 // --- What is in the installed kit -------------------------------------------
 
-const KIT_FILES = [
-  'AGENTS.md',
-  'vitest.config.ts',
-  'playwright.config.ts',
-  'test/setup.ts',
-  'test/e2e/seed.spec.ts',
-  '.cursorignore',
-  '.cursor/hooks.json',
-  '.cursor/hooks/guard-test-writes.py',
-  '.cursor/mcp.json',
-  '.cursor/qa/vitest-verdict.mjs',
-  '.cursor/qa/playwright-verdict.mjs',
-]
+// The files of the installed kit that the harness looks for, by the runner of
+// the app. The installer leaves out the Vitest and Playwright files in a React
+// Native app, and adds the Jest config there.
+const KIT_FILES_ALL = ['AGENTS.md', '.cursorignore', '.cursor/hooks.json', '.cursor/hooks/guard-test-writes.py', '.cursor/mcp.json']
+const KIT_FILES = {
+  vitest: [...KIT_FILES_ALL, 'vitest.config.ts', 'playwright.config.ts', 'test/setup.ts', 'test/e2e/seed.spec.ts', '.cursor/qa/vitest-verdict.mjs', '.cursor/qa/playwright-verdict.mjs'],
+  jest: [...KIT_FILES_ALL, '.cursor/qa/jest.config.cjs', '.cursor/qa/jest-verdict.mjs'],
+}
 
 const TEST = `import { expect, it } from 'vitest'\n\nit('adds', () => {\n  expect(1 + 1).toBe(2)\n})\n`
 const SPEC = `import { expect, test } from '@playwright/test'\n\ntest.fixme('home', async ({ page }) => {\n  await page.goto('/')\n  await expect(page).toHaveURL('/')\n})\n`
+const JEST_TEST = `it('adds', () => {\n  expect(1 + 1).toBe(2)\n})\n`
+const JEST_COMMAND = 'RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/lib/validation.test.ts'
 
 // Asks the installed hook a few fixed questions. The first two show that the
-// guard is alive. The others show which of the newer rules it has. `browseUrl`
-// is set when the skill of this case opens the app with playwright-cli. Then
-// the hook is also asked about that command, with the URL of the case's server.
-function probeHook(sandbox, browseUrl) {
+// guard is alive. The others show which of the newer rules it has, for the
+// runner of the app. `browseUrl` is set when the skill of this case opens the
+// app with playwright-cli. Then the hook is also asked about that command,
+// with the URL of the case's server.
+function probeHook(sandbox, browseUrl, runner = 'vitest') {
   const write = (file, content) => ({ tool_name: 'Write', tool_input: { file_path: join(sandbox, file), content } })
   const shell = (command) => ({ command, cwd: '' })
   const browse = browseUrl
     ? [{ name: 'allows the playwright-cli command that opens the app', expected: 'allow', event: 'beforeShellExecution', payload: shell(`npx --no-install playwright-cli open ${browseUrl}/sign-in`) }]
     : []
+  const test = runner === 'jest' ? JEST_TEST : TEST
+  const forRunner =
+    runner === 'jest'
+      ? [
+          { name: 'denies a new xit( in a test', expected: 'deny', event: 'preToolUse', payload: write('test/unit/eval-probe.test.ts', JEST_TEST.replace('it(', 'xit(')) },
+          { name: 'denies a new toMatchSnapshot( in a test', expected: 'deny', event: 'preToolUse', payload: write('test/unit/eval-probe.test.ts', JEST_TEST.replace('expect(1 + 1).toBe(2)', 'expect(1 + 1).toMatchSnapshot()')) },
+          { name: 'allows the Jest command the skill teaches', expected: 'allow', event: 'beforeShellExecution', payload: shell(JEST_COMMAND) },
+          { name: "denies jest without the kit's config", expected: 'deny', event: 'beforeShellExecution', payload: shell('RTK_DISABLED=1 npx jest test/unit/lib/validation.test.ts') },
+          { name: 'denies jest -u', expected: 'deny', event: 'beforeShellExecution', payload: shell(JEST_COMMAND.replace(' test/', ' -u test/')) },
+        ]
+      : [
+          { name: 'denies test.fixme( without the product bug comment', expected: 'deny', event: 'preToolUse', payload: write('test/e2e/eval-probe.spec.ts', SPEC) },
+          { name: 'allows the Vitest command the skills teach', expected: 'allow', event: 'beforeShellExecution', payload: shell('RTK_DISABLED=1 npx vitest run test/unit/lib/validation.test.ts') },
+          { name: 'denies vitest without run', expected: 'deny', event: 'beforeShellExecution', payload: shell('RTK_DISABLED=1 npx vitest test/unit/lib/validation.test.ts') },
+        ]
   const probes = [
-    { name: 'allows a test file under test/', must: true, expected: 'allow', event: 'preToolUse', payload: write('test/unit/eval-probe.test.ts', TEST) },
+    { name: 'allows a test file under test/', must: true, expected: 'allow', event: 'preToolUse', payload: write('test/unit/eval-probe.test.ts', test) },
     { name: 'denies a write to application source', must: true, expected: 'deny', event: 'preToolUse', payload: write('src/eval-probe.ts', 'export const probe = 1\n') },
-    { name: 'denies a new .skip( in a test', expected: 'deny', event: 'preToolUse', payload: write('test/unit/eval-probe.test.ts', TEST.replace('it(', 'it.skip(')) },
-    { name: 'denies a .tsx test file', expected: 'deny', event: 'preToolUse', payload: write('test/unit/eval-probe.test.tsx', TEST) },
-    { name: 'denies test.fixme( without the product bug comment', expected: 'deny', event: 'preToolUse', payload: write('test/e2e/eval-probe.spec.ts', SPEC) },
-    { name: 'allows the Vitest command the skills teach', expected: 'allow', event: 'beforeShellExecution', payload: shell('RTK_DISABLED=1 npx vitest run test/unit/lib/validation.test.ts') },
-    { name: 'denies vitest without run', expected: 'deny', event: 'beforeShellExecution', payload: shell('RTK_DISABLED=1 npx vitest test/unit/lib/validation.test.ts') },
+    { name: 'denies a new .skip( in a test', expected: 'deny', event: 'preToolUse', payload: write('test/unit/eval-probe.test.ts', test.replace('it(', 'it.skip(')) },
+    { name: 'denies a .tsx test file', expected: 'deny', event: 'preToolUse', payload: write('test/unit/eval-probe.test.tsx', test) },
+    ...forRunner,
     ...browse,
   ]
   return probes.map(({ name, must = false, expected, event, payload }) => {
@@ -414,12 +449,13 @@ function probeHook(sandbox, browseUrl) {
 function reportKit(sandbox, testCase, url) {
   const read = (path) => (existsSync(join(sandbox, path)) ? readFileSync(join(sandbox, path), 'utf8') : null)
   const route = routeOf(read, testCase.skill)
+  const runner = APPS[testCase.app].runner
   const missing = []
 
   if (route === 'none') {
     missing.push(`.cursor/skills/${testCase.skill}/SKILL.md and .cursor/agents/qa.md are both absent, so there is no prompt for this case`)
   }
-  for (const file of KIT_FILES) {
+  for (const file of KIT_FILES[runner]) {
     if (read(file) === null) missing.push(`${file} is not in the installed kit`)
   }
   if (route === 'skill') {
@@ -437,7 +473,12 @@ function reportKit(sandbox, testCase, url) {
     missing.push('@playwright/cli is not installed in the sandbox, so the skill cannot open the app with playwright-cli')
   }
 
-  const hookProbes = existsSync(join(sandbox, '.cursor', 'hooks.json')) ? probeHook(sandbox, browses ? url : null) : []
+  // The scorer runs Jest from the sandbox's node_modules, so it must be there.
+  if (runner === 'jest' && !existsSync(join(sandbox, 'node_modules', 'jest', 'package.json'))) {
+    missing.push('jest is not installed in the sandbox, so neither the agent nor the scorer can run a test')
+  }
+
+  const hookProbes = existsSync(join(sandbox, '.cursor', 'hooks.json')) ? probeHook(sandbox, browses ? url : null, runner) : []
   for (const probe of hookProbes) {
     if (probe.got === probe.expected) continue
     missing.push(
@@ -480,8 +521,13 @@ async function buildSandbox(options) {
   try {
     out = prepareOut(options.out, options.force)
     sandbox = join(out, SANDBOX_NAME)
-    copyExample(sandbox)
+    copyExample(sandbox, testCase.app)
     installReport = installKit(sandbox, kit)
+  } catch (error) {
+    // Leave no half-built sandbox behind, for example when the kit at an old
+    // ref cannot be installed into the React Native app.
+    if (out) rmSync(out, { recursive: true, force: true })
+    throw error
   } finally {
     if (kit.holder) rmSync(kit.holder, { recursive: true, force: true })
   }
@@ -492,7 +538,7 @@ async function buildSandbox(options) {
 
   let base
   try {
-    base = shareNodeModules(sandbox, baseRoot, !options.skipBrowser)
+    base = shareNodeModules(sandbox, baseRoot, !options.skipBrowser, testCase.app)
   } catch (error) {
     // Leave no half-built sandbox behind, for example when it does not fit.
     rmSync(out, { recursive: true, force: true })
@@ -515,6 +561,7 @@ async function buildSandbox(options) {
 
   const meta = {
     case: testCase.id,
+    app: testCase.app,
     createdAt: new Date().toISOString(),
     kit: { source: kit.source, ref: kit.ref, commit: kit.commit, dirty: kit.dirty },
     route: kitReport.route,
@@ -536,6 +583,7 @@ async function buildSandbox(options) {
       : `working tree at ${kit.commit.slice(0, 7)}${kit.dirty ? ' plus uncommitted changes' : ''}`
   log('')
   log(`Case:     ${testCase.id} (${testCase.title})`)
+  log(`App:      examples/${testCase.app}, tests run with ${APPS[testCase.app].runner === 'jest' ? 'Jest' : 'Vitest and Playwright'}`)
   log(`Kit:      ${kitLine}`)
   log(`Route:    ${kitReport.route === 'skill' ? `/${testCase.skill}` : kitReport.route === 'qa-agent' ? '/qa (the old route)' : 'none'}`)
   log(`Sandbox:  ${sandbox}`)

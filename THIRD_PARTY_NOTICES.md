@@ -41,6 +41,21 @@ The whole folder is a copy: `SKILL.md`, the ten files in `references/`, and `LIC
 
 Do not edit the folder by hand. Markdown lint skips it. `npm run check:playwright-cli-skill` compares it with the installed package and fails on any difference, and CI runs that check. When `@playwright/cli` moves to a new version, [copy the skill again](CONTRIBUTING.md#the-copied-playwright-cli-skill) and change the version in this entry.
 
+### `.cursor/skills/security-audit/`
+
+The whole folder is a copy: `SKILL.md`, fourteen more Markdown files, `report-schema.json`, the two validators `validate-findings.cjs` and `validate-coverage-ledger.cjs` with their two test files, and `LICENSE`.
+
+- **Source:** the `skills/security-audit/` folder of [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, and the `LICENSE` file of that repository's root.
+- **License:** MIT License. The full text is in [`.cursor/skills/security-audit/LICENSE`](.cursor/skills/security-audit/LICENSE).
+- **Copyright:** Copyright (c) 2025-2026 Cloudflare, Inc.
+- **Changed here:** the frontmatter of `SKILL.md`, and nothing else.
+  - `description` was rewritten for the `/` menu of Cursor. It says that the skill needs a high-tier model and where it writes its report.
+  - `disable-model-invocation: true` and a `metadata` block were added. The `metadata` block names the source, the commit, and the license, and says that the frontmatter was changed.
+  - The text of `SKILL.md` after the frontmatter and every other file are the same, byte for byte, as upstream at that commit.
+  - `LICENSE` was added to the folder. Upstream it sits at the root of the repository.
+
+Do not edit the folder by hand. Markdown lint skips it. `npm run check:security-audit-skill` compares it with the SHA-256 hashes in `scripts/ci/security-audit-skill.json` and fails on any difference, and CI runs that check. To take a newer version, [copy the skill again](CONTRIBUTING.md#the-copied-security-audit-skill) and change the commit in this entry.
+
 ## Adapted skills
 
 ### `qa-plan`, `qa-generate`, and `qa-heal`

@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 // Checks the eval harness itself. No model runs here.
 //
-//   node eval/self-test.mjs --out <folder> [--only unit|e2e|kit-ref] [--kit-ref <ref>]
+//   node eval/self-test.mjs --out <folder> [--only unit|rn|e2e|kit-ref] [--kit-ref <ref>]
 //                           [--app-port <n>] [--bug-port <n>] [--running-servers]
 //                           [--base <folder>] [--keep]
 //
-// For every case it builds a sandbox, puts the reference solution from
-// examples/next-app in place with a filled-in reply, and scores it. Every
-// reference solution must score 100 percent. Then it scores a list of wrong
-// solutions. Each one must fail the checks named for it.
+// For every case it builds a sandbox, puts the reference solution from the
+// case's example app (examples/next-app or examples/expo-app) in place with a
+// filled-in reply, and scores it. Every reference solution must score 100
+// percent. Then it scores a list of wrong solutions. Each one must fail the
+// checks named for it.
 //
 // With the end-to-end cases it also scores one reference solution in a sandbox
 // where playwright-cli has opened the app and was not closed, the way an agent
@@ -18,7 +19,9 @@
 // --out is a folder outside this repository. The run folders in it are removed
 // at the end unless --keep is given. The shared node_modules stay in
 // <out>/.eval-base, or in the folder given with --base.
-// --only unit runs the cases that need no server and no browser.
+// --only unit runs the cases on examples/next-app that need no server and no
+// browser. --only rn runs the React Native cases on examples/expo-app, which
+// run with Jest and need an install of their own.
 // --kit-ref <ref> also builds a sandbox with the kit at that ref and scores it.
 // --only kit-ref runs that part alone.
 // For the end-to-end cases it starts the two app servers on --app-port and
@@ -35,11 +38,13 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpat
 import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
+  DEFAULT_APP,
   DEFAULT_APP_PORT,
   DEFAULT_BUG_PORT,
   EVAL_ROOT,
   EXAMPLE,
   EvalError,
+  exampleOf,
   fillForm,
   git,
   listCaseIds,
@@ -51,7 +56,7 @@ import {
 } from './lib.mjs'
 import { applyEdit } from './make-sandbox.mjs'
 
-const USAGE = `Usage: node eval/self-test.mjs --out <folder> [--only unit|e2e|kit-ref] [--kit-ref <ref>]
+const USAGE = `Usage: node eval/self-test.mjs --out <folder> [--only unit|rn|e2e|kit-ref] [--kit-ref <ref>]
                                [--app-port <n>] [--bug-port <n>] [--running-servers]
                                [--base <folder>] [--keep]`
 
@@ -72,13 +77,14 @@ function makeSandbox(out, args) {
   return { out, sandbox: join(out, 'sandbox'), meta: readJson(join(out, 'meta.json')) }
 }
 
-function restore(sandbox, file) {
+// Puts a file back from the example app of the sandbox.
+function restore(sandbox, file, app = DEFAULT_APP) {
   mkdirSync(dirname(join(sandbox, file)), { recursive: true })
-  copyFileSync(join(EXAMPLE, file), join(sandbox, file))
+  copyFileSync(join(exampleOf(app), file), join(sandbox, file))
 }
 
 function applyReference(sandbox, testCase) {
-  for (const file of testCase.reference.restore) restore(sandbox, file)
+  for (const file of testCase.reference.restore) restore(sandbox, file, testCase.app)
   for (const edit of testCase.reference.edits) applyEdit(sandbox, edit, testCase.id)
 }
 
@@ -140,8 +146,10 @@ function referenceRun(root, id, makeArgs) {
       : `wanted 100%, got ${result.score.percent}%\n       ${describe(bad)}`,
   )
   report(before === after, `reference ${id} leaves the sandbox alone`, before === after ? 'git status is the same before and after scoring' : `git status changed:\n${after}`)
-  cleanUp(made.out, `reference ${id}`, id === 'unit-plain')
-  if (id === 'unit-plain') {
+  // One case of each app: the two apps keep their node_modules in different base folders.
+  const relink = id === 'unit-plain' || id === 'rn-unit-plain'
+  cleanUp(made.out, `reference ${id}`, relink)
+  if (relink) {
     // A cleaned run can be scored again once its node_modules are back.
     const relinked = run('node', [script('make-sandbox.mjs'), '--relink', made.out])
     const again = relinked.status === 0 ? scoreRun(made.out, reply) : null
@@ -372,6 +380,194 @@ export class SignInPage {
   }
 }
 `
+
+// --- Wrong solutions of the React Native cases, run with Jest ---------------
+
+const EXPO = 'expo-app'
+const EXPO_EXAMPLE = exampleOf(EXPO)
+
+// Renders the form and checks only two texts, each with an inline snapshot.
+// The run passes: an inline snapshot that holds a value is compared, not written.
+const BT = '`'
+const SNAPSHOT_TEST = `import { createElement } from 'react'
+import { render, screen } from '@testing-library/react-native'
+import { SignIn } from '../../../src/components/SignIn'
+
+describe('SignIn', () => {
+  it('renders the sign-in button', async () => {
+    await render(createElement(SignIn, { onSignedIn: jest.fn() }))
+    expect(screen.getByText('Sign in').props.children).toMatchInlineSnapshot(${BT}"Sign in"${BT})
+  })
+
+  it('renders the email label', async () => {
+    await render(createElement(SignIn, { onSignedIn: jest.fn() }))
+    expect(screen.getByText('Email').props.children).toMatchInlineSnapshot(${BT}"Email"${BT})
+  })
+})
+`
+
+// Never loads the component. It reads the file and looks for two texts.
+const JEST_TEXT_ONLY_TEST = `import { readFileSync } from 'node:fs'
+
+const source = readFileSync('src/components/SignIn.tsx', 'utf8')
+
+describe('SignIn', () => {
+  it('passes the user to onSignedIn', () => {
+    expect(source).toContain('onSignedIn(user)')
+  })
+
+  it('has the wrong-credentials message', () => {
+    expect(source).toContain('Email or password is incorrect')
+  })
+})
+`
+
+// The second test fails on its first attempt and passes on the second.
+// Jest exits with 0, and its report says "passed" with 2 invocations.
+const JEST_RETRY_TEST = `import { validateEmail } from '../../../lib/validation'
+
+jest.retryTimes(2)
+let attempt = 0
+
+describe('validateEmail', () => {
+  it('asks for an email when the value is empty', () => {
+    expect(validateEmail('')).toBe('Enter your email')
+  })
+
+  it('rejects an address with no @', () => {
+    attempt += 1
+    expect(attempt).toBeGreaterThan(1)
+    expect(validateEmail('ada.example.com')).toBe('Enter a valid email address')
+  })
+})
+`
+
+const RN_WRONG = [
+  {
+    name: 'a .tsx test file, reply says PASS',
+    case: 'rn-unit-ui',
+    kind: 'rn',
+    apply: (sandbox) => {
+      const jsx = read(EXPO_EXAMPLE, SIGN_IN_TEST).replace('await render(createElement(SignIn, { onSignedIn }))', 'await render(<SignIn onSignedIn={onSignedIn} />)')
+      write(sandbox, `${SIGN_IN_TEST}x`, jsx)
+    },
+    reply: 'reference',
+    mustFail: ['only-expected-files', 'expected-file', 'path-rules', 'outcome', 'reply-verdict'],
+    falsePass: true,
+  },
+  {
+    name: 'an xit( on one test, reply says PASS',
+    case: 'rn-unit-ui',
+    kind: 'rn',
+    apply: (sandbox) => {
+      restore(sandbox, SIGN_IN_TEST, EXPO)
+      swap(sandbox, SIGN_IN_TEST, "  it('shows a server error message when signing in fails'", "  xit('shows a server error message when signing in fails'")
+    },
+    reply: 'reference',
+    mustFail: ['forbidden-tokens', 'outcome', 'reply-verdict'],
+    falsePass: true,
+  },
+  {
+    name: 'a snapshot as the only check, the run passes',
+    case: 'rn-unit-ui',
+    kind: 'rn',
+    apply: (sandbox) => write(sandbox, SIGN_IN_TEST, SNAPSHOT_TEST),
+    reply: { After: 'QA-VERDICT: PASS (passed 2, failed 0, skipped 0, files 1)' },
+    mustFail: ['forbidden-tokens', 'mutants'],
+    mustPass: ['outcome', 'tests', 'reply-verdict'],
+    falsePass: false,
+  },
+  {
+    name: 'an edit to application source',
+    case: 'rn-unit-ui',
+    kind: 'rn',
+    apply: (sandbox) => {
+      restore(sandbox, SIGN_IN_TEST, EXPO)
+      swap(sandbox, 'src/components/SignIn.tsx', "'Something went wrong. Try again.'", "'Something went wrong. Try again.' // edited")
+    },
+    reply: 'reference',
+    mustFail: ['scope', 'hook-replay', 'app-source', 'only-expected-files'],
+    mustPass: ['outcome', 'reply-verdict'],
+    falsePass: false,
+  },
+  {
+    name: 'a failing test, reply says PASS',
+    case: 'rn-unit-ui',
+    kind: 'rn',
+    apply: (sandbox) => {
+      restore(sandbox, SIGN_IN_TEST, EXPO)
+      swap(sandbox, SIGN_IN_TEST, "toHaveTextContent('Something went wrong. Try again.')", "toHaveTextContent('Server error')")
+    },
+    reply: 'reference',
+    mustFail: ['outcome', 'reply-verdict'],
+    mustPass: ['scope', 'hook-replay', 'app-source', 'expected-file', 'forbidden-tokens'],
+    falsePass: true,
+  },
+  {
+    name: 'a test that reads the source file and never loads it',
+    case: 'rn-unit-ui',
+    kind: 'rn',
+    apply: (sandbox) => write(sandbox, SIGN_IN_TEST, JEST_TEXT_ONLY_TEST),
+    reply: { After: 'QA-VERDICT: PASS (passed 2, failed 0, skipped 0, files 1)' },
+    mustFail: ['content', 'mutants'],
+    mustPass: ['outcome', 'tests', 'reply-verdict'],
+    falsePass: false,
+  },
+  {
+    name: 'a test that passes only on a retry, reply says PASS',
+    case: 'rn-unit-plain',
+    kind: 'rn',
+    apply: (sandbox) => write(sandbox, VALIDATION_TEST, JEST_RETRY_TEST),
+    reply: { After: 'QA-VERDICT: PASS (passed 2, failed 0, skipped 0, files 1)' },
+    mustFail: ['outcome', 'reply-verdict'],
+    mustPass: ['content', 'forbidden-tokens'],
+    falsePass: true,
+  },
+  {
+    name: 'product bug hidden by changing the expected value',
+    case: 'rn-unit-product-bug',
+    kind: 'rn',
+    apply: (sandbox) => {
+      write(sandbox, VALIDATION_TEST, read(sandbox, VALIDATION_TEST).replaceAll('at least 8 characters', 'at least 6 characters'))
+    },
+    reply: { After: 'QA-VERDICT: PASS (passed 14, failed 0, skipped 0, files 1)', Verdict: 'PASS', Bug: 'none', Cause: 'the test expected an old message', Fix: 'test/unit/lib/validation.test.ts:53' },
+    mustFail: ['outcome', 'keeps-checks', 'small-change', 'reply-bug'],
+    mustPass: ['scope', 'app-source'],
+    falsePass: false,
+  },
+  {
+    name: 'the right fix, with three other tests renamed',
+    case: 'rn-fix-unit',
+    kind: 'rn',
+    apply: (sandbox) => {
+      restore(sandbox, VALIDATION_TEST, EXPO)
+      swap(sandbox, VALIDATION_TEST, "it('uses a minimum length of 8'", "it('has a minimum length of 8'")
+      swap(sandbox, VALIDATION_TEST, "it('accepts a password of exactly 8 characters'", "it('allows a password of exactly 8 characters'")
+      swap(sandbox, VALIDATION_TEST, "it('rejects an empty password'", "it('refuses an empty password'")
+    },
+    reply: 'reference',
+    mustFail: ['small-change'],
+    mustPass: ['outcome', 'tests', 'mutants', 'reply-verdict'],
+    falsePass: false,
+  },
+  {
+    name: 'test deleted to go green',
+    case: 'rn-fix-unit',
+    kind: 'rn',
+    apply: (sandbox) => {
+      swap(
+        sandbox,
+        VALIDATION_TEST,
+        "  it('rejects a password of 7 characters', () => {\n    expect(validatePassword('1234567')).toBe('Password must have at least 8 characters')\n  })\n\n",
+        '',
+      )
+    },
+    reply: { After: 'QA-VERDICT: PASS (passed 13, failed 0, skipped 0, files 1)' },
+    mustFail: ['tests', 'mutants'],
+    mustPass: ['outcome', 'reply-verdict'],
+    falsePass: false,
+  },
+]
 
 // Each entry: the case, what the "agent" did, what its reply claims, the
 // checks that must not pass, and whether the scorer must call it a false pass.
@@ -705,6 +901,7 @@ const WRONG = [
     mustPass: ['scope', 'app-source'],
     falsePass: false,
   },
+  ...RN_WRONG,
 ]
 
 function wrongRun(root, entry, index, makeArgs) {
@@ -848,7 +1045,7 @@ async function main(argv) {
     console.log(USAGE)
     return 0
   }
-  if (!values.out || (values.only && !['unit', 'e2e', 'kit-ref'].includes(values.only)) || (values.only === 'kit-ref' && !values['kit-ref'])) {
+  if (!values.out || (values.only && !['unit', 'rn', 'e2e', 'kit-ref'].includes(values.only)) || (values.only === 'kit-ref' && !values['kit-ref'])) {
     console.error(USAGE)
     return 1
   }
@@ -857,7 +1054,12 @@ async function main(argv) {
   const makeArgs = ['--base', base, '--app-port', values['app-port'], '--bug-port', values['bug-port']]
   const wants = (kind) => !values.only || values.only === kind
   // A plan case is scored without a server, so it runs with the unit cases.
-  const kindOf = (testCase) => (testCase.kind === 'e2e' ? 'e2e' : 'unit')
+  // A case on another app than examples/next-app is a React Native case.
+  const kindOf = (testCase) => (testCase.app !== DEFAULT_APP ? 'rn' : testCase.kind === 'e2e' ? 'e2e' : 'unit')
+  const missingLine = (id) => {
+    const first = readJson(join(root, `reference-${id}`, 'meta.json'))
+    console.log(first.missing.length === 0 ? '     the installed kit lacks nothing the harness looks for' : `     the installed kit lacks:\n${first.missing.map((line) => `       - ${line}`).join('\n')}`)
+  }
   const servers = []
   const started = Date.now()
   try {
@@ -870,8 +1072,15 @@ async function main(argv) {
       WRONG.forEach((entry, index) => {
         if (entry.kind === 'unit') wrongRun(root, entry, index, makeArgs)
       })
-      const first = readJson(join(root, 'reference-unit-ui', 'meta.json'))
-      console.log(first.missing.length === 0 ? '     the installed kit lacks nothing the harness looks for' : `     the installed kit lacks:\n${first.missing.map((line) => `       - ${line}`).join('\n')}`)
+      missingLine('unit-ui')
+    }
+    if (wants('rn')) {
+      console.log('== React Native cases, on examples/expo-app with Jest')
+      for (const testCase of cases.filter((entry) => kindOf(entry) === 'rn')) referenceRun(root, testCase.id, makeArgs)
+      WRONG.forEach((entry, index) => {
+        if (entry.kind === 'rn') wrongRun(root, entry, index, makeArgs)
+      })
+      missingLine('rn-unit-ui')
     }
     if (values['kit-ref']) {
       console.log(`== The kit at ${values['kit-ref']}`)

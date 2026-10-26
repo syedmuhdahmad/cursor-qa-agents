@@ -1,0 +1,28 @@
+# plan: test/mobile/plan/sign-in.plan.md
+# scenario: 2.2 Badly formatted email is rejected
+appId: ${APP_ID}
+name: "Badly formatted email is rejected"
+tags:
+  - sign-in
+---
+- runFlow: ../elements/load.yaml
+# 1. Launch the app with cleared state.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+# 2. On the Sign in screen, type `ada.example.com` into "Email".
+- tapOn:
+    id: ${output.signIn.email}
+- inputText: "ada.example.com"
+# 3. On the Sign in screen, type `correct-horse-battery` into "Password".
+- tapOn:
+    id: ${output.signIn.password}
+- inputText: "correct-horse-battery"
+# 4. On the Sign in screen, tap "Sign in".
+- hideKeyboard
+- tapOn:
+    id: ${output.signIn.signIn}
+# Expect: On the Sign in screen, "Enter a valid email address" is visible.
+- assertVisible:
+    id: ${output.signIn.enterAValidEmailAddress}
+    text: "Enter a valid email address"

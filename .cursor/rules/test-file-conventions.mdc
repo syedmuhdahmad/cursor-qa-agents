@@ -8,12 +8,13 @@ alwaysApply: false
 
 | Kind | Path | Example |
 | --- | --- | --- |
-| Unit test | `test/unit/**/<Name>.test.ts` | `test/unit/components/SignIn.test.ts` |
+| Unit test, Vitest or, in a React Native app, Jest | `test/unit/**/<Name>.test.ts` | `test/unit/components/SignIn.test.ts` |
 | Integration test | `test/integration/**/<name>.test.ts` | `test/integration/api/session/route.test.ts` |
 | E2e spec | `test/e2e/<name>.spec.ts` | `test/e2e/sign-in.spec.ts` |
 | Page class | `test/e2e/pages/<screen>-page.ts` | `test/e2e/pages/sign-in-page.ts` |
 | E2e plan | `test/e2e/plan/<name>.plan.md` | `test/e2e/plan/sign-in.plan.md` |
 | E2e seed | `test/e2e/seed.spec.ts` | `test/e2e/seed.spec.ts` |
+| Jest setup file, optional, React Native only | `test/jest.setup.ts` | `test/jest.setup.ts` |
 | Mobile flow | `test/mobile/<feature>/<nn>-<scenario>.flow.yaml` | `test/mobile/sign-in/01-valid-account.flow.yaml` |
 | Mobile plan | `test/mobile/plan/<feature>.plan.md` | `test/mobile/plan/sign-in.plan.md` |
 | Mobile element file, one for each screen and platform | `test/mobile/elements/<platform>/<screen>.js` | `test/mobile/elements/android/sign-in.js` |
@@ -31,4 +32,4 @@ A unit or integration test mirrors the source path. Drop a leading `src/` or `ap
 | `app/api/session/route.ts` | `test/integration/api/session/route.test.ts` |
 | `lib/validation.ts` | `test/unit/lib/validation.test.ts` |
 
-Never create a `.tsx` test file or a `tests/`, `specs/`, or `__tests__/` folder.
+Never create a `.tsx` test file or a `tests/`, `specs/`, or `__tests__/` folder. Never add a snapshot such as `toMatchSnapshot(`: the hook denies it.

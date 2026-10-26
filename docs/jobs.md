@@ -1,6 +1,6 @@
 # Jobs, replies, and the verdict line
 
-This file holds the detail behind [Start a job](../README.md#start-a-job) in the README: what each web skill does with a prompt, the form every reply has, and the line every test run ends with. The mobile skills are in [mobile.md](mobile.md).
+This file holds the detail behind [Start a job](../README.md#start-a-job) in the README: what each web skill and `/qa-rn-unit` do with a prompt, the form every reply has, and the line every test run ends with. The Maestro skills are in [mobile.md](mobile.md), and the security audit is in [security-audit.md](security-audit.md).
 
 ## Notes on each job
 
@@ -8,6 +8,7 @@ This file holds the detail behind [Start a job](../README.md#start-a-job) in the
 - **`/qa-plan`** opens the feature in the browser. `/qa-plan sign-in` opens `http://localhost:3000/sign-in`. If the app or the page is somewhere else, say so, and give a test account if the feature needs one: `/qa-plan checkout. Base URL http://localhost:4000. Route /cart/checkout. Test account ada@example.com / correct-horse-battery.`
 - **`/qa-generate`** has two parts. The first uses the browser and writes the page classes. The second writes the spec and runs it. Ask for one part with `page classes only` or `spec only` after the path of the plan.
 - **`/qa-heal`** runs one spec and fixes the test, one line at a time, in at most three rounds. It also takes a spec that fails with no failing test: a test marked `.skip` or `.only`, or a spec that does not load. It removes the mark, or corrects the import, and runs the spec again.
+- **`/qa-rn-unit`** writes or fixes one Jest test in a React Native or Expo app, the way `/qa-unit` does for Vitest. It mirrors the source path under `test/unit/`, also when the app keeps its own tests in `__tests__/` folders. It renders a component with `@testing-library/react-native`, finds elements by role, label, or text, and drives them with `userEvent`. It writes no snapshot, and the hook denies the snapshot matchers. It runs the test with the kit's Jest config: `RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/components/SignIn.test.ts`. It writes tests for components and plain functions, and not yet for hooks or navigation. In a web app it replies `This is not a React Native app. Use /qa-unit for a web app.`, and `/qa-unit` in a React Native app replies `This is a React Native app. Use /qa-rn-unit for a Jest test.`
 
 Every web job needs the app on this machine. `/qa-plan` and the first part of `/qa-generate` open it in a browser with `playwright-cli`, and the hook lets that browser open only `http://localhost` and `http://127.0.0.1`, with any port. `/qa-heal` and the second part of `/qa-generate` run tests, and the hook allows a test run only against the same two hosts. With another host in the prompt, all three skills stop with `BLOCKED: the tests run only against an app on this machine.`
 
@@ -35,6 +36,7 @@ The examples inside the skills come from an imaginary app with a profile form, n
 | `playwright-cli` | Looking at the running app in `/qa-plan` and `/qa-generate`, and at the page of a paused spec in `/qa-heal` (a spec run with `--debug=cli`, then `playwright-cli attach`) |
 | `maestro` MCP | Reading the device screen in `/qa-mobile-plan`, `/qa-mobile-generate`, and `/qa-mobile-heal` |
 | `npx vitest` | Running unit and integration tests from the shell |
+| `npx jest` | Running the Jest tests of `/qa-rn-unit`, always with `--config .cursor/qa/jest.config.cjs --ci` |
 
 Turn the `maestro` MCP server on in Cursor settings for the jobs that need it, and restart it if Cursor does not show it. The web jobs need no MCP server.
 
@@ -122,7 +124,7 @@ Each skill has its own lines, and two lines are in every form:
 
 ## The verdict line
 
-The agent does not judge the runner's output. Every Vitest run and every Playwright run ends with one line that starts with `QA-VERDICT:`, and the agent copies it:
+The agent does not judge the runner's output. Every Vitest, Playwright, and Jest run ends with one line that starts with `QA-VERDICT:`, and the agent copies it:
 
 ```text
 QA-VERDICT: PASS (passed 3, failed 0, skipped 0, files 1)
@@ -143,7 +145,15 @@ QA-VERDICT: PASS-WITH-FIXME (passed 5, failed 0, skipped 0, fixme 1, files 1)
 - Some runs print no line: `npm run test:e2e:list`, a run with a `--reporter` flag, and a Vitest run that is killed. No line is never a pass. The hook denies the agent a `--reporter` flag on a test run for that reason.
 - On a new install with no tests, `npm run test:unit` exits 0 and prints `QA-VERDICT: FAIL (passed 0, failed 0, skipped 0, files 0) reason: no tests ran`.
 
-The two reporters that print the line are `.cursor/qa/vitest-verdict.mjs` and `.cursor/qa/playwright-verdict.mjs`. The kit's two config files load them. They are outside the agent's write scope.
+The reporters that print the line are `.cursor/qa/vitest-verdict.mjs`, `.cursor/qa/playwright-verdict.mjs`, and `.cursor/qa/jest-verdict.mjs`. The kit's config files load them. They are outside the agent's write scope.
+
+For Jest, three things differ:
+
+- Jest exits 0 when a test is skipped, is a `todo`, was left out by a stray `.only`, or passed only on a retry. The line says `FAIL` for each.
+- Jest prints its own summary after the reporters are done, so the reporter holds the line and prints it as the process exits. It stays the last line.
+- When no test file matches the command, Jest stops before it calls a reporter. `.cursor/qa/jest.config.cjs` then prints `QA-VERDICT: FAIL (passed 0, failed 0, skipped 0, files 0) reason: no tests ran` itself.
+
+`.cursor/qa/jest.config.cjs` is the app's own Jest config with the kit's changes: it runs only `*.test.ts` files under `test/unit/` and `test/integration/`, adds the reporter, and turns coverage off. The command passes `--ci`, so that Jest writes no new snapshot: Jest 30.5 ignores `ci` in a config file, and the hook denies a `jest` run without the flag. The preset, the transforms, and the module mappers stay the app's. It reads `jest.config.js`, `.cjs`, `.mjs`, `.json`, or `"jest"` in `package.json`. It cannot read a config in TypeScript, and it stops with a message for one, and for a config with `projects`. If `test/jest.setup.ts` exists, it runs after the app's own setup files.
 
 The Maestro skills have no verdict line. They copy Maestro's own summary line, such as `2/2 Flows Passed in 46s`.
 
@@ -151,7 +161,7 @@ The Maestro skills have no verdict line. They copy Maestro's own summary line, s
 
 No skill changes what a test expects to get a pass.
 
-- `/qa-unit` and `/qa-generate` leave the test failing. The reply says `Verdict: FAIL`, and `Bug:` names the source line with the expected and the received value.
+- `/qa-unit`, `/qa-rn-unit`, and `/qa-generate` leave the test failing. The reply says `Verdict: FAIL`, and `Bug:` names the source line with the expected and the received value.
 - `/qa-heal` marks that one test and reports it. The mark is `test.fixme(` with a comment on the line above it:
 
   ```ts
