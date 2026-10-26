@@ -932,7 +932,7 @@ test('case e2e-heal-product-bug: nothing depends on the example the skill shows'
 
 test('README: the commands work from any clone and say where runs belong', () => {
   const readme = readFileSync(join(EVAL_ROOT, 'README.md'), 'utf8')
-  assert.ok(!readme.includes('~/cursor-qa-agents'), 'no command names a fixed place for the clone')
+  assert.ok(!readme.includes('~/qa-agent-kit'), 'no command names a fixed place for the clone')
   for (const line of readme.split('\n').filter((entry) => /^\s*(node|agent) /.test(entry) || entry.includes('$(node '))) {
     assert.ok(!/node eval\//.test(line) || !/RUNS\/[\w-]+\/sandbox/.test(line), `a command that runs in a sandbox does not use a path relative to the clone: ${line.trim()}`)
   }

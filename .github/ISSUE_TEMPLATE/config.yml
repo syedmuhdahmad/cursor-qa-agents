@@ -2,8 +2,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Report a security problem
-    url: https://github.com/syedmuhdahmad/cursor-qa-agents/security/advisories/new
+    url: https://github.com/syedmuhdahmad/qa-agent-kit/security/advisories/new
     about: Report it in private with GitHub's vulnerability form. Do not open a public issue. See SECURITY.md.
   - name: Report a conduct problem
-    url: https://github.com/syedmuhdahmad/cursor-qa-agents/security/advisories/new
+    url: https://github.com/syedmuhdahmad/qa-agent-kit/security/advisories/new
     about: The same private form. Start the title with "Conduct report". See CODE_OF_CONDUCT.md.

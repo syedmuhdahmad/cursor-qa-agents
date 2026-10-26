@@ -31,7 +31,7 @@ const ROOT = path.resolve(__dirname, '..', '..')
 const REPORTER = path.join(__dirname, 'jest-verdict.mjs')
 const SETUP = path.join(ROOT, 'test', 'jest.setup.ts')
 // The key jest-verdict.mjs sets on globalThis once it has printed its line.
-const MARK = Symbol.for('cursor-qa-agents.jest-verdict.printed')
+const MARK = Symbol.for('qa-agent-kit.jest-verdict.printed')
 const NO_TESTS_LINE = 'QA-VERDICT: FAIL (passed 0, failed 0, skipped 0, files 0) reason: no tests ran'
 const CONFIG_FILES = ['jest.config.js', 'jest.config.cjs', 'jest.config.mjs', 'jest.config.json']
 const TYPESCRIPT_FILES = ['jest.config.ts', 'jest.config.cts', 'jest.config.mts']

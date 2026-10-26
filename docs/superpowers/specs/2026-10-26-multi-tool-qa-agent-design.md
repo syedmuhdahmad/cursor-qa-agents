@@ -7,7 +7,7 @@ Date: 2026-10-26. Status: agreed. Plan: [roadmap.md](../../roadmap.md). Tracking
 Turn the 0.2 Cursor kit into one QA agent that a user installs with one command into the AI coding tools they use, for the stack their app is written in:
 
 ```bash
-npx create-qa-agents
+npx qa-agent-kit
 ```
 
 The installer asks a few questions, writes the skills, the agent, the guard hook and the MCP configuration for each chosen tool, and records the answers so `update` can re-apply them later.
@@ -17,7 +17,7 @@ The installer asks a few questions, writes the skills, the agent, the guard hook
 | Question | Decision | Why |
 | --- | --- | --- |
 | Which tools | Claude Code, Cursor, GitHub Copilot in VS Code, OpenAI Codex CLI | The four agents with skills, a custom agent file and MCP. Claude Code and Cursor first, because both have a blocking pre-tool hook |
-| Package name | `create-qa-agents` | `npm create qa-agents` and `npx create-qa-agents` both work. `qa-agents` is taken on npm |
+| Name | `qa-agent-kit` for the repository and the npm package | Names no single AI tool. Free on npm on 2026-10-26. The repository was `cursor-qa-agents` |
 | One source of skills | Canonical `SKILL.md` files, rendered per tool by an adapter | All four tools read the Agent Skills format. Only paths, frontmatter keys and the question tool differ |
 | Guard hook | Rewritten in Node, with one payload adapter per tool | Node is already required. Python on Windows was the reason the 0.2 hook could not run there |
 | .NET unit tests | xUnit v3, NSubstitute, Shouldly | Open source. FluentAssertions 8 needs a paid licence for commercial use |
@@ -31,12 +31,12 @@ The installer asks a few questions, writes the skills, the agent, the guard hook
 ### Install
 
 ```text
-$ npx create-qa-agents
+$ npx qa-agent-kit
 ? Which AI tools do you use here?   [x] Claude Code  [x] Cursor  [ ] GitHub Copilot  [ ] Codex
 ? Which stack is this app?           (•) .NET   ( ) Web (Vitest + Playwright)   ( ) React Native
 ? Connect Jira through Atlassian MCP? (Y/n)
 ? Where may the agent write tests?   test/   (detected)
-Writing .claude/ .cursor/ .mcp.json qa-agents.json ... done
+Writing .claude/ .cursor/ .mcp.json qa-agent-kit.json ... done
 Next: open Claude Code and run /qa
 ```
 
@@ -45,16 +45,16 @@ Answers are pre-filled from detection: `*.csproj` or `*.sln` means .NET, `vitest
 For CI and scripts, every question has a flag:
 
 ```bash
-npx create-qa-agents --yes --tools claude,cursor --stack dotnet --jira
+npx qa-agent-kit --yes --tools claude,cursor --stack dotnet --jira
 ```
 
 ### Later
 
 | Command | Does |
 | --- | --- |
-| `npx create-qa-agents update` | Re-renders everything from `qa-agents.json` with the newer kit, keeping the user's answers |
-| `npx create-qa-agents add copilot` | Adds a tool or a stack to an existing install |
-| `npx create-qa-agents doctor` | Checks Node, the browsers, the hook registration and the MCP servers, and says what to fix |
+| `npx qa-agent-kit update` | Re-renders everything from `qa-agent-kit.json` with the newer kit, keeping the user's answers |
+| `npx qa-agent-kit add copilot` | Adds a tool or a stack to an existing install |
+| `npx qa-agent-kit doctor` | Checks Node, the browsers, the hook registration and the MCP servers, and says what to fix |
 
 ### Ask first
 
@@ -71,7 +71,7 @@ The skill skips the questions when the prompt already answers them, so a precise
 ## Architecture
 
 ```text
-create-qa-agents
+qa-agent-kit
 ├── bin/cli.mjs              entry: install, update, add, doctor
 ├── src/detect.mjs           stack and tool detection
 ├── src/questions.mjs        prompts, defaults, flags
@@ -88,7 +88,7 @@ create-qa-agents
 └── test/
 ```
 
-`qa-agents.json` in the user's repository records the kit version, the tools, the stack, the write scope and whether Jira is on. `update` reads it, so a re-install never asks again.
+`qa-agent-kit.json` in the user's repository records the kit version, the tools, the stack, the write scope and whether Jira is on. `update` reads it, so a re-install never asks again.
 
 ### Where each tool gets its files
 
@@ -105,7 +105,7 @@ The Copilot and Codex rows are checked by a spike (SCRUM-53) before any adapter 
 
 One Node script, `guard.mjs`, with a small adapter per tool that turns the tool's hook payload into `{ tool, path, command }` and turns the decision back into the tool's reply format. The rules are the 0.2 rules, ported with their tests:
 
-- Writes are allowed only inside the write scope from `qa-agents.json`.
+- Writes are allowed only inside the write scope from `qa-agent-kit.json`.
 - Shell commands are allowed only from the list for the chosen stack: `npm run`, `npx vitest`, `npx playwright` for web; `dotnet test`, `dotnet build`, `pwsh bin/.../playwright.ps1` for .NET.
 - Forbidden content (`.skip`, `.only`, `waitForTimeout`, `[Fact(Skip = ...)]`) is denied, with a message naming the allowed alternative.
 - A hook that crashes denies the action.

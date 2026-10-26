@@ -16,8 +16,8 @@ You need:
 - `git`. Two tests of the evaluation scripts make a small repository in the temporary folder.
 
 ```bash
-git clone https://github.com/syedmuhdahmad/cursor-qa-agents.git
-cd cursor-qa-agents
+git clone https://github.com/syedmuhdahmad/qa-agent-kit.git
+cd qa-agent-kit
 npm ci
 ```
 
@@ -73,7 +73,7 @@ Five things to know about these files:
 - `typescript` and `markdownlint-cli2` are tools for this repository only. Keep them out of the README block, so they do not reach users' apps.
 - The installer adds every line of `.gitignore` that the user's `.gitignore` lacks, and users copy `.cursorignore` as it is. Put a path in those two files only when it belongs in a user's app.
 - In those two files, start a folder name with a slash when an app could have a folder of that name in its source, such as `/coverage/` or `/build/`. Without the slash the line also matches `app/coverage/`. Then git hides the user's own files, and the hook denies the agent a read of application source.
-- `README.md` holds what a new user needs, in about 2,300 words. Detail goes into a file under `docs/`, with a short paragraph and a link in the README. The two marked blocks stay in `README.md`. The [wiki](https://github.com/syedmuhdahmad/cursor-qa-agents/wiki) is a short guide that links to both, and it is a repository of its own: update it when a page there goes out of date.
+- `README.md` holds what a new user needs, in about 2,300 words. Detail goes into a file under `docs/`, with a short paragraph and a link in the README. The two marked blocks stay in `README.md`. The [wiki](https://github.com/syedmuhdahmad/qa-agent-kit/wiki) is a short guide that links to both, and it is a repository of its own: update it when a page there goes out of date.
 
 ## Skills
 

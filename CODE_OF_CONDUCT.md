@@ -36,7 +36,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at <https://github.com/syedmuhdahmad/cursor-qa-agents/security/advisories/new>. This is GitHub's private reporting form for this repository. It is built for security reports, and it is also the private channel for conduct reports. Start the title with "Conduct report". Only you and the maintainers of this repository can read what you send. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at <https://github.com/syedmuhdahmad/qa-agent-kit/security/advisories/new>. This is GitHub's private reporting form for this repository. It is built for security reports, and it is also the private channel for conduct reports. Start the title with "Conduct report". Only you and the maintainers of this repository can read what you send. All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 

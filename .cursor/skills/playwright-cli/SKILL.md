@@ -7,7 +7,7 @@ metadata:
   version: "0.1.22"
   repository: "https://github.com/microsoft/playwright-cli"
   license: "Apache-2.0. Copyright (c) Microsoft Corporation. The full text is in the LICENSE file in this folder."
-  changes: "Changed by cursor-qa-agents: this frontmatter only. The description was rewritten, allowed-tools was removed, and disable-model-invocation and metadata were added. The text below the frontmatter and every file in references/ are byte for byte as published."
+  changes: "Changed by qa-agent-kit: this frontmatter only. The description was rewritten, allowed-tools was removed, and disable-model-invocation and metadata were added. The text below the frontmatter and every file in references/ are byte for byte as published."
 ---
 
 # Browser Automation with playwright-cli

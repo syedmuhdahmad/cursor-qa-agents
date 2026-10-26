@@ -1,4 +1,4 @@
-# Cursor QA agent
+# QA agent kit
 
 This kit is a set of Cursor files that you copy into a React, Next.js, or React Native app, so that the Cursor agent writes and fixes the app's tests: Vitest unit and integration tests, Playwright end-to-end tests, Jest unit tests in a React Native or Expo app, and Maestro flows for a mobile app (a preview). The agent reads your application source and does not edit it. When a test fails because the product is wrong, it reports the bug instead of weakening the test. The kit also carries Cloudflare's security audit skill, for a high-tier model.
 
@@ -6,7 +6,7 @@ It is written for low-cost and mid-tier models: each job is one skill of numbere
 
 The hook applies to every Cursor agent in the folder. It denies an edit to application source and a command such as `npm install`, so run those yourself. See [What the hook does](#what-the-hook-does).
 
-This file is the short version. The [wiki](https://github.com/syedmuhdahmad/cursor-qa-agents/wiki) is a guide by topic, and the files under [`docs/`](docs/) hold the detail.
+This file is the short version. The [wiki](https://github.com/syedmuhdahmad/qa-agent-kit/wiki) is a guide by topic, and the files under [`docs/`](docs/) hold the detail.
 
 ## Requirements
 
@@ -24,7 +24,7 @@ The install notes have [the detail](docs/install-notes.md#requirements-in-detail
 Clone this repository next to your app:
 
 ```bash
-git clone https://github.com/syedmuhdahmad/cursor-qa-agents.git
+git clone https://github.com/syedmuhdahmad/qa-agent-kit.git
 ```
 
 Copy these from the clone into the root of your React or Next.js app, next to `app/` or `src/`:
@@ -176,7 +176,7 @@ The hook is a guardrail and not a sandbox.
 
 - It does not check what a program does after it starts. A test is code that runs with your permissions, so a test that writes to `src/` passes the hook.
 - It checks the URL the agent opens, not where a link, a redirect, or a script on that page takes the browser next.
-- It will not hold against an agent that follows injected instructions, and it can read a command line wrongly. Gaps of that kind were closed in [issue 8](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/8) and [issue 9](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/9). More may exist.
+- It will not hold against an agent that follows injected instructions, and it can read a command line wrongly. Gaps of that kind were closed in [issue 8](https://github.com/syedmuhdahmad/qa-agent-kit/issues/8) and [issue 9](https://github.com/syedmuhdahmad/qa-agent-kit/issues/9). More may exist.
 - Its rules for MCP tools were seen working in the Cursor CLI, and a live run found one gap, now closed: Maestro's `run` tool saved a screenshot into `src/`. An MCP deny reaching the agent was not seen.
 - `.cursorignore` saves context and keeps no secrets. An untrusted workspace loads no project hooks.
 
@@ -208,7 +208,7 @@ An earlier round on Gemini 3.8 Flash passed 18 of 18 runs of the web cases. Ever
 - No agent tried anything the hook forbids, so the round does not show how a model goes on after a deny.
 - The mobile skills ran once for each job and model, outside the evaluation. Nothing was run on iOS or Windows.
 
-[docs/evaluation.md](docs/evaluation.md) has every round by case, and [eval/results/README.md](eval/results/README.md) says how each round was run. [Issue 30](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/30) tracks what is not tested.
+[docs/evaluation.md](docs/evaluation.md) has every round by case, and [eval/results/README.md](eval/results/README.md) says how each round was run. [Issue 30](https://github.com/syedmuhdahmad/qa-agent-kit/issues/30) tracks what is not tested.
 
 ## Checks and CI
 

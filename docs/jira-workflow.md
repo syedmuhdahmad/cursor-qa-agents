@@ -84,7 +84,7 @@ Start with a verb for stories and tasks. Name the result, not the activity: "Add
 
 | Area | Covers |
 | --- | --- |
-| `INSTALLER` | The `create-qa-agents` CLI, the setup questions, `qa-agents.json`, `update`, `add`, `doctor` |
+| `INSTALLER` | The `qa-agent-kit` CLI, the setup questions, `qa-agent-kit.json`, `update`, `add`, `doctor` |
 | `CORE` | The canonical skills, the guard hook, the ask-first step, the verdict scripts |
 | `CLAUDE` | The Claude Code adapter |
 | `CURSOR` | The Cursor adapter |
@@ -128,7 +128,7 @@ The Atlassian MCP server can create items, sprints and releases, but not change 
 
 1. **Add a Bug work type.** Project settings → Work types → Add → Bug.
 2. **Set a WIP limit of 1 on In Progress.** Board → ⋯ → Configure board → Columns.
-3. **Install GitHub for Jira** from the Atlassian Marketplace and connect `syedmuhdahmad/cursor-qa-agents`.
+3. **Install GitHub for Jira** from the Atlassian Marketplace and connect `syedmuhdahmad/qa-agent-kit`.
 4. **Add two automation rules.** Project settings → Automation:
    - When a pull request is created → transition the item to In Review.
    - When a pull request is merged → transition the item to Done.

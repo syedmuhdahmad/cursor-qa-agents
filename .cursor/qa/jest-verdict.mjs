@@ -41,7 +41,7 @@ export const REASONS = Object.freeze({
 })
 
 // The key, on globalThis, that this reporter sets once it has a line to print.
-export const MARK = Symbol.for('cursor-qa-agents.jest-verdict.printed')
+export const MARK = Symbol.for('qa-agent-kit.jest-verdict.printed')
 
 // Writes one line to standard output in a way that also works while the process exits.
 export function writeLine(line) {

@@ -1,6 +1,6 @@
 # Roadmap
 
-The plan from the 0.2 Cursor kit to 1.0: one QA agent installed with `npx create-qa-agents` into Claude Code, Cursor, GitHub Copilot and OpenAI Codex. It covers web (Vitest and Playwright), React Native, and .NET (xUnit v3, Testcontainers, Playwright for .NET), and connects to Jira through Atlassian Remote MCP.
+The plan from the 0.2 Cursor kit to 1.0: one QA agent installed with `npx qa-agent-kit` into Claude Code, Cursor, GitHub Copilot and OpenAI Codex. It covers web (Vitest and Playwright), React Native, and .NET (xUnit v3, Testcontainers, Playwright for .NET), and connects to Jira through Atlassian Remote MCP.
 
 - Design: [the multi-tool design spec](superpowers/specs/2026-10-26-multi-tool-qa-agent-design.md)
 - How the work is tracked: [jira-workflow.md](jira-workflow.md)
@@ -19,11 +19,11 @@ Jira is the source of truth. This file is the plan as of 2026-10-26 and is updat
 
 | Release | What ships | Points | Planned finish | Jira release date |
 | --- | --- | --- | --- | --- |
-| v0.3.0 | `npx create-qa-agents` installs the kit into Claude Code and Cursor. Node guard hook, shared skills, ask-first step, `qa-agents.json` and `update`, upgrade from 0.2 | 60 | Sat 2 Jan 2027 | 2027-01-02 |
+| v0.3.0 | `npx qa-agent-kit` installs the kit into Claude Code and Cursor. Node guard hook, shared skills, ask-first step, `qa-agent-kit.json` and `update`, upgrade from 0.2 | 60 | Sat 2 Jan 2027 | 2027-01-02 |
 | v0.4.0 | .NET stack pack: xUnit v3, NSubstitute, Shouldly, WebApplicationFactory with Testcontainers, Playwright for .NET, and a `QA-VERDICT:` line read from TRX | 28 | Sat 6 Feb 2027 | 2027-02-06 |
 | v0.5.0 | Jira through Atlassian Remote MCP: plan tests from a ticket, `/qa-jira-sync` to update every touched ticket at once, a confirmation before each write | 13 | Sat 13 Feb 2027 | 2027-02-13 |
 | v0.6.0 | GitHub Copilot and OpenAI Codex targets | 18 | Sat 27 Feb 2027 | 2027-03-06 |
-| v1.0.0 | Every evaluation case on every tool and stack, `doctor`, the docs rewrite, the repository rename, the 1.0 release | 14 | Sat 13 Mar 2027 | 2027-03-20 |
+| v1.0.0 | Every evaluation case on every tool and stack, `doctor`, the docs rewrite, the 1.0 release | 14 | Sat 13 Mar 2027 | 2027-03-20 |
 
 The Jira dates for v0.6.0 and v1.0.0 are a week later than the planned finish. That week is the buffer.
 
@@ -52,7 +52,7 @@ v1.0.0                                          ████▌ (+1 buffer)
 
 ## Sprint plan
 
-S01 to S04 exist in Jira. Create the rest four weeks ahead, from this table. Some sprints pull in a small item from the next release so that no sprint is left with only one 4-point item.
+S01 to S04 exist in Jira. SCRUM-63, the repository rename to `qa-agent-kit`, was done early, on 26 October, outside any sprint. Create the rest four weeks ahead, from this table. Some sprints pull in a small item from the next release so that no sprint is left with only one 4-point item.
 
 | Sprint | Dates | Items | Points |
 | --- | --- | --- | --- |
@@ -61,7 +61,7 @@ S01 to S04 exist in Jira. Create the rest four weeks ahead, from this table. Som
 | S03 | 13–14 Nov | SCRUM-24 canonical skills rendered per tool (4), SCRUM-26 detect stack and tools (3) | 7 |
 | S04 | 20–21 Nov | SCRUM-27 setup questions (4), SCRUM-28 CI flags (2) | 6 |
 | S05 | 27–28 Nov | SCRUM-34 install under `.claude/` (3), SCRUM-38 Cursor adapter (3) | 6 |
-| S06 | 4–5 Dec | SCRUM-35 Claude Code PreToolUse hook (2), SCRUM-29 `qa-agents.json` and `update` (4) | 6 |
+| S06 | 4–5 Dec | SCRUM-35 Claude Code PreToolUse hook (2), SCRUM-29 `qa-agent-kit.json` and `update` (4) | 6 |
 | S07 | 11–12 Dec | SCRUM-25 ask-first step (3), SCRUM-37 evaluation in Claude Code (4) | 7 |
 | S08 | 18–19 Dec | SCRUM-39 Cursor regression evaluation (3), SCRUM-30 upgrade a 0.2 kit (3) | 6 |
 | S09 | 25–26 Dec | SCRUM-31 installer tests on three OSes (3), SCRUM-32 npm publish from CI (3) | 6 |
@@ -75,7 +75,7 @@ S01 to S04 exist in Jira. Create the rest four weeks ahead, from this table. Som
 | S17 | 19–20 Feb | SCRUM-55 Copilot hook (2), SCRUM-56 `.vscode/mcp.json` (2), SCRUM-57 Codex skills and `AGENTS.md` (3) | 7 |
 | S18 | 26–27 Feb | SCRUM-58 `.codex/config.toml` and guard (3), SCRUM-59 evaluation in Codex (3). **v0.6.0 ships** | 6 |
 | S19 | 5–6 Mar | SCRUM-60 full evaluation table (4), SCRUM-61 `doctor` (3) | 7 |
-| S20 | 12–13 Mar | SCRUM-62 docs rewrite (4), SCRUM-63 repository rename (1), SCRUM-64 release 1.0.0 (2). **v1.0.0 ships** | 7 |
+| S20 | 12–13 Mar | SCRUM-62 docs rewrite (4), SCRUM-64 release 1.0.0 (2). **v1.0.0 ships** | 6 |
 | S21 | 19–20 Mar | Buffer. Anything that slipped | 0 |
 
 ## Later
@@ -99,4 +99,4 @@ Moved from GitHub and not planned into a release yet. They carry the `later` lab
 | Copilot or Codex hook formats change, or have no blocking hook | The guard cannot enforce the write scope there | The S12 spike decides. Fall back to rules-only mode and say so in the docs |
 | Playwright for .NET has no xUnit v3 package | Generate and heal need a different base class | The S10 spike decides before any .NET skill is written |
 | Atlassian Remote MCP changes its tool names | `/qa-jira-sync` breaks | Keep the tool allowlist in one file, checked by a test |
-| The `create-qa-agents` name is taken before the first publish | The `npx` command changes | Publish a 0.0.1 placeholder as part of SCRUM-12 in S01 |
+| The `qa-agent-kit` name is taken before the first publish | The `npx` command changes | Publish a 0.0.1 placeholder as part of SCRUM-12 in S01 |

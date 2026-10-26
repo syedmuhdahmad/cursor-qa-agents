@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 export const metadata: Metadata = {
   title: 'Next app example',
-  description: 'A small app the cursor-qa-agents kit is tested against.',
+  description: 'A small app the QA agent kit is tested against.',
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
