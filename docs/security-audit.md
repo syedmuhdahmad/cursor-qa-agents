@@ -13,7 +13,7 @@ A full run starts many subagents. The skill counts them as its budget. Ask for a
 ```text
 /security-audit Run a quick audit of this codebase (quick profile), with a budget of 20 agent invocations.
 /security-audit Audit src/api/ only, standard profile, budget 20.
-/security-audit Is the session cookie in src/lib/session.ts safe?
+/security-audit Is the password reset token in src/lib/reset-token.ts safe?
 ```
 
 The last one is a question, which the skill answers in its guidance mode, with no run folder.

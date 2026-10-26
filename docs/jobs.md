@@ -5,7 +5,7 @@ This file holds the detail behind [Start a job](../README.md#start-a-job) in the
 ## Notes on each job
 
 - **`/qa-unit`** mirrors the source path and drops a leading `src/` or `app/`: `src/components/ProfileForm.tsx` gets `test/unit/components/ProfileForm.test.ts`. A `.tsx` or `.jsx` file gets a jsdom test. A file named `route.ts`, or under an `api/` folder, goes to `test/integration/`. Say `unit test` or `integration` in the prompt to choose the folder yourself. Give it a test file, and it runs that file and fixes it in at most three rounds.
-- **`/qa-plan`** opens the feature in the browser. `/qa-plan profile` opens `http://localhost:3000/profile`. If the app or the page is somewhere else, say so, and give a test account if the feature needs one: `/qa-plan checkout. Base URL http://localhost:4000. Route /cart/checkout. Test account ada@example.com / correct-horse-battery.`
+- **`/qa-plan`** opens the feature in the browser. `/qa-plan profile` opens `http://localhost:3000/profile`. If the app or the page is somewhere else, say so, and give a test account if the feature needs one: `/qa-plan checkout. Base URL http://localhost:4000. Route /cart/checkout. Test account grace@example.org / profile-test-1.`
 - **`/qa-generate`** has two parts. The first uses the browser and writes the page classes. The second writes the spec and runs it. Ask for one part with `page classes only` or `spec only` after the path of the plan.
 - **`/qa-heal`** runs one spec and fixes the test, one line at a time, in at most three rounds. It also takes a spec that fails with no failing test: a test marked `.skip` or `.only`, or a spec that does not load. It removes the mark, or corrects the import, and runs the spec again.
 - **`/qa-rn-unit`** writes or fixes one Jest test in a React Native or Expo app, the way `/qa-unit` does for Vitest. It mirrors the source path under `test/unit/`, also when the app keeps its own tests in `__tests__/` folders. It renders a component with `@testing-library/react-native`, finds elements by role, label, or text, and drives them with `userEvent`. It writes no snapshot, and the hook denies the snapshot matchers. It runs the test with the kit's Jest config: `RTK_DISABLED=1 npx jest --config .cursor/qa/jest.config.cjs --ci test/unit/components/ProfileForm.test.ts`. It writes tests for components and plain functions, and not yet for hooks or navigation. In a web app it replies `This is not a React Native app. Use /qa-unit for a web app.`, and `/qa-unit` in a React Native app replies `This is a React Native app. Use /qa-rn-unit for a Jest test.`
@@ -118,7 +118,7 @@ Each skill has its own lines, and two lines are in every form:
   | `PASS` | The last test run passed. For Vitest and Playwright that means its `QA-VERDICT:` line says `PASS`, or `PASS-WITH-FIXME` in Playwright. |
   | `FAIL` | The last test run did not pass. A fix job stops after 3 rounds, with `FAIL` when the test still fails. |
   | `BLOCKED:` | The agent stopped. The words after it say what you need to do, such as start the app. Do it and ask again. |
-  | `DONE` | The job runs no test and its file is written: a plan from `/qa-plan` or `/qa-mobile-plan`, and `/qa-generate` with `page classes only`. |
+  | `DONE` | The job runs no test and its file is written: a plan from `/qa-plan` or `/qa-mobile-plan`, `/qa-generate` with `page classes only`, and `/qa-mobile-generate` with `element files only`. |
 
 - `Not checked:` is the last line. It says what the agent did not run or verify.
 

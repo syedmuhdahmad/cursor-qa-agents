@@ -173,7 +173,7 @@ In Agent chat, type `/` and pick a skill from the menu. Then add the file or the
 | Security audit | `/security-audit Run a quick audit of this codebase (quick profile), with a budget of 20 agent invocations.` | Not a test job. For a high-tier model only. See [Security audit][wiki-audit]. |
 
 - **Start the app yourself** before a plan or generate job. Without it, the reply is `BLOCKED: start the app with npm run dev, then ask again.`
-- **The app must be on this machine.** For another port, route, or a signed-in page, say so in words: `/qa-plan profile. Base URL http://localhost:4000. Route /settings/profile. Test account ada@example.com / correct-horse-battery.`
+- **The app must be on this machine.** For another port, route, or a signed-in page, say so in words: `/qa-plan profile. Base URL http://localhost:4000. Route /settings/profile. Test account grace@example.org / profile-test-1.`
 - **When the app is wrong, no skill changes what the test expects.** `/qa-unit`, `/qa-rn-unit`, and `/qa-generate` leave the test failing and name the source line under `Bug:`. `/qa-heal` marks that one test `test.fixme(`, under a `// product bug:` comment that names the source line. `/qa-mobile-heal` tags the flow `fixme`.
 - **For a small model,** keep each prompt to one file, one feature, or one plan, and ask for generate in two prompts: `/qa-generate test/e2e/plan/profile.plan.md page classes only`, then `/qa-generate test/e2e/plan/profile.plan.md spec only`.
 
