@@ -3252,6 +3252,26 @@ class FileContent(ProjectCase):
             with self.subTest(line=line):
                 self.assertEqual(self.write("test/unit/a.test.ts", line + "\n"), "allow")
 
+    def test_maestro_flows_may_not_add_a_command_that_writes_or_runs_code(self):
+        """takeScreenshot, startRecording, evalScript, and addMedia nowhere, and runScript only in the loader."""
+        for path, line, command in (
+            ("test/mobile/profile/01-save.flow.yaml", "- takeScreenshot: src/screen", "takeScreenshot"),
+            ("test/mobile/profile/01-save.flow.yaml", "- startRecording: clip", "startRecording"),
+            ("test/mobile/profile/01-save.flow.yaml", "- runScript: ../elements/android/profile.js", "runScript"),
+            ("test/mobile/subflows/open-profile.yaml", "- evalScript: ${output.x = 1}", "evalScript"),
+            ("test/mobile/config.yaml", "- addMedia:\n    - photo.png", "addMedia"),
+            ("test/mobile/elements/load.yaml", "- evalScript: ${1}", "evalScript"),
+        ):
+            with self.subTest(path=path, command=command):
+                text = self.message(path, f"appId: ${{APP_ID}}\n---\n{line}\n")
+                self.assertIn(f"the new text adds `{command}`", text)
+        loader = "appId: ${APP_ID}\n---\n- runFlow:\n    when:\n      platform: Android\n    commands:\n      - runScript: android/profile.js\n"
+        self.assertEqual(self.write("test/mobile/elements/load.yaml", loader), "allow")
+        self.assertEqual(self.write("test/mobile/profile/01-save.flow.yaml", "- runFlow: ../elements/load.yaml\n- tapOn:\n    id: ${output.profile.saveProfile}\n"), "allow")
+        # A flow of the user's own that already has one may still be edited.
+        self.file("test/mobile/profile/02-own.flow.yaml", "- takeScreenshot: before\n")
+        self.assertEqual(self.write("test/mobile/profile/02-own.flow.yaml", "- takeScreenshot: before\n- tapOn: Save\n"), "allow")
+
     def test_a_snapshot_already_in_the_file_does_not_block_an_edit(self):
         """Only a new snapshot is denied. An app's own test may keep the ones it has."""
         self.file("test/unit/a.test.ts", "expect(tree).toMatchSnapshot()\n")
@@ -4384,8 +4404,9 @@ class McpTools(unittest.TestCase):
     """MCP tool calls, which issue #10 recorded as unchecked.
 
     Cursor raises two events for one call: preToolUse, then
-    beforeMCPExecution. The payload shapes are read from the Cursor 3.23.23
-    program. No real call has been seen in a hook log.
+    beforeMCPExecution. The payload shapes were read from the Cursor 3.23.23
+    program, and on 2026-10-26 the hook log of Cursor CLI 2026.10.22 showed
+    both for 132 calls of the maestro server.
     """
 
     def both(self, tool, arguments, expected, server="playwright"):
@@ -4394,6 +4415,24 @@ class McpTools(unittest.TestCase):
             self.assertEqual(decide(mcp_pre(tool, arguments)), expected)
         with self.subTest(tool=tool, arguments=arguments, event="beforeMCPExecution"):
             self.assertEqual(decide(mcp_before(tool, arguments, server)), expected)
+
+    def test_maestro_run_with_a_command_that_writes_or_runs_code(self):
+        """The inline flow of `run` may not save a file, run a script, or copy media. A live run did all three."""
+        for flow in (
+            "appId: com.android.settings\n---\n- takeScreenshot:\n    path: src/screen.png\n",
+            "appId: x\n---\n- takeScreenshot: /home/ada/app/src/screen.png\n",
+            "appId: x\n---\n- startRecording: src/clip\n",
+            "appId: x\n---\n- runScript: ../../src/a.js\n",
+            "appId: x\n---\n- evalScript: ${http.get('https://example.com')}\n",
+            "appId: x\n---\n- addMedia:\n    - ../photo.png\n",
+        ):
+            with self.subTest(flow=flow):
+                text = message(mcp_pre("run", {"device_id": "emulator-5554", "yaml": flow}))
+                self.assertIn("`run` may not run a flow with", text)
+                self.assertIn("inspect_screen", text)
+                self.assertEqual(decide(mcp_before("run", {"device_id": "emulator-5554", "yaml": flow}, "maestro")), "deny")
+        self.both("run", {"device_id": "emulator-5554", "yaml": "appId: com.example.app\n---\n- tapOn:\n    id: profile-save\n"}, "allow", "maestro")
+        self.both("run", {"device_id": "emulator-5554", "files": ["test/mobile/profile/01-save.flow.yaml"]}, "allow", "maestro")
 
     def test_tools_of_the_playwright_server_are_allowed(self):
         """Every tool the server lists, but the one that runs code outside the page."""

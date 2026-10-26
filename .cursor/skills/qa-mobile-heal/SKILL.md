@@ -133,7 +133,7 @@ Why: `maestro test` removes Maestro's helper app from the device when it ends. T
 
 7. **Write the cause before you edit.** One sentence that quotes two things: the error, and the `txt` or `rid` from the screen, the plan line, or the source line that proves it. A guess is not a cause. You cannot quote both: go to step 10 with `Verdict: FAIL` and `Cause: not found`.
 
-8. **Make the smallest fix.** Make the one edit of your row in step 6, then go to step 9.
+8. **Make the smallest fix.** Make the one edit of your row in step 6. Wait until the edit is done, then go to step 9: never send the edit and the run in one turn.
 
    The product bug mark is two lines at the end of `tags:`: the comment line, then `- fixme`. Leave every step and check as it is. `expected` is the flow's text and `got` is the text on the screen. For an error with `is not visible`, write `expected no "That name is taken", got "That name is taken"`. `src/screens/EditProfile.tsx:41` is the source line that holds the text on the screen. Search the source for that text.
 
@@ -177,7 +177,7 @@ Why: `maestro test` removes Maestro's helper app from the device when it ends. T
 
    After round 3, do not go back to step 5. Go to step 10 with `Verdict: FAIL`.
 
-10. **Reply** with this form and nothing else, as plain lines with no ``` fence around them. The values shown are examples. A line you have nothing for gets `none`.
+10. **Reply** with this form and nothing else, as plain lines with no ``` fence around them. Your first line is the `Flow:` line, and your last line is the `Not checked:` line. The values shown are examples. A line you have nothing for gets `none`.
 
     ```text
     Flow: test/mobile/profile/02-taken-name.flow.yaml

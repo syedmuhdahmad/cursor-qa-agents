@@ -34,7 +34,7 @@ A plan line gives the file, the object, and the name of its element. This table 
 | --- | --- | --- |
 | The file | The screen name of the line in lower case, with a hyphen between its words, then `.js`. It goes in the folder of your platform. | `On the Order history screen` gives `test/mobile/elements/android/order-history.js` |
 | The object | `output.`, then the words of the screen name joined, with a capital at the start of each word but the first | `output.orderHistory` |
-| The name | The words of the first text in double quotes, joined: letters and digits only, a capital at the start of each word but the first | `"Save profile"` gives `saveProfile` |
+| The name | The words of the first text in double quotes, joined: letters and digits only, a capital at the start of each word but the first. A word ends only at a space: drop every other character. | `"Save profile"` gives `saveProfile`, and `"Saved for grace@example.org"` gives `savedForGraceexampleorg` |
 | The name, in a line with `next to` | The words of the first text, then `next to`, then the words of the second text, joined the same way | `"+" next to "Work email"` gives `nextToWorkEmail` |
 | The name, when it comes out empty or starts with a digit | One or two words for what the element does, in the same form. Name it under `Not checked:`. | `"3 items"` gives `itemCount` |
 
@@ -240,7 +240,7 @@ appId: com.example.app
    | One line such as `Invalid Command: tapOnn at /syntax-checker:13:9` | The line names the fault. The number after `/syntax-checker:` is about the line of your file. Correct the file and check it again. |
    | No row matches | Go to step 10 with `Verdict: FAIL` and the output under `Not checked:`. |
 
-8. **Part 2: run the feature's folder.** `RTK_DISABLED=1 maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/profile`. Change only the platform word, the app id, and the folder. Never start a device and never run on the other platform. A flow takes 15 to 60 seconds. The output has one line for each flow, `[Passed]` or `[Failed]` and the flow's name, not in the order of the files. Then comes the summary line: `2/2 Flows Passed in 48s` when all passed, `1/2 Flow Failed` when one did not. Ignore the box drawn with lines. You have 3 runs: after the third run that is not a pass, go to step 10 with `Verdict: FAIL`.
+8. **Part 2: run the feature's folder.** `RTK_DISABLED=1 maestro test --platform android --exclude-tags=fixme -e APP_ID=com.example.app test/mobile/profile`. Change only the platform word, the app id, and the folder. Never start a device and never run on the other platform. A flow takes 15 to 60 seconds, so give the command a time limit of 10 minutes. The output has one line for each flow, `[Passed]` or `[Failed]` and the flow's name, not in the order of the files. Then comes the summary line: `2/2 Flows Passed in 48s` when all passed, `1/2 Flow Failed` when one did not. Ignore the box drawn with lines. You have 3 runs: after the third run that is not a pass, go to step 10 with `Verdict: FAIL`.
 
    | The output contains | Do |
    | --- | --- |
@@ -263,7 +263,7 @@ appId: com.example.app
 
    The app does not do what the plan says: leave the flow failing. Do not change a selector, a text, or a check, and do not tag the flow. Go to step 10 with `Verdict: FAIL`. `/qa-mobile-heal` reads the screen and finds the cause.
 
-10. **Reply** with this form and nothing else, as plain lines with no ``` fence around them. The values shown are examples. A line you have nothing for gets `none`.
+10. **Reply** with this form and nothing else, as plain lines with no ``` fence around them. Your first line is the `Plan:` line, and your last line is the `Not checked:` line. The values shown are examples. A line you have nothing for gets `none`.
 
     ```text
     Plan: test/mobile/plan/profile.plan.md

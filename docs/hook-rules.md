@@ -183,6 +183,9 @@ The hook compares the new text with the file on disk and denies only what the wr
 | `Write {"file_path": ".cursor/skills/x/SKILL.md", "content": "it.only("}` | allow |
 | `Write {"file_path": "test/mobile/config.yaml", "content": "excludeTags:\n  - fixme\n"}` | allow |
 | `Write {"file_path": "test/mobile/config.yaml", "content": "testOutputDir: out\n"}` | deny |
+| `Write {"file_path": "test/mobile/profile/01-save.flow.yaml", "content": "- takeScreenshot: src/screen\n"}` | deny |
+| `Write {"file_path": "test/mobile/profile/01-save.flow.yaml", "content": "- runScript: ../elements/android/profile.js\n"}` | deny |
+| `Write {"file_path": "test/mobile/elements/load.yaml", "content": "- runScript: android/profile.js\n"}` | allow |
 
 - Test code is a file under `test/` that ends in `.ts`, `.js`, `.mts`, `.cts`, `.mjs`, or `.cjs`. Plans, flows, and files outside `test/` are not scanned.
 - A write may not add `.only(`, `.skip(`, `.todo(`, or `.fails(` on a test function (`it`, `test`, `describe`, `suite`, `bench`, and names built on them such as `test.describe`), or `test.fail(`, `skipIf(`, or `runIf(`.
@@ -193,6 +196,7 @@ The hook compares the new text with the file on disk and denies only what the wr
 - `test.fixme(` is allowed only in a spec directly in `test/e2e/`, and only when the line above it starts with `// product bug:` and then names the application source file and line that are wrong, as in `// product bug: src/a.ts:7 expected "1", got "2"`. A marker with no file and line, or one that names a file under `test/`, does not count.
 - The check is on plain text. The same text in a comment or a string counts.
 - A write may not add `testOutputDir` to `config.yaml` or `config.yml` under `test/mobile/`. See "maestro".
+- A write of a `.yaml` or `.yml` file under `test/mobile/` may not add `takeScreenshot`, `startRecording`, `evalScript`, or `addMedia`, and may add `runScript` only to the loader, `test/mobile/elements/load.yaml`. They save a file where the flow says or run code on this machine, and `maestro test` and the `run` tool run every flow there. A flow that already holds one can still be edited.
 
 ## Shell commands
 
@@ -1062,16 +1066,17 @@ What the `rtk` forms do when they run was not checked here. RTK is not installed
 
 ## MCP tools
 
-Cursor raises two events for one MCP call, according to its code (version 3.23.23) and its documentation. `preToolUse` carries the tool name with `MCP:` in front and the arguments as an object. `beforeMCPExecution` carries the bare tool name, the arguments as a JSON string, and the server's name. The hook gives the same answer to both. No real MCP call has been seen in a hook log, so this section is UNVERIFIED in Cursor. See "Known limits and unverified behaviour".
+Cursor raises two events for one MCP call, according to its code (version 3.23.23) and its documentation. `preToolUse` carries the tool name with `MCP:` in front and the arguments as an object. `beforeMCPExecution` carries the bare tool name, the arguments as a JSON string, and the server's name. The hook gives the same answer to both. On 2026-10-26 the hook log of the Cursor CLI, version 2026.10.22, showed both events, in these shapes, for each of 132 calls of the Maestro server. See "Known limits and unverified behaviour" for what was not seen.
 
 In a `beforeMCPExecution` payload, `command` is the line that started the MCP server. The hook never reads it as a shell command. Arguments in a shape the hook does not expect, such as text that is not JSON, are treated as no arguments, so an odd payload cannot make the hook deny every MCP call.
 
 The kit's `.cursor/mcp.json` starts the Maestro server. The kit does not start a Playwright MCP server: it browses with `playwright-cli`, under the rules above. The `browser_*` rows below are for a Playwright MCP server you add yourself. The hook does not hold `browser_navigate` to a URL on this machine.
 
-Most MCP tools pass. The hook does two things:
+Most MCP tools pass. The hook does three things:
 
 1. It denies a few tools by name.
-2. It checks the files a tool names.
+2. It denies Maestro's `run` when its inline flow, `yaml`, holds a command that writes a file on this machine or runs code there: `takeScreenshot`, `startRecording`, `runScript`, `evalScript`, or `addMedia`. In a live run, `run` with `takeScreenshot` saved two files into `src/`, because Maestro saves a screenshot where the flow says. No skill sends these commands: `inspect_screen` reads the screen.
+3. It checks the files a tool names.
 
 | Tool call | Decision |
 | --- | --- |
@@ -1098,6 +1103,8 @@ Most MCP tools pass. The hook does two things:
 | `MCP:take_screenshot {"device_id": "emulator-5554"}` | allow |
 | `MCP:cheat_sheet {}` | allow |
 | `MCP:run {"device_id": "emulator-5554", "yaml": "- launchApp"}` | allow |
+| `MCP:run {"device_id": "emulator-5554", "yaml": "appId: x\n---\n- takeScreenshot:\n    path: src/screen.png"}` | deny |
+| `MCP:run {"device_id": "emulator-5554", "yaml": "appId: x\n---\n- evalScript: ${1}"}` | deny |
 | `MCP:run {"device_id": "emulator-5554", "files": ["test/mobile/sign-in/01-valid-account.flow.yaml"]}` | allow |
 | `MCP:run {"device_id": "emulator-5554", "dir": "test/mobile/sign-in"}` | allow |
 | `MCP:run {"device_id": "emulator-5554", "files": ["src/flows/a.yaml"]}` | deny |
@@ -1169,8 +1176,7 @@ The hook reads tool calls and command lines. It is a guardrail and not a sandbox
 - **Seen in Cursor.** On 2026-10-09, with Composer 2.5, a denied shell command reached the model as `Rejected: Command execution was blocked by a hook:` followed by the hook's own message, word for word, and a line from Cursor that tells the model not to suggest workarounds. A `cd lib`, a read of `package-lock.json`, and a `playwright-cli open` on localhost each got the answer this document gives. A denied file write was not tried in that session.
 Not seen in a real Cursor session:
 
-- **MCP payloads.** No MCP call is in Cursor's hook logs on the machine these rules were written on. The two payload shapes are read from the code of Cursor 3.23.23 and from Cursor's documentation. The hook's tests send those shapes. Whether Cursor sends exactly these, whether both events fire in the command-line agent, and whether the agent sees the deny message are UNVERIFIED.
-- **Where an MCP server resolves a relative path.** The hook uses the project root. Which directory Cursor starts an MCP server in was not checked.
+- **An MCP deny reaching the agent.** Both MCP events fire in the Cursor CLI with the shapes the hook expects, and the Maestro server resolves a relative path from the project root, as the hook does. That was seen on 2026-10-26. No MCP call was denied in those runs, so whether the agent sees the message of an MCP deny is UNVERIFIED. The deny of every other tool reached the agent word for word.
 - **The shell's directory.** Cursor sent an empty `cwd` with every logged shell command. The hook then assumes the project root. Whether Cursor's shell keeps a directory between commands is UNVERIFIED. The `cd` rule makes the answer not matter.
 - **The `Delete` tool.** The name is read from Cursor's code. No call was logged.
 - **Windows.** The hook accepts the byte order mark that Cursor on Windows puts in front of the payload. It was not run on Windows. `hooks.json` names a `.py` file, which Windows cannot start by itself.

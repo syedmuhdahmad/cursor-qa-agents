@@ -1160,6 +1160,29 @@ DENY_MAESTRO_CONFIG = (
     "folders next to it. Remove that line."
 )
 # MCP tools that are denied whatever their arguments are, with the reason and what to do instead.
+# Maestro commands that write a file on this machine or run code there: a
+# screenshot or a recording, saved where the flow says, also outside the
+# project; a script; and media copied from this machine to the device. No
+# flow of the skills uses them, and the inline flow of the `run` tool never
+# needs them: inspect_screen reads the screen. The loader of the element
+# files, test/mobile/elements/load.yaml, runs them with runScript, so a flow
+# file may hold runScript there and nowhere else.
+MAESTRO_RISKY_COMMANDS = {
+    "takeScreenshot": "saves a file where the flow says, also outside the project",
+    "startRecording": "saves a file where the flow says, also outside the project",
+    "runScript": "runs code on this machine",
+    "evalScript": "runs code on this machine",
+    "addMedia": "copies a file from this machine to the device",
+}
+MAESTRO_FLOW_SUFFIXES = (".yaml", ".yml")
+MAESTRO_LOADER = ("mobile", "elements", "load.yaml")
+DENY_MCP_RUN_COMMAND = (
+    "`run` may not run a flow with `{command}`, which {what}. Leave it out. To see the screen, use inspect_screen."
+)
+DENY_MOBILE_FLOW_COMMAND = (
+    "`{path}` is blocked: the new text adds `{command}`, which {what}. The flows of the skills never use it. "
+    "Only the loader, test/mobile/elements/load.yaml, may run the element files with runScript."
+)
 MCP_DENIED_TOOLS = {
     "browser_run_code_unsafe": (
         "`browser_run_code_unsafe` runs code outside the page, where it can change any file, so it is not "
@@ -2056,6 +2079,31 @@ def mobile_config_problem(paths, tool_input, cwd):
     new, old = new_and_old_text(tool_input, [target for target, _ in configs], cwd)
     if new.count(MAESTRO_OUTPUT_KEY) > old.count(MAESTRO_OUTPUT_KEY):
         return DENY_MAESTRO_CONFIG_WRITE.format(path="/".join(("test",) + configs[0][1]))
+    return ""
+
+
+def mobile_flow_problem(paths, tool_input, cwd):
+    """Why a write to a Maestro flow under test/mobile/ is not allowed, or "".
+
+    The write may not add a command of MAESTRO_RISKY_COMMANDS. The loader,
+    test/mobile/elements/load.yaml, may add runScript. The check is on plain
+    text, as content_problem() is, and only an increase is denied.
+    """
+    flows = []
+    for target in paths:
+        parts = parts_under_test(target, cwd)
+        if parts and parts[0] == "mobile" and parts[-1].endswith(MAESTRO_FLOW_SUFFIXES):
+            flows.append((target, parts))
+    if not flows:
+        return ""
+    new, old = new_and_old_text(tool_input, [target for target, _ in flows], cwd)
+    only_loader = all(parts == MAESTRO_LOADER for _, parts in flows)
+    for command, what in MAESTRO_RISKY_COMMANDS.items():
+        if command == "runScript" and only_loader:
+            continue
+        if new.count(command) > old.count(command):
+            path = "/".join(("test",) + flows[0][1])
+            return DENY_MOBILE_FLOW_COMMAND.format(path=path, command=command, what=what)
     return ""
 
 
@@ -4261,7 +4309,9 @@ def mcp_problem(tool_name, arguments):
 
     A few tools are denied by name: they run code outside the browser page,
     install software, send data to a cloud service, or open a page for a
-    person. For every other tool the hook checks the files it names:
+    person. Maestro's `run` is denied when its inline flow, `yaml`, uses a
+    command that writes a file or runs code (MAESTRO_RISKY_COMMANDS). For
+    every other tool the hook checks the files it names:
 
     - a file the tool writes (filename, output, download_path, and the other
       MCP_OUTPUT_KEYS) must be inside the write scope, whatever the tool is;
@@ -4279,6 +4329,13 @@ def mcp_problem(tool_name, arguments):
     for tool, message in MCP_DENIED_TOOLS.items():
         if names_tool(name, tool):
             return message
+    if names_tool(name, "run"):
+        flows = []
+        collect_strings(arguments, {"yaml"}, flows)
+        text = "\n".join(flows)
+        for command, what in MAESTRO_RISKY_COMMANDS.items():
+            if command in text:
+                return DENY_MCP_RUN_COMMAND.format(command=command, what=what)
     keys = set(MCP_OUTPUT_KEYS)
     words = re.findall(r"[a-z]+", re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).lower())
     if MCP_WRITE_WORDS.intersection(words) or any(names_tool(name, tool) for tool in MCP_FILE_TOOLS):
@@ -4352,7 +4409,11 @@ def guard_tool(payload, cwd):
             problem = path_problem(path, cwd)
             if problem:
                 emit("deny", problem)
-        problem = content_problem(paths, tool_input, cwd) or mobile_config_problem(paths, tool_input, cwd)
+        problem = (
+            content_problem(paths, tool_input, cwd)
+            or mobile_config_problem(paths, tool_input, cwd)
+            or mobile_flow_problem(paths, tool_input, cwd)
+        )
         if problem:
             emit("deny", problem)
     emit("allow")

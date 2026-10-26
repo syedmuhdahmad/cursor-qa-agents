@@ -177,14 +177,14 @@ The hook is a guardrail and not a sandbox.
 - It does not check what a program does after it starts. A test is code that runs with your permissions, so a test that writes to `src/` passes the hook.
 - It checks the URL the agent opens, not where a link, a redirect, or a script on that page takes the browser next.
 - It will not hold against an agent that follows injected instructions, and it can read a command line wrongly. Gaps of that kind were closed in [issue 8](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/8) and [issue 9](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/9). More may exist.
-- Its rules for MCP tools have not been seen working in a live Cursor session.
+- Its rules for MCP tools were seen working in the Cursor CLI, and a live run found one gap, now closed: Maestro's `run` tool saved a screenshot into `src/`. An MCP deny reaching the agent was not seen.
 - `.cursorignore` saves context and keeps no secrets. An untrusted workspace loads no project hooks.
 
 For a real boundary, run the agent in a container with application source mounted read-only. See [what the hook does not check](docs/hook-rules.md#what-it-does-not-check) and its [known limits](docs/hook-rules.md#known-limits-and-unverified-behaviour).
 
 ## Mobile
 
-Three more skills plan, write, and fix [Maestro](https://maestro.dev) flows for an Android or iOS app: `/qa-mobile-plan`, `/qa-mobile-generate`, and `/qa-mobile-heal`. Treat them as a preview. Parts were run on one Android emulator, with scripts in place of a model. Nothing was run on iOS, and the skills were not run on any model. You start the device and install the app, and every flow clears the app's data there. [docs/mobile.md](docs/mobile.md) has the layout, each job, what was run, and the [open points](docs/mobile.md#open-points).
+Three more skills plan, write, and fix [Maestro](https://maestro.dev) flows for an Android or iOS app: `/qa-mobile-plan`, `/qa-mobile-generate`, and `/qa-mobile-heal`. Treat them as a preview. On one Android emulator, with [`examples/expo-app`](examples/expo-app/), each skill ran once on each of the three models, and 7 of the 9 jobs met every check. CI runs the example's six flows on an emulator. Nothing was run on iOS. You start the device and install the app, and every flow clears the app's data there. [docs/mobile.md](docs/mobile.md) has the layout, each job, what was run, and the [open points](docs/mobile.md#open-points).
 
 ## Security audit
 
@@ -206,7 +206,7 @@ An earlier round on Gemini 3.8 Flash, on the same day and before two small chang
 
 - Each case had one or two runs on each model, on two small example apps.
 - No agent tried anything the hook forbids, so the round does not show how a model goes on after a deny.
-- The mobile skills were not run on any model, and nothing was run on iOS or Windows.
+- The mobile skills ran once for each job and model, outside the evaluation. Nothing was run on iOS or Windows.
 
 [docs/evaluation.md](docs/evaluation.md) has every round by case, and [eval/results/README.md](eval/results/README.md) says how each round was run. [Issue 30](https://github.com/syedmuhdahmad/cursor-qa-agents/issues/30) tracks what is not tested.
 

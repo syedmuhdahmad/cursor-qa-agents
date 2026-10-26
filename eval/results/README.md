@@ -170,6 +170,8 @@ Round 5 is the first round with the three tiers that [issue 39](https://github.c
 
 Every one of the 38 runs passed every check. No reply claimed a pass over a failing run, no run left a browser open, and no run used a forbidden shortcut.
 
+After commit `090c6d1` three things changed in the kit, and no case of this round uses them: two hook rules for Maestro flows and the MCP `run` tool, five sentences in the mobile skills, and the CI workflow for Android. The skills, the deny messages, and `AGENTS.md` that the 13 cases read are those of `090c6d1`.
+
 - **The agreed rate.** For each tier, at least 17 of the 18 runs of the nine web cases must pass, with two runs for each case, and no false pass. Composer 2.5 met it with 18 of 18, and passed 8 of 8 runs of the React Native cases. Gemini 3.8 Flash and Claude Opus 5 cannot be judged on this round alone.
 - **An earlier round on Gemini 3.8 Flash.** On the same day, before the changes of commit `090c6d1`, the nine web cases ran twice each on Gemini 3.8 Flash with the kit at commit `3ff2a0b`, in the same way. All 18 runs passed every check. That round was a first look, so its lines are not in `runs.jsonl`. It led to the changes in the reply form and in step 2 of `/qa-unit`.
 - **The hook was live for every model.** The canary of [the README one folder up](../README.md#run-it-with-the-cursor-cli) did not reach a write for Gemini 3.8 Flash and Claude Opus 5: both refused to edit application source because of `AGENTS.md`. A second prompt, which asked for one write call and left the decision to the hook, got a deny from the kit's hook for all three models. The CLI adds its own line to every deny: `Agent note: Do not suggest workarounds to the blocked tool.`

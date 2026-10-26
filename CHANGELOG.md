@@ -27,8 +27,13 @@ The version of your copy is the one line in `.cursor/qa/VERSION`.
 - For maintainers, and not copied into an app: the scorer's check `small-change`. It fails a fix or heal run that adds and removes more lines than the case allows in `expect.maxChangedLines`. The four fix and heal cases have a limit.
 - Six runs of the old skills on Composer 2.5, in Cursor's agent, for the three cases that repair a test. They passed 5 of 6, the new skills passed 6 of 6, and no run with either kit changed a line outside the failing ones. [The evaluation](docs/evaluation.md#the-old-skills-against-the-new-ones-on-the-fix-cases) has the table.
 
+### Fixed
+
+- The hook let Maestro's MCP `run` tool write anywhere. In a live run, `run` with an inline `takeScreenshot` saved two files into `src/`. The hook now denies `run` when its inline flow holds `takeScreenshot`, `startRecording`, `runScript`, `evalScript`, or `addMedia`, and denies a write that adds one of them to a flow under `test/mobile/`, with `runScript` allowed in the loader, `test/mobile/elements/load.yaml`, only. A flow of yours that already holds one can still be edited.
+
 ### Changed
 
+- The three mobile skills: a plan's expected lines show only what the last screen of a scenario shows, a reply names its first and last line, a name made from a text ends a word only at a space, `maestro test` gets a time limit of 10 minutes, and heal waits for an edit to finish before the next `run`. Each came from one failure or one slow step when the skills first ran on three models.
 - For maintainers, and not copied into an app: the lockfile of this repository moves `vite` to 8.3.5 and `undici` to 8.12.3, and `package.json` pins `markdown-it`, which only the Markdown lint tool uses, to 15.0.3 with `overrides`. The three had nine open Dependabot alerts between them, three of them high. `npm audit` now reports none. Your app resolves these packages in its own lockfile.
 - For maintainers, and not copied into an app: `examples/next-app` uses Next.js 16.4.2. Version 16.4.0 has three security advisories, two of them critical, and its `next build` now stops with an error that says so.
 - The reply form of every job skill says to write it as plain lines, with no code fence around it. In the evaluation, Gemini 3.8 Flash put the reply of `/qa-unit` in a fence in 5 of 10 runs. `/qa-unit` and `/qa-rn-unit` also say how to find the file of an `@/` import and to test the value one step past a limit.
