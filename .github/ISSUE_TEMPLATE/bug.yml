@@ -14,7 +14,7 @@ body:
     attributes:
       label: Kit version
       description: The content of `.cursor/qa/VERSION` in your app. If the file is missing, give the commit or date you copied the kit from.
-      placeholder: "0.1.0"
+      placeholder: "0.2.0"
     validations:
       required: true
   - type: input

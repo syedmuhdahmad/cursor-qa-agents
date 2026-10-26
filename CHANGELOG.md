@@ -8,6 +8,8 @@ The version of your copy is the one line in `.cursor/qa/VERSION`.
 
 ## Unreleased
 
+## 0.2.0 - 2026-10-26
+
 ### Action needed if you copied an earlier version
 
 1. A write to a test file may no longer add a snapshot matcher: `toMatchSnapshot(`, `toMatchInlineSnapshot(`, `toThrowErrorMatchingSnapshot(`, or `toThrowErrorMatchingInlineSnapshot(`. This holds for your Vitest tests too. A snapshot that a file already has can stay, and the file can still be edited.
@@ -33,6 +35,7 @@ The version of your copy is the one line in `.cursor/qa/VERSION`.
 
 ### Changed
 
+- The dev dependencies that the installer adds to a web app have newer lowest versions: `@playwright/test` 1.64.1, `@vitest/coverage-v8` 5.0.5, `jsdom` 30.1.3, and `@types/node` 26.6.5. A range of your own that is lower is left alone and listed as skipped.
 - The three mobile skills: a plan's expected lines show only what the last screen of a scenario shows, a reply names its first and last line, a name made from a text ends a word only at a space, `maestro test` gets a time limit of 10 minutes, and heal waits for an edit to finish before the next `run`. Each came from one failure or one slow step when the skills first ran on three models.
 - For maintainers, and not copied into an app: the lockfile of this repository moves `vite` to 8.3.5 and `undici` to 8.12.3, and `package.json` pins `markdown-it`, which only the Markdown lint tool uses, to 15.0.3 with `overrides`. The three had nine open Dependabot alerts between them, three of them high. `npm audit` now reports none. Your app resolves these packages in its own lockfile.
 - For maintainers, and not copied into an app: `examples/next-app` uses Next.js 16.4.2. Version 16.4.0 has three security advisories, two of them critical, and its `next build` now stops with an error that says so.
