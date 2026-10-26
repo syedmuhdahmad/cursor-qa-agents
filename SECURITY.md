@@ -6,13 +6,13 @@ Report it in private. Do not open a public issue or pull request for it.
 
 1. Open the [private vulnerability form](https://github.com/syedmuhdahmad/cursor-qa-agents/security/advisories/new). The **Report a vulnerability** button on the repository's **Security** tab opens the same form.
 2. Say what you ran and what happened. The shell command or the tool call that shows the problem is the most useful part.
-3. Give the version of your copy. It is in `.cursor/qa/VERSION`. The first tagged version is `v0.1.0`. A copy made from `main` before that tag also says `0.1.0`, and an older copy has no such file. If yours may be one of those, also give the commit you copied, or the date.
+3. Give the version of your copy. It is in `.cursor/qa/VERSION`. The first tagged version is `v0.1.0`. A copy made from `main` between two tags says the version of the tag before it, and a copy older than `v0.1.0` has no such file. If yours may be one of those, also give the commit you copied, or the date.
 
 Only you and the maintainers of this repository can read the report. The maintainer replies in the report.
 
 ## Supported versions
 
-Version 0.1.0 is the first release. Fixes go into the `main` branch and into the next release, and older releases get no fixes. Until that release is out, take a fix by copying the kit again from `main`.
+Only the latest release gets fixes. That is 0.2.0, of 2026-10-26. Fixes go into the `main` branch and into the next release, and older releases get no fixes. Until the next release is out, take a fix by copying the kit again from `main`.
 
 ## What counts as a vulnerability
 
