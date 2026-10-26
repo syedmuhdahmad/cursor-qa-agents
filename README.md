@@ -64,7 +64,7 @@ jsdom
 vitest
 ```
 
-In a React Native or Expo app, the installer below sees `react-native` or `expo` in your `package.json` and does three things differently. It leaves out `vitest.config.ts`, `playwright.config.ts`, `test/setup.ts`, and `test/e2e/`. It adds these dev dependencies in place of the ones above, with the ranges from [`examples/expo-app/package.json`](examples/expo-app/package.json), and picks the `test-renderer` line that matches your React version. And it adds one script, `"test:rn-unit": "jest --config .cursor/qa/jest.config.cjs --ci"`.
+In a React Native or Expo app, the installer below leaves out the web files, adds these dev dependencies in place of the ones above, and adds one script, `"test:rn-unit": "jest --config .cursor/qa/jest.config.cjs --ci"`.
 
 <!-- install:react-native-dev-dependencies -->
 
@@ -75,7 +75,7 @@ jest
 test-renderer
 ```
 
-Your app needs a Jest preset of its own. For an Expo app that is `"jest": { "preset": "jest-expo" }` in `package.json`, with `jest-expo` from `npx expo install jest-expo`. The installer warns when it finds none. [docs/install-notes.md](docs/install-notes.md#a-react-native-app) has the detail.
+Your app needs a Jest preset of its own, such as `"jest": { "preset": "jest-expo" }` in `package.json`. [A React Native app](docs/install-notes.md#a-react-native-app) in the install notes has the detail.
 
 Then install dependencies and, in a web app, the Chromium browser Playwright uses:
 
@@ -188,7 +188,7 @@ Three more skills plan, write, and fix [Maestro](https://maestro.dev) flows for 
 
 ## Security audit
 
-`/security-audit` is Cloudflare's [security audit skill](https://github.com/cloudflare/security-audit-skill), copied byte for byte with only its frontmatter changed. It is not a test job. It maps the app's trust boundaries, sends subagents to hunt for vulnerabilities, has other subagents try to disprove each finding, and writes a report of the verified ones to `~/security-audit-skill/<repo-name>/run-<N>/`, outside your project. It reads the source and runs none of it. It is long and runs many subagents, so use it with a high-tier model such as Claude Opus 5, and ask for a small run first: `/security-audit quick audit of src/`. [docs/security-audit.md](docs/security-audit.md) says what the hook allows it and what was run.
+`/security-audit` is Cloudflare's [security audit skill](https://github.com/cloudflare/security-audit-skill), copied with only its frontmatter changed. It is not a test job: subagents hunt for vulnerabilities in the source and try to disprove each other, and it writes a report to `~/security-audit-skill/`, outside your project. Use it with a high-tier model such as Claude Opus 5, and expect a quick run of a small app to take over an hour. [docs/security-audit.md](docs/security-audit.md) has the detail.
 
 ## Evaluation
 
@@ -202,7 +202,7 @@ The kit is tested on three models in Cursor's own agent, one for each tier: Clau
 | Gemini 3.8 Flash | 6 of 6: one run of 6 cases, before the account's usage limit stopped the round |
 | Claude Opus 5 | 6 of 6: the same 6 cases, before the same limit |
 
-An earlier round on Gemini 3.8 Flash, on the same day and before two small changes to the skill text, passed 18 of 18 runs of the nine web cases. Every run of both rounds passed every check, and no reply claimed a pass over a failing run. Read the numbers as a good sign and not as proof:
+An earlier round on Gemini 3.8 Flash passed 18 of 18 runs of the web cases. Every run passed every check, and no reply claimed a pass over a failing run. Read the numbers as a good sign and not as proof:
 
 - Each case had one or two runs on each model, on two small example apps.
 - No agent tried anything the hook forbids, so the round does not show how a model goes on after a deny.
