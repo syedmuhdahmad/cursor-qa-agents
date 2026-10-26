@@ -11,6 +11,8 @@ The version of your copy is the one line in `.cursor/qa/VERSION`.
 ### Changed
 
 - The repository is renamed from `cursor-qa-agents` to `qa-agent-kit`, because the kit is moving to Claude Code, GitHub Copilot and Codex as well as Cursor. GitHub sends the old links and `git` remotes to the new name. `package.json` is named `qa-agent-kit`.
+- The README is now the overview and index, and the [wiki](https://github.com/syedmuhdahmad/qa-agent-kit/wiki) is the full manual. New wiki pages: Getting started, Skills and example prompts, a QA manual for web apps, for React Native, and for .NET (planned), Layout and files, Upgrading, Troubleshooting, and Security audit.
+- The example prompts in the README, `docs/jobs.md`, and `AGENTS.md` use the imaginary profile app of the skills. They used the sign-in page of `examples/next-app`, which the evaluation runs on. The README now has an example for every skill, the mobile skills and the security audit included.
 
 ## 0.2.0 - 2026-10-26
 
